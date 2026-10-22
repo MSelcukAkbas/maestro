@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Proje
 
-Claude Panel: birden çok Claude Code oturumunu rollere ayrılmış bir ekip olarak (orkestra şefi + coder/review/araştırma…) tek yerel web panelinden yöneten Node.js uygulaması. Yalnızca Windows'ta, yalnızca `127.0.0.1`'de çalışır. Kod, yorumlar, arayüz metinleri ve rol talimatları Türkçe; yeni kod da böyle yazılır. Derleme adımı yok: sunucu düz CommonJS, arayüz tek dosya vanilla JS (`web/app.js`, IIFE) + xterm. Bağımlılıklar yalnızca `ws`, `@lydell/node-pty`, `@xterm/*`. Node ≥ 22. Git deposu değil.
+Claude Panel: birden çok Claude Code oturumunu rollere ayrılmış bir ekip olarak (orkestra şefi + coder/review/araştırma…) tek yerel web panelinden yöneten Node.js uygulaması. Yalnızca Windows'ta, yalnızca `127.0.0.1`'de çalışır. Kod, yorumlar, arayüz metinleri ve rol talimatları Türkçe; yeni kod da böyle yazılır. Derleme adımı yok: sunucu düz CommonJS, arayüz tek dosya vanilla JS (`web/app.js`, IIFE) + xterm. Bağımlılıklar yalnızca `ws`, `@lydell/node-pty`, `@xterm/*`. Node ≥ 22. Yerel git deposu (uzak depo yok); `data/`, `.remember/`, `external resources/` (kaynak olarak indirilen dış repolar) depo dışında.
 
 ## Komutlar
 
@@ -13,13 +13,15 @@ npm start                      # node server/index.js (canlı panel, port 7788, 
 node --test test/unit.test.js  # birim testleri (model çağırmaz). Node 24'te `node --test test/` klasör kabul etmez, hata verir
 node --test --test-name-pattern "<ad>" test/unit.test.js   # tek birim testi
 node test/smoke.js             # ~74 API çağrısı, 7799'da geçici veriyle; 500 yok, panel ayakta (SMOKE_PC=1 → open-pc de)
-node test/e2e.js [senaryo ...] # gerçek Claude oturumları açar, KOTA HARCAR (Haiku). Senaryolar: launch paste settings teamcaps account curator curatormerge optimize
+node test/e2e.js [senaryo ...] # gerçek Claude oturumları açar, KOTA HARCAR (Haiku). Senaryolar: launch builtinskills paste settings teamcaps account curator curatormerge optimize
 node --check server/<dosya>.js # hızlı sözdizimi kontrolü
 ```
 
 - **Canlı panel (7788) ile test paneli (7799) ayrıdır.** `test/lib.js` paneli `CLAUDE_PANEL_DATA=<geçici klasör>` ve `CLAUDE_PANEL_PORT=7799` ile açar, canlı `data/settings.json`, `projects.json`, `caps.json`'u kopyalar; gruplar boş başlar. Canlı veriye ve oturumlara dokunma.
 - Canlı panel kullanıcının açık ekip oturumlarını barındırır; yeniden başlatmak hepsini kapatır. Yeni kod canlıda ancak yeniden başlatınca geçer (`Claude-Panel.bat` ya da arka planda `Claude-Panel-Arkaplan.vbs`; kapatma Ayarlar → "Sunucuyu kapat"). Yeniden başlatmayı kullanıcıya sormadan yapma; yapılmadıysa "canlıda doğrulanmadı" diye raporla.
 - Değişiklikten sonra beklenen doğrulama: `node --test test/unit.test.js` + ilgili `node test/e2e.js <senaryo>`; API eklendiyse `test/smoke.js`'e de ekle.
+- e2e oturumları bu klasörde açar; klasör git deposu olduğundan Claude Code güveni deponun kökünden sorar (üst klasör `Desktop`'ın güveni artık yetmez). Hesapta klasör güvenilir değilse oturumlar güven ekranında bekler ve e2e "skill listesi yok" / "ilk görev bitmedi" diye düşer.
+- İlk görev (`firstTask`) gruptaki yalnızca şefe ya da ilk üyeye gider; diğer üyelerin oturum kaydı ilk mesaja kadar oluşmaz.
 - Ortam değişkenleri: `CLAUDE_PANEL_DATA`, `CLAUDE_PANEL_PORT`, `CLAUDE_PANEL_ROTATE_MS`, `CLAUDE_PANEL_HOOK_DEBUG`, `TEST_PANEL_PORT`, `E2E_ACCOUNT`, `SMOKE_PC`.
 - `attach.js <oturum-id> [port] [veri]`: harici terminali paneldeki bir oturumun PTY'sine bağlar.
 
@@ -52,6 +54,7 @@ Görev panosu kartları, grup notları ve ekip istek sonuçları dosyada "iletil
 
 ### Kurulum ve yetenekler (optimizer.js, caps.js)
 - `optimizer.js`: grup açılmadan önce tek model çağrısıyla satır başına model/effort/izin/talimat/yetenek önerir (proje özeti + önceki grupların harcaması; proje klasöründe yalnızca Read/Grep/Glob). Hesap dağıtımı kuralla yapılır, modele sorulmaz. Yanıt sunucuda doğrulanır.
+- Skill'ler iki katmanlı. **Depodaki `skills/`**: panelle gelen, role özel genel bilgi (projeye özel olan rol talimatıdır). Panelden salt okunur (düzenleme/silme 403, aynı adla yerel skill 409); varsayılan roller `skills/roles.json`, kaynak ve uyarlamalar `skills/SOURCES.md`. **`data/skills/`**: kullanıcının panelden eklediği yerel skill'ler. `caps.load()` ikisini `builtin` işaretiyle birleştirir; `save()` depodakileri yazmaz, yalnızca rollerinin varsayılandan farkını `caps.json` `builtinRoles`'a yazar. Anahtar ikisinde de `pskill:<ad>`; kurulum, optimizer ve şefin `uye_yetenek_degistir` isteği aynı yoldan çalışır. Skill eklerken: klasör + `roles.json` + SOURCES.md tablosu birlikte (birim testi tutarlılığı denetler); skill başka bir skill'in klasörüne `../` ile bağlanamaz, çünkü her skill oturuma ayrı kopyalanır.
 - `caps.js`: panel MCP/skill'leri yalnızca işaretli rollere verilir; global skill/eklenti/MCP rol bazında kapatılır. Hiçbiri hesap ayarlarına yazılmaz, hep oturuma özel dosyayla. Skill kataloğu oturum kayıtlarındaki `skill_listing` ekinden öğrenilir (`caps.json seen`). `skillOverrides: "off"` yerleşik ve claude.ai skill'lerini kapatır, eklenti skill'ine işlemez (yalnızca `enabledPlugins`). Skill listesi oturum başında ve compact sonrası yazılır; kazanç yeni/yenilenen oturumda görülür.
 
 ### Kalıcı veri (`data/`, gitignore)

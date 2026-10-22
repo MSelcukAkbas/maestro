@@ -1,0 +1,18 @@
+{
+  "planning-and-task-breakdown": ["sef"],
+  "spec-driven-development": ["sef"],
+  "incremental-implementation": ["coder"],
+  "api-and-interface-design": ["backend"],
+  "observability-and-instrumentation": ["backend"],
+  "frontend-ui-engineering": ["frontend"],
+  "android-app-engineering": ["android"],
+  "code-review-and-quality": ["review"],
+  "debugging-and-error-recovery": ["debug"],
+  "code-simplification": ["kalite"],
+  "source-driven-development": ["arastirma"],
+  "ci-cd-and-automation": ["ops"],
+  "doubt-driven-development": ["avukat"],
+  "test-driven-development": ["test"],
+  "security-and-hardening": ["guvenlik"],
+  "documentation-and-adrs": ["dokuman"]
+}

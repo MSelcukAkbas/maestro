@@ -4248,11 +4248,14 @@
         ...c.skills.map((s) => `
           <div class="cap-row">
             <div class="cap-head">
-              <span class="cap-name mono">${esc(s.name)}</span><span class="badge acc-green">panel</span>
+              <span class="cap-name mono">${esc(s.name)}</span>
+              ${s.builtin
+                ? `<span class="badge acc-green" title="Panelle gelen skill (depodaki skills/ klasörü); panelden düzenlenmez. Varsayılan roller: ${esc((s.defaults || []).join(', ') || 'yok')}">panel</span>`
+                : '<span class="badge" title="Panelden eklediğin skill (data/skills)">yerel</span>'}
               ${globalSkillNames.has(s.name) ? '<span class="badge warn" title="Global skill ile aynı ad; o rolde global olanı kapatırsan bu da gizlenir">ad çakışıyor</span>' : ''}
               <span class="grow"></span>
-              <button class="btn small ghost" data-act="skill-edit" data-name="${esc(s.name)}">Düzenle</button>
-              <button class="btn small ghost danger-text" data-act="skill-del" data-name="${esc(s.name)}">Sil</button>
+              ${s.builtin ? '' : `<button class="btn small ghost" data-act="skill-edit" data-name="${esc(s.name)}">Düzenle</button>
+              <button class="btn small ghost danger-text" data-act="skill-del" data-name="${esc(s.name)}">Sil</button>`}
             </div>
             <div class="cap-desc">${esc(s.description)}</div>
             ${this.roleChecks(`pskill:${s.name}`, (rid) => s.roles.includes(rid))}

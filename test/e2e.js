@@ -73,6 +73,36 @@ const SCENARIOS = {
     }
   },
 
+  // Depodaki skills/: rolün varsayılan skill'i oturuma yüklenir; Ayarlar'da rolden çıkarılan yüklenmez; salt okunur.
+  async builtinskills({ api, acc, pid }) {
+    const caps = await api('GET', '/api/caps');
+    const sec = caps.skills.find((s) => s.name === 'security-and-hardening');
+    assert.ok(sec && sec.builtin && sec.roles.includes('guvenlik'), 'depodaki skill varsayılan rolüyle gelmedi');
+    await assert.rejects(api('DELETE', '/api/caps/skill/security-and-hardening'), (e) => e.status === 403);
+    await api('PUT', '/api/caps/role', { key: 'pskill:source-driven-development', roleId: 'arastirma', on: false });
+    // İlk görev gruptaki yalnızca ilk üyeye gider; her rol kendi grubunda açılır ki ikisinin de kaydı oluşsun.
+    const open = (roleId) => api('POST', '/api/groups', {
+      projectId: pid, name: `e2e-builtin-${roleId}`, permissionMode: 'manual', firstTask: 'Yalnızca "ok" yaz.',
+      rows: [{ key: 'a', roleId, accountId: acc, model: 'haiku', effort: 'low' }],
+    });
+    const groups = [await open('guvenlik'), await open('arastirma')];
+    const listing = (sid) => until(() => {
+      const l = transcript(sid).find((x) => x.type === 'attachment' && x.attachment.type === 'skill_listing');
+      return l ? l.attachment.names : null;
+    }, 120000);
+    try {
+      const n1 = await listing(groups[0].sessions[0].id);
+      const n2 = await listing(groups[1].sessions[0].id);
+      assert.ok(n1 && n2, 'oturum kaydında skill listesi yok (proje klasörü bu hesapta güvenilir mi?)');
+      assert.ok(n1.includes('security-and-hardening'), `güvenlik rolüne skill yüklenmedi: ${n1}`);
+      assert.ok(!n1.includes('planning-and-task-breakdown'), 'başka rolün skill\'i yüklendi');
+      assert.ok(!n2.includes('source-driven-development'), 'rolden çıkarılan skill yüklendi');
+      return `güvenlik: ${n1.filter((n) => !n.includes(':')).length} skill listede`;
+    } finally {
+      for (const g of groups) await api('POST', `/api/groups/${g.id}/stop`).catch(() => {});
+    }
+  },
+
   // Panelin yapıştırdığı bildirim (not) kullanıcı mesajı sayılmaz.
   async paste({ api, acc, pid }) {
     const g = await api('POST', '/api/groups', {

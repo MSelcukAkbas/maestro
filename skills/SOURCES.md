@@ -8,6 +8,10 @@ arasındaki farka bakılır, uyarlamalar korunarak elle aktarılır.
 
 ## Rol eşleştirmesi
 
+Panelin okuduğu varsayılan eşleştirme `roles.json`'dadır; bu tablo onun okunur hâlidir, değişince ikisi birlikte
+güncellenir. Kullanıcının Ayarlar → Yetenekler'de yaptığı rol değişikliği `data/caps.json` (`builtinRoles`) içine
+varsayılandan fark olarak yazılır, bu dosyalara dokunmaz.
+
 | Rol (id) | Skill | Kaynak |
 |---|---|---|
 | Orkestra şefi (`sef`) | planning-and-task-breakdown, spec-driven-development | agent-skills |

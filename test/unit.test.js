@@ -69,6 +69,62 @@ test('caps: skill listesi öğrenilir, türler ayrılır, kapatma skillOverrides
   assert.deepStrictEqual(f.settings.skillOverrides, { 'anthropic-skills:docs': 'off', dataviz: 'off' });
 });
 
+test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır, salt okunurdur', () => {
+  const { Caps } = require('../server/caps');
+  const repo = tmp('builtin');
+  const mk = (name, desc) => {
+    fs.mkdirSync(path.join(repo, name, 'references'), { recursive: true });
+    fs.writeFileSync(path.join(repo, name, 'SKILL.md'), `---\nname: ${name}\ndescription: ${desc}\n---\n\nGövde\n`);
+    fs.writeFileSync(path.join(repo, name, 'references', 'ek.md'), 'ek');
+  };
+  mk('plan-skill', 'Planlama');
+  mk('review-skill', 'İnceleme');
+  fs.writeFileSync(path.join(repo, 'roles.json'), JSON.stringify({ 'plan-skill': ['sef'], 'review-skill': ['review'] }));
+  const dir = tmp('caps-b');
+  const c = new Caps(dir, repo);
+  const roles = (n) => c.load().skills.find((s) => s.name === n).roles;
+  assert.deepStrictEqual(roles('plan-skill'), ['sef']);
+  assert.ok(c.load().skills.every((s) => s.builtin));
+  // Rol değişikliği yalnızca fark olarak yazılır; depodaki dosyalar değişmez.
+  c.setRole('pskill:plan-skill', 'coder', true);
+  c.setRole('pskill:review-skill', 'review', false);
+  assert.deepStrictEqual(roles('plan-skill'), ['sef', 'coder']);
+  assert.deepStrictEqual(roles('review-skill'), []);
+  const saved = JSON.parse(fs.readFileSync(path.join(dir, 'caps.json'), 'utf8'));
+  assert.deepStrictEqual(saved.skills, []);
+  assert.deepStrictEqual(saved.builtinRoles, { 'plan-skill': { on: ['coder'] }, 'review-skill': { off: ['review'] } });
+  // Varsayılana dönen rol farkı silinir.
+  c.setRole('pskill:review-skill', 'review', true);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'caps.json'), 'utf8')).builtinRoles, { 'plan-skill': { on: ['coder'] } });
+  // Oturuma referans dosyalarıyla birlikte kopyalanır.
+  const f = c.forSession('sid', 'sef', null);
+  assert.ok(fs.existsSync(path.join(f.addDir, '.claude', 'skills', 'plan-skill', 'references', 'ek.md')));
+  assert.ok(!fs.existsSync(path.join(f.addDir, '.claude', 'skills', 'review-skill')));
+  assert.strictEqual(c.readSkill('plan-skill').builtin, true);
+  assert.throws(() => c.removeSkill('plan-skill'), (e) => e.status === 403);
+  assert.throws(() => c.writeRaw('plan-skill', '---\nname: plan-skill\ndescription: x\n---\n'), (e) => e.status === 403);
+  assert.throws(() => c.writeSkill({ name: 'plan-skill', description: 'x', body: '' }), (e) => e.status === 409);
+  assert.ok(fs.existsSync(path.join(repo, 'plan-skill', 'SKILL.md')));
+  // Kullanıcı skill'i yerel katmanda kalır.
+  c.writeSkill({ name: 'yerel-skill', description: 'Yerel', body: 'x' });
+  assert.deepStrictEqual(c.load().skills.map((s) => [s.name, !!s.builtin]), [['plan-skill', true], ['review-skill', true], ['yerel-skill', false]]);
+});
+
+test('skills/: roles.json depodaki skill\'leri ve paneldeki rolleri gösterir', () => {
+  const { Caps } = require('../server/caps');
+  const map = JSON.parse(fs.readFileSync(path.join(ROOT, 'skills', 'roles.json'), 'utf8'));
+  const names = new Caps(tmp('caps-r')).builtins().map((b) => b.name);
+  assert.deepStrictEqual(Object.keys(map).sort(), [...names].sort(), 'roles.json ile skill klasörleri uyuşmuyor');
+  // Varsayılan roller boş veri klasörüyle (canlı ayarlara dokunmadan) yüklenir.
+  const r = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/store').loadSettings().roles.map((x) => x.id)))`], {
+    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: tmp('store-r') }, encoding: 'utf8',
+  });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const roleIds = JSON.parse(r.stdout);
+  for (const [n, rs] of Object.entries(map)) for (const r of rs) assert.ok(roleIds.includes(r), `${n}: bilinmeyen rol ${r}`);
+  for (const r of roleIds) assert.ok(Object.values(map).some((rs) => rs.includes(r)), `${r} rolüne skill yok`);
+});
+
 test('optimizer: ekleme / çıkarma / effort doğrulanır', () => {
   const o = require('../server/optimizer');
   const rows = [
