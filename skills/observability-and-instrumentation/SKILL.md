@@ -19,8 +19,8 @@ Code you can't observe is code you can't operate. Observability is the ability t
 
 **NOT for:**
 - Diagnosing a failure happening right now — use the `debugging-and-error-recovery` skill (observability is what makes that skill fast next time)
-- Profiling and optimizing measured slowness — use the `performance-optimization` skill
-- Launch-day monitoring checklists and rollback triggers — see the `shipping-and-launch` skill; this skill covers the instrumentation that feeds them
+- Profiling and optimizing measured slowness
+- Launch-day monitoring checklists and rollback triggers; this skill covers the instrumentation that feeds them
 
 ## Process
 
