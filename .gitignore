@@ -1,0 +1,10 @@
+node_modules/
+# Çalışma verisi: erişim anahtarı (token.txt), hesap ayarları, oturum istemleri, panolar, notlar.
+data/
+# Kişisel oturum hafızası (remember eklentisi).
+.remember/
+# Kaynak olarak indirilen dış repolar; her birinin kendi .git'i var. Kullanılan parçalar skills/ altına kopyalanır.
+external resources/
+# e2e testinin denediği dosya.
+e2e-yazma-denemesi.txt
+*.tmp
