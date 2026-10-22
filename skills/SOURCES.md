@@ -29,3 +29,11 @@ güncel hali arasındaki farka bakılır, uyarlamalar korunarak elle aktarılır
   - security-and-hardening ← security-checklist.md (`hardening-patterns.md` içindeki yol da düzeltildi)
   - test-driven-development ← testing-patterns.md
   - frontend-ui-engineering ← accessibility-checklist.md
+- planning-and-task-breakdown, spec-driven-development: görev listesi panel ekibinde görev panosuna (`pano_ekle`,
+  kart başına bir görev, panel kartı üyeye iletir), plan dokümanı grup notuna (`not_ekle`) yazılır; panel dışında
+  kaynaktaki `tasks/plan.md` / `tasks/todo.md` geçerli. Panelde olmayan `/build` komutuna atıflar ve "şef kod yazmaz"
+  ile çelişen uygulama adımı uyarlandı.
+- Kopyalanmayan skill'lere atıflar çıkarıldı: api-and-interface-design, incremental-implementation, context-engineering
+  (spec), performance-optimization ve constraint-driven-development (review), observability-and-instrumentation
+  (security), browser-testing-with-devtools (test).
+- Skill açıklamaları (`description`, her istekte bağlamda) değiştirilmedi.

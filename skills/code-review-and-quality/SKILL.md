@@ -76,7 +76,7 @@ For detailed security guidance, see `security-and-hardening`. Does the change in
 
 ### 5. Performance
 
-For detailed profiling and optimization, see `performance-optimization`. Does the change introduce performance problems?
+Does the change introduce performance problems?
 
 - Any N+1 query patterns?
 - Any unbounded loops or unconstrained data fetching?
@@ -161,7 +161,7 @@ Tests reveal intent and coverage:
 - Would the tests catch a regression if the code changed?
 ```
 
-Answer the last question by experiment, not by reading. Invert one condition the change adds (drop a negation, swap `&&` for `||`), run the suite, then restore the file from a copy. A mutation that stays green is a finding: name the test case that is missing. For a project-wide mutation score, see `constraint-driven-development`.
+Answer the last question by experiment, not by reading. Invert one condition the change adds (drop a negation, swap `&&` for `||`), run the suite, then restore the file from a copy. A mutation that stays green is a finding: name the test case that is missing.
 
 ### Step 3: Review the Implementation
 

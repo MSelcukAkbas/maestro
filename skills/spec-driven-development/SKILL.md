@@ -58,7 +58,7 @@ Build order: identity → billing, notifications → reporting
 
 - **Stable module ids.** Kebab-case, chosen once, never renamed mid-initiative. Specs, plans, and downstream commands select work by these ids instead of guessing which spec is active.
 - **Dependency direction, no cycles.** Arrows point one way. If two modules each need the other, they are one module.
-- **Interfaces live at the boundary.** The map records that `billing` depends on `identity`; the contract between them belongs in the provider module's spec (see `api-and-interface-design` for designing it).
+- **Interfaces live at the boundary.** The map records that `billing` depends on `identity`; the contract between them belongs in the provider module's spec.
 
 **The map is gated like every phase.** The human reviews module boundaries, dependency direction, and build order before any module spec is written. Getting the map wrong is expensive; reviewing ten lines is not.
 
@@ -185,7 +185,7 @@ With the validated spec, generate a technical implementation plan:
 
 > Follow `planning-and-task-breakdown` for the dependency-graph mapping and vertical-slicing mechanics behind these steps; it is the canonical source. The bullets above are a lightweight summary; if they ever diverge, `planning-and-task-breakdown` takes precedence.
 >
-> **Output convention:** Save the plan to `tasks/plan.md` and record the task list in the task list target defined by `planning-and-task-breakdown` (default `tasks/todo.md`; projects may designate an external tracker instead). Create `tasks/` if it does not exist. Downstream commands (`/build`, etc.) expect these defaults.
+> **Output convention:** Record the plan and the task list where `planning-and-task-breakdown` says: in a Claude Panel team, the plan as a group note and the tasks as task board cards; outside the panel, `tasks/plan.md` and `tasks/todo.md` (or the project's designated tracker).
 
 The plan should be reviewable: the human should be able to read it and say "yes, that's the right approach" or "no, change X."
 
@@ -211,7 +211,7 @@ Break the plan into discrete, implementable tasks:
 
 ### Phase 4: Implement
 
-Execute tasks one at a time following `skills/incremental-implementation/SKILL.md` (`incremental-implementation`) and `skills/test-driven-development/SKILL.md` (`test-driven-development`). Use `skills/context-engineering/SKILL.md` (`context-engineering`) to load the right spec sections and source files at each step rather than flooding the agent with the entire spec.
+Execute tasks one at a time in thin, verifiable slices, test-first where it applies (`test-driven-development`). Give each implementer only the spec sections and source files its task needs rather than the entire spec. In a Claude Panel team the lead does not implement: assign the tasks on the task board and track them there.
 
 ## Keeping the Spec Alive
 
