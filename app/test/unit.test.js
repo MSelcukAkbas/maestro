@@ -377,6 +377,40 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(data, 'settings.json'), 'utf8')).roles, undefined);
 });
 
+test('prompts: rol kaydında değişen dosyaların eski hali arşive girer, en fazla 30 sürüm tutulur', () => {
+  const dir = tmp('prompts-arch');
+  fs.cpSync(path.join(ROOT, 'prompts'), dir, { recursive: true, filter: (src) => path.basename(src) !== 'archive' });
+  const script = `
+    const p = require('./server/core/prompts');
+    const out = {};
+    const list = () => p.roles().map((r) => ({ ...r }));
+    const orig = p.role('review').persona;
+    p.saveRoles(list());
+    out.noop = p.roleArchive('review').length;
+    const l = list(); l.find((r) => r.id === 'review').persona = 'yeni persona';
+    p.saveRoles(l, { review: { kaynak: 'rol danışmanı', ozet: 'kısa', uygulanan: [{ alan: 'persona', ozet: 'x', neden: 'y' }] } });
+    const a = p.roleArchive('review');
+    out.one = a.map((x) => ({ kaynak: x.kaynak, dosyalar: x.dosyalar, ozet: x.ozet }));
+    out.entry = p.roleArchiveEntry('review', a[0].id);
+    out.orig = orig;
+    out.bad = p.roleArchiveEntry('review', '../sef');
+    for (let i = 0; i < 32; i++) { const m = list(); m.find((r) => r.id === 'review').model = i % 2 ? 'opus' : 'sonnet'; p.saveRoles(m); }
+    out.kept = p.roleArchive('review').length;
+    out.sef = p.roleArchive('sef').length;
+    process.stdout.write(JSON.stringify(out));`;
+  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_PROMPTS: dir, CLAUDE_PANEL_DATA: tmp('prompts-arch-data') }, encoding: 'utf8' });
+  assert.strictEqual(r.status, 0, r.stderr);
+  const o = JSON.parse(r.stdout);
+  // Değişiklik yoksa arşiv kaydı açılmaz.
+  assert.strictEqual(o.noop, 0);
+  assert.deepStrictEqual(o.one, [{ kaynak: 'rol danışmanı', dosyalar: ['persona.md'], ozet: 'kısa' }]);
+  assert.strictEqual(o.entry.files['persona.md'].replace(/\n+$/, ''), o.orig);
+  assert.strictEqual(o.entry.meta.uygulanan[0].neden, 'y');
+  assert.strictEqual(o.bad, null);
+  assert.strictEqual(o.kept, 30);
+  assert.strictEqual(o.sef, 0);
+});
+
 test('rol danışmanı: öneriler küçük değişiklik kuralıyla doğrulanır, izin gevşetilmez', () => {
   const { validateProposals, validateQuestions, usage } = require('../server/setup/roleadvisor');
   const role = {

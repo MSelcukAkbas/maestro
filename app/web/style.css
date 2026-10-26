@@ -736,3 +736,12 @@ a.notif-item:hover { background: var(--surface-2); }
 .ropt-diff { display: flex; flex-direction: column; gap: 3.5px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ropt-diff del { color: #ffb3b3; background: rgba(255, 90, 90, .08); text-decoration: line-through; padding: 3.5px 7px; border-radius: 5px; }
 .ropt-diff ins { color: var(--accent); background: rgba(52, 209, 160, .08); text-decoration: none; padding: 3.5px 7px; border-radius: 5px; }
+/* Rol arşivi (Geçmiş) */
+.arch-row { padding: 10px 0; border-top: 1px solid var(--line); }
+.arch-row:first-child { border-top: 0; }
+.arch-row .cap-head { flex-wrap: wrap; gap: 7px; }
+.arch-diffs { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
+.arch-diff { margin: 5px 0 0; padding: 7px 10px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; background: rgba(0, 0, 0, .18); border-radius: 7px; }
+.arch-diff .dl { color: #ffb3b3; background: rgba(255, 90, 90, .08); }
+.arch-diff .da { color: var(--accent); background: rgba(52, 209, 160, .08); }
+.arch-diff .dc, .arch-diff .dm { color: var(--muted); }

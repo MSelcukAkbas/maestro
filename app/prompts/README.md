@@ -45,6 +45,12 @@ Her rolün Ayarlar → Roller altında kendi sayfası var (`#/ayarlar/roller/<ki
 düzenlenir: `role.json`, üç metin, `permissions.json` ve rolün yetenekleri. "Salt okunur" kutusu bu üç aracı `deny`'a
 ekler ya da çıkarır; diğer `allow` / `deny` kuralları sayfadaki iki alanda satır satır yazılır.
 
+**`archive/`** panelden yapılan her rol kaydında değişen dosyaların eski halini tutar:
+`archive/<YYYYMMDD-HHMMSS>/` içinde eski dosyalar ve `kayit.json` (zaman, değişen dosyalar, kaynak: `elle` /
+`rol danışmanı` / `geri yükleme`; danışmansa soru-cevaplar ve uygulanan öneriler). Rol başına son 30 sürüm kalır.
+Rol sayfasının "Geçmiş" bölümünde fark görülür ve "Geri yükle" ile eski hal forma yüklenir (kaydedince yazılır,
+şimdiki hal de arşive girer). Klasör git'e girmez (`.gitignore`); elle yapılan dosya düzenlemeleri arşivlenmez.
+
 **`role.json`** rolün ayarlarını tutar:
 
 | alan | anlamı |

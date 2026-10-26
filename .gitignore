@@ -8,3 +8,5 @@ external resources/
 # e2e testinin denediği dosya.
 e2e-yazma-denemesi.txt
 *.tmp
+# Rol arşivi: panelden yapılan rol kayıtlarının eski sürümleri (geri dönüş panelden).
+app/prompts/roles/*/archive/

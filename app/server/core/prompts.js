@@ -124,9 +124,60 @@ function role(id) {
   return roles().find((r) => r.id === id) || null;
 }
 
+// ---------- rol arşivi ----------
+// Panelden yapılan her rol kaydında değişen dosyaların ESKİ hali roles/<id>/archive/<zaman>/ altına kopyalanır, yanına
+// kayit.json (zaman, kaynak, dosyalar, varsa rol danışmanının soru / cevap / önerileri). Geri dönüş panelden yapılır
+// (eski sürüm forma yüklenir, kaydedince şimdiki hal de arşive girer). Arşiv git dışında; rol başına son ARCHIVE_KEEP.
+// Panel dışında elle yapılan düzenleme burada görünmez.
+const ARCHIVE_KEEP = 30;
+const ARCHIVE_ID = /^\d{8}-\d{6}(-\d+)?$/;
+
+function archiveDir(id) {
+  return path.join(PROMPTS_DIR, 'roles', id, 'archive');
+}
+
+// files: [{ name, old }] (old: dosyanın yazılmadan önceki tam içeriği), meta: { kaynak, ... }
+function archiveRole(id, files, meta) {
+  const base = new Date().toISOString().slice(0, 19).replace(/-|:/g, '').replace('T', '-');
+  let stamp = base;
+  for (let n = 2; fs.existsSync(path.join(archiveDir(id), stamp)); n++) stamp = `${base}-${n}`;
+  const dir = path.join(archiveDir(id), stamp);
+  fs.mkdirSync(dir, { recursive: true });
+  for (const f of files) fs.writeFileSync(path.join(dir, f.name), f.old, 'utf8');
+  fs.writeFileSync(path.join(dir, 'kayit.json'), `${JSON.stringify({ zaman: Date.now(), dosyalar: files.map((f) => f.name), ...meta }, null, 2)}\n`, 'utf8');
+  const all = fs.readdirSync(archiveDir(id)).filter((x) => ARCHIVE_ID.test(x)).sort();
+  for (const old of all.slice(0, Math.max(0, all.length - ARCHIVE_KEEP))) fs.rmSync(path.join(archiveDir(id), old), { recursive: true, force: true });
+}
+
+// Rolün arşivi, en yeni önce: [{ id, zaman, kaynak, dosyalar, danisman }]
+function roleArchive(id) {
+  let names = [];
+  try { names = fs.readdirSync(archiveDir(id)).filter((x) => ARCHIVE_ID.test(x)).sort().reverse(); } catch {}
+  return names.map((stamp) => {
+    let meta = {};
+    try { meta = JSON.parse(fs.readFileSync(path.join(archiveDir(id), stamp, 'kayit.json'), 'utf8')); } catch {}
+    return { id: stamp, ...meta };
+  });
+}
+
+// Tek sürümün dosyaları: { id, meta, files: { 'gorevler.md': '…', 'role.json': '…' } }
+function roleArchiveEntry(id, stamp) {
+  if (!ROLE_ID.test(id) || !ARCHIVE_ID.test(stamp)) return null;
+  const dir = path.join(archiveDir(id), stamp);
+  if (!fs.existsSync(dir)) return null;
+  const files = {};
+  for (const f of ROLE_FILES) {
+    try { files[f] = fs.readFileSync(path.join(dir, f), 'utf8').replace(/\r\n/g, '\n'); } catch {}
+  }
+  let meta = {};
+  try { meta = JSON.parse(fs.readFileSync(path.join(dir, 'kayit.json'), 'utf8')); } catch {}
+  return { id: stamp, meta, files };
+}
+
 // Ayarlar ekranından gelen tam rol listesini klasörlere yazar: yalnızca değişen dosya yazılır, sıra listedeki sıradır.
 // Listede olmayan rolün klasörü silinmez, "_silinen-<id>-<zaman>" adıyla kenara alınır (elle yazılmış metin kaybolmasın).
-function saveRoles(list) {
+// Değişen dosyaların eski hali önce rolün arşivine girer; notes: { rolId: { kaynak, ... } } arşiv kaydına eklenir.
+function saveRoles(list, notes = {}) {
   for (const r of list) if (!ROLE_ID.test(r.id)) throw new Error(`Geçersiz rol kimliği: ${r.id}`);
   const keep = new Set(list.map((r) => r.id));
   for (const id of roleDirs()) {
@@ -146,16 +197,20 @@ function saveRoles(list) {
     const deny = strList(Array.isArray(r.deny) ? r.deny : oldPerm.deny).filter((t) => !READ_ONLY_TOOLS.includes(t));
     const allow = strList(Array.isArray(r.allow) ? r.allow : oldPerm.allow);
     const perm = { mode: r.permissionMode || '', allow, deny: r.readOnly ? [...READ_ONLY_TOOLS, ...deny] : deny };
-    const writeJsonIfChanged = (rel, v) => {
-      const t = `${JSON.stringify(v, null, 2)}\n`;
-      if (text(rel) !== t.replace(/\n+$/, '')) writeFile(rel, t);
+    const writes = [];
+    const want = (name, t) => {
+      if ((text(`roles/${r.id}/${name}`) ?? '') !== t.replace(/\n+$/, '')) writes.push({ name, t });
     };
-    writeJsonIfChanged(`roles/${r.id}/role.json`, cfg);
-    writeJsonIfChanged(`roles/${r.id}/permissions.json`, perm);
-    for (const k of ROLE_TEXTS) {
-      const v = String(r[k] || '').replace(/\r\n/g, '\n').replace(/\n+$/, '');
-      if ((text(`roles/${r.id}/${k}.md`) ?? '') !== v) writeFile(`roles/${r.id}/${k}.md`, `${v}\n`);
-    }
+    want('role.json', `${JSON.stringify(cfg, null, 2)}\n`);
+    want('permissions.json', `${JSON.stringify(perm, null, 2)}\n`);
+    for (const k of ROLE_TEXTS) want(`${k}.md`, `${String(r[k] || '').replace(/\r\n/g, '\n').replace(/\n+$/, '')}\n`);
+    if (!writes.length) return;
+    // Yeni rolde eski dosya yoktur; arşive yalnızca var olan dosyaların eski hali girer.
+    const prev = writes.map((w) => {
+      try { return { name: w.name, old: fs.readFileSync(path.join(PROMPTS_DIR, 'roles', r.id, w.name), 'utf8') }; } catch { return null; }
+    }).filter(Boolean);
+    if (prev.length) archiveRole(r.id, prev, { kaynak: 'elle', ...(notes[r.id] || {}) });
+    for (const w of writes) writeFile(`roles/${r.id}/${w.name}`, w.t);
   });
   roleCache = null;
 }
@@ -249,4 +304,7 @@ function sharedSections() {
   return names.map((f) => text(`shared/${f}`)).filter((t) => t != null);
 }
 
-module.exports = { PROMPTS_DIR, ROLE_ID, ROLE_TEXTS, READ_ONLY_TOOLS, text, json, roles, role, saveRoles, skillRoles, setSkillRoles, tool, message, render, sharedSections };
+module.exports = {
+  PROMPTS_DIR, ROLE_ID, ROLE_TEXTS, READ_ONLY_TOOLS, text, json, roles, role, saveRoles, roleArchive, roleArchiveEntry, skillRoles, setSkillRoles,
+  tool, message, render, sharedSections,
+};

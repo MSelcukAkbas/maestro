@@ -16,6 +16,25 @@ const CAP_KIND = { plugin: 'eklenti', skill: 'skill', mcp: 'MCP' };
 // Salt okunur rolde kapatılan araçlar (server/core/prompts.js READ_ONLY_TOOLS ile aynı).
 const READ_ONLY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
+// İki satır listesinin farkı (en uzun ortak alt dizi): [{ t: ' ' | '-' | '+', s }]. Rol metinleri kısa, O(n·m) yeter.
+function lineDiff(a, b) {
+  const n = a.length;
+  const m = b.length;
+  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
+  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
+  const out = [];
+  let i = 0;
+  let j = 0;
+  while (i < n && j < m) {
+    if (a[i] === b[j]) { out.push({ t: ' ', s: a[i] }); i++; j++; }
+    else if (L[i + 1][j] >= L[i][j + 1]) out.push({ t: '-', s: a[i++] });
+    else out.push({ t: '+', s: b[j++] });
+  }
+  while (i < n) out.push({ t: '-', s: a[i++] });
+  while (j < m) out.push({ t: '+', s: b[j++] });
+  return out;
+}
+
 // "KEY=değer" / "Ad: değer" satırları ile nesne arasında.
 const pairsToText = (o, sep) => Object.entries(o || {}).map(([k, v]) => `${k}${sep}${v}`).join('\n');
 function textToPairs(t, sep) {
@@ -50,6 +69,9 @@ const SettingsView = {
     this.roleId = this.tab === 'roller' && role ? decodeURIComponent(role) : null;
     // Rol danışmanının açık kartı: { rid, busy, questions, changes, … }.
     this.ropt = null;
+    // Rol arşivleri (rolId → liste | { loading } | { error }) ve açık sürüm { rid, id, entry }.
+    this.archives = {};
+    this.archOpen = null;
     this.caps = null;
     this.capTests = {};
     app.innerHTML = '<div class="page" id="settings"></div>';
@@ -68,6 +90,147 @@ const SettingsView = {
       this.caps = { error: err.message };
     }
     if ($('#settings') && ['yetenekler', 'roller'].includes(this.tab)) this.renderBody();
+  },
+
+  // ---------- rol arşivi ----------
+
+  async loadArchive(rid) {
+    this.archives[rid] = { loading: true };
+    try {
+      this.archives[rid] = await api('GET', `/api/roles/${encodeURIComponent(rid)}/archive`);
+    } catch (err) {
+      this.archives[rid] = { error: err.message };
+    }
+    if ($('#settings') && this.roleId === rid) this.renderBody();
+  },
+
+  // Arşivdeki dosyaları formdaki karşılıklarıyla karşılaştırılabilir metne çevirir (json'da yalnızca formdaki alanlar).
+  archiveTexts(r, files) {
+    const out = [];
+    const pick = (o, keys) => JSON.stringify(Object.fromEntries(keys.map((k) => [k, o[k] ?? null])), null, 2);
+    const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    for (const [name, raw] of Object.entries(files)) {
+      const md = name.match(/^(persona|gorevler|sinirlar)\.md$/);
+      if (md) {
+        out.push({ name, title: { persona: 'Persona', gorevler: 'Görevler', sinirlar: 'Sınırlar' }[md[1]], old: raw.replace(/\n+$/, ''), cur: String(r[md[1]] || '').replace(/\n+$/, '') });
+        continue;
+      }
+      let j = {};
+      try { j = JSON.parse(raw); } catch {}
+      if (name === 'role.json') {
+        const keys = ['label', 'short', 'model', 'effort', 'ctxWarn', 'ctxHigh'];
+        out.push({ name, title: 'Genel ve bağlam', old: pick(j, keys), cur: pick({ ...r, ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null }, keys) });
+      } else if (name === 'permissions.json') {
+        out.push({ name, title: 'İzinler', old: pick(j, ['mode', 'allow', 'deny']), cur: pick({ mode: r.permissionMode || '', allow: lines(r.allowText), deny: [...(r.readOnly ? READ_ONLY_TOOLS : []), ...lines(r.denyText)] }, ['mode', 'allow', 'deny']) });
+      }
+    }
+    return out;
+  },
+
+  // Eski sürümü forma yükler (yalnızca o kayıtta değişen dosyalar); kaydedince şimdiki hal de arşive girer.
+  restoreArchive(r, entry) {
+    for (const [name, raw] of Object.entries(entry.files)) {
+      const md = name.match(/^(persona|gorevler|sinirlar)\.md$/);
+      if (md) {
+        r[md[1]] = raw.replace(/\n+$/, '');
+        continue;
+      }
+      let j;
+      try { j = JSON.parse(raw); } catch { continue; }
+      if (name === 'role.json') {
+        for (const k of ['label', 'short', 'model', 'effort']) if (typeof j[k] === 'string') r[k] = j[k];
+        r.ctxWarn = j.ctxWarn || null;
+        r.ctxHigh = j.ctxHigh || null;
+      } else if (name === 'permissions.json') {
+        const deny = Array.isArray(j.deny) ? j.deny : [];
+        r.permissionMode = j.mode || '';
+        r.readOnly = READ_ONLY_TOOLS.every((t) => deny.includes(t));
+        r.allowText = (Array.isArray(j.allow) ? j.allow : []).join('\n');
+        r.denyText = deny.filter((t) => !READ_ONLY_TOOLS.includes(t)).join('\n');
+      }
+    }
+    r.archiveNote = { kaynak: 'geri yükleme', geriYuklenen: entry.id };
+  },
+
+  async onArchive(a, b) {
+    const r = this.model.roles.find((x) => x.id === this.roleId);
+    if (!r) return;
+    if (a === 'arch-close') {
+      this.archOpen = null;
+      return this.renderBody();
+    }
+    const id = b.dataset.aid;
+    const entry = await act(() => api('GET', `/api/roles/${encodeURIComponent(r.id)}/archive/${encodeURIComponent(id)}`));
+    if (!entry) return;
+    if (a === 'arch-show') {
+      this.archOpen = { rid: r.id, id, entry };
+      this.renderBody();
+      const el = $(`#arch-${id}`);
+      if (el) el.scrollIntoView({ block: 'nearest' });
+    } else if (a === 'arch-restore') {
+      if (!confirm('Bu sürüm forma yüklensin mi? "Ayarları kaydet" ile yazılır; şimdiki hal de arşive girer.')) return;
+      this.restoreArchive(r, entry);
+      this.archOpen = null;
+      this.dirty = true;
+      this.renderHead();
+      this.renderBody();
+      window.scrollTo(0, 0);
+      toast('Eski sürüm forma yüklendi. Dosyaya yazmak için "Ayarları kaydet".');
+    }
+  },
+
+  roleArchiveSection(r) {
+    const list = this.archives[r.id];
+    if (!list) {
+      this.loadArchive(r.id);
+      return '';
+    }
+    let body;
+    if (list.loading) body = '<p class="note">Geçmiş yükleniyor…</p>';
+    else if (list.error) body = `<p class="note warn-note">Geçmiş alınamadı: ${esc(list.error)}</p>`;
+    else if (!list.length) body = '<p class="note">Henüz arşiv yok. Bu rolü panelden her kaydettiğinde değişen dosyaların eski hali burada saklanır.</p>';
+    else {
+      const KAYNAK = { elle: 'elle', 'rol danışmanı': 'rol danışmanı', 'geri yükleme': 'geri yükleme' };
+      const NAMES = { 'persona.md': 'persona', 'gorevler.md': 'görevler', 'sinirlar.md': 'sınırlar', 'role.json': 'genel', 'permissions.json': 'izinler' };
+      body = `<div class="card cap-list">${list.map((x) => {
+        const open = this.archOpen && this.archOpen.rid === r.id && this.archOpen.id === x.id;
+        return `
+          <div class="arch-row" id="arch-${esc(x.id)}">
+            <div class="cap-head">
+              <span class="cap-name">${esc(x.zaman ? new Date(x.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : x.id)}</span>
+              <span class="badge${x.kaynak === 'rol danışmanı' ? ' acc-green' : ''}">${esc(KAYNAK[x.kaynak] || x.kaynak || 'elle')}</span>
+              <span class="note">${esc((x.dosyalar || []).map((f) => NAMES[f] || f).join(', '))} değişmeden önceki hali</span>
+              <span class="grow"></span>
+              <button class="btn small ghost" data-act="${open ? 'arch-close' : 'arch-show'}" data-aid="${esc(x.id)}" aria-expanded="${open}">${open ? 'Gizle' : 'Farkı göster'}</button>
+              <button class="btn small" data-act="arch-restore" data-aid="${esc(x.id)}">Geri yükle</button>
+            </div>
+            ${x.kaynak === 'rol danışmanı' && x.uygulanan && x.uygulanan.length ? `<div class="cap-desc">Danışmanın uyguladığı: ${esc(x.uygulanan.map((u) => u.neden || u.alan).join(' · ').slice(0, 300))}</div>` : ''}
+            ${x.geriYuklenen ? `<div class="cap-desc">${esc(x.geriYuklenen)} sürümü geri yüklenmeden önceki hal.</div>` : ''}
+            ${open ? this.archiveDiff(r, this.archOpen.entry) : ''}
+          </div>`;
+      }).join('')}</div>`;
+    }
+    return `
+        <section class="section">
+          <div class="section-head"><h2>Geçmiş</h2><span class="count">panelden yapılan kayıtlar · son 30 sürüm</span></div>
+          ${body}
+        </section>`;
+  },
+
+  // Arşivdeki hal (−) ile formdaki şimdiki hal (+) arasındaki satır farkı; değişmeyen uzun bölümler kısaltılır.
+  archiveDiff(r, entry) {
+    const parts = this.archiveTexts(r, entry.files).map((f) => {
+      const d = lineDiff(f.old.split('\n'), f.cur.split('\n'));
+      if (d.every((x) => x.t === ' ')) return `<div class="arch-file"><div class="ropt-field">${esc(f.title)}</div><p class="note">Şimdiki halle aynı.</p></div>`;
+      const shown = [];
+      d.forEach((x, i) => {
+        const near = d.slice(Math.max(0, i - 1), i + 2).some((y) => y.t !== ' ');
+        if (x.t !== ' ' || near) shown.push(x);
+        else if (shown.length && shown[shown.length - 1].t !== '…') shown.push({ t: '…', s: '' });
+      });
+      return `<div class="arch-file"><div class="ropt-field">${esc(f.title)}</div><pre class="arch-diff">${shown.map((x) => (x.t === '…' ? '<span class="dm">…</span>' : `<span class="${x.t === '-' ? 'dl' : x.t === '+' ? 'da' : 'dc'}">${x.t} ${esc(x.s)}</span>`)).join('\n')}</pre></div>`;
+    });
+    return `<div class="arch-diffs"><p class="note">− arşivdeki hal · + formdaki şimdiki hal</p>${parts.join('')}</div>`;
   },
 
   setDirty() {
@@ -135,6 +298,8 @@ const SettingsView = {
       this.renderHead();
     } else if (a.startsWith('ropt-')) {
       this.onRoleOpt(a);
+    } else if (a.startsWith('arch-')) {
+      this.onArchive(a, b);
     } else if (a === 'role-open') {
       this.openRole(b.dataset.rid);
     } else if (a === 'role-back') {
@@ -154,7 +319,9 @@ const SettingsView = {
       const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       const body = {
         accounts: this.model.accounts,
-        roles: this.model.roles.map(({ allowText, denyText, ...r }) => ({ ...r, allow: lines(allowText), deny: lines(denyText) })),
+        roles: this.model.roles.map(({ allowText, denyText, archiveNote, ...r }) => ({ ...r, allow: lines(allowText), deny: lines(denyText) })),
+        // Rol arşivine yazılacak not: danışmanın uyguladığı öneriler ya da geri yüklenen sürüm.
+        roleNotes: Object.fromEntries(this.model.roles.filter((r) => r.archiveNote).map((r) => [r.id, r.archiveNote])),
         allowedDirs: this.model.allowedText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
         port: Number(this.model.port),
         autoRotate: !!this.model.autoRotate,
@@ -171,6 +338,9 @@ const SettingsView = {
       const r = await act(() => api('PUT', '/api/settings', body), 'Ayarlar kaydedildi.');
       if (r) {
         this.dirty = false;
+        for (const x of this.model.roles) delete x.archiveNote;
+        // Kayıt arşive yeni sürüm ekleyebilir; açık rol sayfası geçmişi yeniden okur.
+        this.archives = {};
         await refresh().catch(() => {});
         this.renderHead();
         this.loadCaps();
@@ -341,6 +511,20 @@ const SettingsView = {
         }
       }
       const caps = chosen.filter((c) => c.kind === 'cap' && !missed.includes(c)).length;
+      // Kaydedilince arşiv kaydına girer: hangi cevaplarla hangi öneriler uygulandı.
+      const applied = chosen.filter((c) => c.kind !== 'cap' && !missed.includes(c));
+      if (applied.length) {
+        const prev = r.archiveNote && r.archiveNote.kaynak === 'rol danışmanı' ? r.archiveNote : null;
+        r.archiveNote = {
+          kaynak: 'rol danışmanı',
+          ozet: this.ropt.proposalSummary || '',
+          cevaplar: [...(prev ? prev.cevaplar : []), ...(this.ropt.answers || [])],
+          uygulanan: [...(prev ? prev.uygulanan : []), ...applied.map((c) => ({
+            alan: c.field, neden: c.why || '',
+            ozet: c.kind === 'text' ? `${c.old ? `"${c.old}" → ` : 'sona eklendi: '}"${c.new}"` : String(c.value),
+          }))],
+        };
+      }
       this.ropt = null;
       if (form) this.dirty = true;
       this.renderHead();
@@ -781,7 +965,8 @@ const SettingsView = {
         <section class="section">
           <div class="section-head"><h2>Yetenekler</h2><span class="count">işaret hemen kaydedilir</span></div>
           ${this.roleCapsEditor(r.id)}
-        </section>`;
+        </section>
+${this.roleArchiveSection(r)}`;
   },
 
   // Rol sayfasındaki yetenek listesi: Yetenekler sekmesindeki işaretlerin yalnızca bu rol için olanı (aynı istek).

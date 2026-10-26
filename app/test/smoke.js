@@ -91,6 +91,10 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     }
     // Rol danışmanı: bilinmeyen rol model çağırmadan 404.
     await hit('POST', '/api/roles/yok-boyle/optimize', { step: 'sorular' });
+    // Rol arşivi: liste her zaman dizi, olmayan sürüm 404.
+    const arch = await hit('GET', '/api/roles/review/archive');
+    if (!Array.isArray(arch)) fails.push('GET /api/roles/review/archive → dizi değil');
+    await hit('GET', '/api/roles/review/archive/20000101-000000', undefined, (s) => s === 404);
     const s2 = await hit('GET', '/api/state');
     const saved = await hit('PUT', '/api/settings', s2.settings);
     // Kaydet / geri oku: rol alanları korunmalı (boş alanların false / null'a dönmesi dışında).
