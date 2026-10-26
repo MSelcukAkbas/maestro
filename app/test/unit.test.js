@@ -132,9 +132,17 @@ test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan
   for (const n of names) assert.ok(map[n] && map[n].length, `${n} hiçbir role atanmamış`);
   for (const id of ids) assert.ok(Object.values(map).some((rs) => rs.includes(id)), `${id} rolüne skill yok`);
   // Yardımcı model araçlarının dosyaları tam.
-  for (const t of ['bekci', 'kurulum-danismani', 'not-duzenleyici', 'kapanis-ozeti']) assert.ok(prompts.tool(t).text().length > 100, t);
+  // Yardımcı model araçlarının dosyaları tam: dört bölüm de dolu.
+  for (const t of ['bekci', 'kurulum-danismani', 'not-duzenleyici', 'kapanis-ozeti']) {
+    for (const f of ['persona.md', 'gorevler.md', 'sinirlar.md', 'cikti.md']) assert.ok(prompts.tool(t).text(f).trim().length > 20, `${t}/${f}`);
+    assert.match(prompts.tool(t).system(), /^## Persona\n[\s\S]+\n## Görevler\n[\s\S]+\n## Sınırlar\n[\s\S]+\n## Çıktı\n/, t);
+  }
+  // Not düzenleyicinin seviye metni görevlerin sonuna, sınırlardan önce girer.
   const { systemPrompt, curatorLevels } = require('../server/team/curator');
-  for (const lv of curatorLevels()) assert.ok(systemPrompt(lv).includes('Derinlik:'), lv);
+  for (const lv of curatorLevels()) {
+    const s = systemPrompt(lv);
+    assert.ok(s.indexOf('Derinlik:') > s.indexOf('## Görevler') && s.indexOf('Derinlik:') < s.indexOf('## Sınırlar'), lv);
+  }
   // Koddaki her bildirim adının messages/ altında dosyası var.
   const used = new Set();
   const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {

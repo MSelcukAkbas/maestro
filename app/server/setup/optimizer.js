@@ -118,7 +118,7 @@ function assignAccounts(rows, accounts, quota) {
 }
 
 // projectDir: model bu klasörde yalnızca okuma araçlarıyla (Read, Grep, Glob) projeyi inceleyebilir.
-// Metin ve ayarlar prompts/tools/kurulum-danismani/ (prompt.md; tool.json: model, maxTurns, timeoutSec); her çağrıda okunur.
+// Metin ve ayarlar prompts/tools/kurulum-danismani/ (persona, görevler, sınırlar, çıktı md'leri; tool.json: model, maxTurns, timeoutSec); her çağrıda okunur.
 // Tur sınırı proje incelemesinin uzamasını keser. model verilmezse tool.json'daki model.
 function ask(account, payload, model = null, projectDir = null) {
   return new Promise((resolve, reject) => {
@@ -127,7 +127,7 @@ function ask(account, payload, model = null, projectDir = null) {
     const cwd = projectDir && fs.existsSync(projectDir) ? projectDir : CWD;
     const read = cwd !== CWD;
     llm.run({
-      kind: 'kurulum danışmanı', account, model: model || t.config.model, system: t.text(), excludeDynamic: true, input: JSON.stringify(payload), cwd,
+      kind: 'kurulum danışmanı', account, model: model || t.config.model, system: t.system(), excludeDynamic: true, input: JSON.stringify(payload), cwd,
       tools: read ? READ_TOOLS : '', allowed: read ? READ_TOOLS : null, maxTurns: read ? t.config.maxTurns : null,
       timeoutMs: t.config.timeoutSec * 1000, timeoutMsg: 'kurulum danışmanı zaman aşımına uğradı',
     }).then(({ res, ok }) => {

@@ -32,10 +32,10 @@ function ask(account, cands, context) {
         kural_onerisi: c.def,
       })),
     };
-    // Metin ve model ayarı prompts/tools/bekci/ (prompt.md, tool.json); her çağrıda okunur.
+    // Metin ve model ayarı prompts/tools/bekci/ (persona, görevler, sınırlar, çıktı md'leri; tool.json); her çağrıda okunur.
     const t = prompts.tool('bekci');
     llm.run({
-      kind: 'bekçi yardımcısı', label: 'yardımcı model', account, model: t.config.model, effort: t.config.effort, system: t.text(), excludeDynamic: true,
+      kind: 'bekçi yardımcısı', label: 'yardımcı model', account, model: t.config.model, effort: t.config.effort, system: t.system(), excludeDynamic: true,
       input: JSON.stringify(payload), cwd: CWD, timeoutMs: t.config.timeoutSec * 1000, timeoutMsg: 'yardımcı model zaman aşımı',
     }).then(({ res, ok, text }) => {
       if (!ok) return reject(new Error(`yardımcı model hatası: ${String(res.result || res.subtype).slice(0, 200)}`));

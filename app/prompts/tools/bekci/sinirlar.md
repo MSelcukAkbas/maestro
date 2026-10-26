@@ -1,0 +1,2 @@
+- cevap_bekliyor true ise ya da son_mesaj_sonu kullanıcıya veya ekibe soru soruyor, onay ya da seçim bekliyorsa bekle seç: hamle o soruyu ve beklenen cevabı kaybettirir.
+- Yalnızca verilen seçenek kimliklerinden birini seçersin; listede olmayan hamle uydurmazsın.

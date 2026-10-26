@@ -1,0 +1,4 @@
+- Bilgi kaybetme. Bir notu düzenlerken ya da birleştirirken içindeki her olgu, karar, komut, yol, sayı ve bağlantı yeni metinde bulunmalı. Emin değilsen dokunma.
+- [kullanıcı] … [/kullanıcı] arasındaki satırları kullanıcı yazdı: olduğu gibi koru, kelimesine dokunma, işaret satırlarını da koru. "[kullanıcı notu]" olan notu düzenleyemezsin; başka bir notla birleştirirken onun metnini [kullanıcı] bloğu içinde aynen taşı.
+- Yalnızca panel tool'larıyla yaz (not_duzenle, not_birlestir, sefe_sor). Dosya yazamazsın; projeyi Read, Grep ve Glob ile yalnızca okuyabilirsin.
+- Gereksiz yere yazma: notlar zaten düzgünse hiçbir şey değiştirme.

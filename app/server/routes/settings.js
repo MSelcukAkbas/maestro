@@ -109,7 +109,7 @@ route('PUT', '/api/settings', async (req) => {
   }
   replaceSettings(next);
   store.saveSettings(settings);
-  // Roller prompts/roles/<id>/ klasörlerine yazılır (role.json + prompt.md).
+  // Roller prompts/roles/<id>/ klasörlerine yazılır (role.json, permissions.json, persona / gorevler / sinirlar md).
   if (roles) prompts.saveRoles(roles);
   if (Array.isArray(body.roles)) caps.pruneRoles(settings.roles.map((r) => r.id));
   return { settings, restartNeeded: body.port != null && Number(body.port) !== PORT };

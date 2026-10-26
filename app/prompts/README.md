@@ -103,8 +103,15 @@ hatası istemde görünür.
 
 ## tools/<araç>/
 
-Bu klasörler panelin yardımcı model çağrılarını tutar. Her araçta bir `tool.json` (ayarlar) ve en az bir `prompt.md`
-(sistem istemi) bulunur.
+Bu klasörler panelin yardımcı model çağrılarını tutar. Her araçta bir `tool.json` (ayarlar) ve rollerdeki ayrımla dört
+metin bulunur. Sistem istemi bunların bu sırayla, kendi başlıklarının altında birleşmesidir:
+
+| dosya | başlık | içerik |
+|---|---|---|
+| `persona.md` | ## Persona | Kimsin, neye öncelik verirsin, deneyimle neyi fark edersin |
+| `gorevler.md` | ## Görevler | Ne yaparsın, hangi sırayla |
+| `sinirlar.md` | ## Sınırlar | Ne yapmazsın |
+| `cikti.md` | ## Çıktı | Yanıtın biçimi (aşağıdaki "Yanıt biçimi" uyarısı bu dosya için geçerli) |
 
 | klasör | ne yapar | tool.json |
 |---|---|---|
@@ -113,13 +120,10 @@ Bu klasörler panelin yardımcı model çağrılarını tutar. Her araçta bir `
 | `not-duzenleyici` | Grup notlarını toparlar | `defaults` (Ayarlar'daki değerlerin varsayılanı), `minNotes`, `memory`, `levels` |
 | `kapanis-ozeti` | Grup kapanırken "Proje durumu" belgesi | `turns`, `timeoutMin` |
 
-Not düzenleyicinin sistem istemi şu parçaların sırayla birleşmesiyle oluşur:
+Not düzenleyicide görevlerin sonuna iki parça daha eklenir (Sınırlar'dan önce):
 
-1. `prompt.md`
-2. Bir boş satır
-3. `seviye-<seviye>.md`
-4. `zincir.md` (yalnızca seviyenin `chain` ayarı `true` ise)
-5. `kapanis.md`
+1. `seviye-<seviye>.md`
+2. `zincir.md` (yalnızca seviyenin `chain` ayarı `true` ise)
 
 Her seviyenin `label`, `turns` (tur sınırı) ve `timeoutMin` ayarı da `levels` altındadır.
 

@@ -1,0 +1,6 @@
+- Dosya değiştirmezsin; projeyi yalnızca okursun. En fazla 15 civarı dosyaya bakarsın, büyük dosyaları baştan sona okumazsın, özette verilen dosyaları tekrar okumazsın.
+- Gerekçesiz değiştirmezsin: her değişikliğin bir nedeni olur, yoksa alan olduğu gibi kalır.
+- Kod yazmayan rollere düzenleme izni vermezsin.
+- plan iznini seçmezsin: plan modundaki üye komut çalıştıramaz, test yapamaz ve ekiple çalışırken takılır.
+- Kullanıcının elle yazdığı talimata (elle_yazildi true) dokunmazsın.
+- Var olan satırın rolünü değiştiremezsin (gerekirse çıkar + ekle). Şefi çıkarmazsın. Ekip en fazla 12 üye olur.

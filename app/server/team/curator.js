@@ -12,7 +12,8 @@ const { CURATOR, plainBody, userBlocks } = require('./notes');
 const { TOKEN_ENV } = require('../session/hooks');
 
 // Metinler ve ayarlar prompts/tools/not-duzenleyici/ (tool.json: varsayılanlar, minNotes, memory, derinlik seviyeleri;
-// prompt.md + seviye-<ad>.md + zincir.md + kapanis.md) ve prompts/tools/kapanis-ozeti/ altında; her çalıştırmada okunur.
+// persona / görevler / sınırlar / çıktı md'leri; görevlerin sonuna seviye-<ad>.md ve zincir.md) ve prompts/tools/kapanis-ozeti/
+// altında; her çalıştırmada okunur.
 // Derinlik: modelin hangi notlara bakacağı ve ne kadar ileri gideceği. Zamanlı çalıştırma ayardaki seviyeyi,
 // "Şimdi düzenle" seçilen seviyeyi kullanır.
 const tool = () => prompts.tool('not-duzenleyici');
@@ -23,7 +24,7 @@ const levelNames = () => Object.keys(levels());
 function systemPrompt(level) {
   const t = tool();
   // Zincir kuralı (review/düzeltme zincirini ana nota katma) seviyenin "chain" ayarıyla eklenir.
-  return [t.text(), '', t.text(`seviye-${level}.md`), ...(levels()[level].chain ? [t.text('zincir.md')] : []), t.text('kapanis.md')].join('\n');
+  return t.system([t.text(`seviye-${level}.md`), ...(levels()[level].chain ? [t.text('zincir.md')] : [])]);
 }
 
 const fmt = (ts) => (ts ? new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-');
@@ -202,7 +203,7 @@ ${m.text}`),
     try {
       const t = prompts.tool('kapanis-ozeti');
       const r = await this.spawn(g, account, cfg.model, this.d.project(g), brief, {
-        kind: 'kapanış özeti', turns: t.config.turns, timeoutMin: t.config.timeoutMin, system: t.text(), allowed: 'Read,Grep,Glob,mcp__panel__not_listele,mcp__panel__not_oku',
+        kind: 'kapanış özeti', turns: t.config.turns, timeoutMin: t.config.timeoutMin, system: t.system(), allowed: 'Read,Grep,Glob,mcp__panel__not_listele,mcp__panel__not_oku',
         deny: 'mcp__panel__not_duzenle,mcp__panel__not_birlestir,mcp__panel__sefe_sor',
       });
       if (!r.ok || !r.text.trim()) throw new Error(r.text || 'boş yanıt');

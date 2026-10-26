@@ -184,17 +184,29 @@ function setSkillRoles(name, roleIds) {
 
 // ---------- yardımcı model araçları ----------
 
-// tools/<ad>/: config = tool.json, text(dosya) = o klasördeki .md (varsayılan prompt.md). Dosya eksikse hata fırlatır;
-// eksik metinle model çağırmak sessizce yanlış sonuç verir.
+// Aracın sistem istemi bu dosyalardan, bu sırayla ve bu başlıklarla oluşur (rollerdeki ayrımın aynısı; cikti.md yanıtın
+// biçimidir ve paneldeki ayrıştırıcıyla birlikte değişir).
+const TOOL_PARTS = [['persona.md', 'Persona'], ['gorevler.md', 'Görevler'], ['sinirlar.md', 'Sınırlar'], ['cikti.md', 'Çıktı']];
+
+// tools/<ad>/: config = tool.json, text(dosya) = o klasördeki .md, system(ekler) = persona / görevler / sınırlar / çıktı
+// birleşimi (ekler görevlerin sonuna eklenir; ör. not düzenleyicinin seviye metni). Dosya eksikse hata fırlatır; eksik
+// metinle model çağırmak sessizce yanlış sonuç verir.
 function tool(name) {
   const config = json(`tools/${name}/tool.json`);
   if (!config) throw new Error(`prompts/tools/${name}/tool.json okunamadı`);
+  const read = (file) => {
+    const t = text(`tools/${name}/${file}`);
+    if (t == null) throw new Error(`prompts/tools/${name}/${file} bulunamadı`);
+    return t;
+  };
   return {
     config,
-    text(file = 'prompt.md') {
-      const t = text(`tools/${name}/${file}`);
-      if (t == null) throw new Error(`prompts/tools/${name}/${file} bulunamadı`);
-      return t;
+    text: read,
+    system(extra = []) {
+      return TOOL_PARTS.map(([file, title]) => {
+        const body = [read(file).trim(), ...(file === 'gorevler.md' ? extra.map((x) => x.trim()) : [])].filter(Boolean).join('\n\n');
+        return `## ${title}\n${body}`;
+      }).join('\n\n');
     },
   };
 }
