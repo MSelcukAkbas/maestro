@@ -289,14 +289,11 @@
   let state = null;
 
   function setServer(ok, authFail) {
-    const pill = $('#server-pill');
-    if (ok) {
-      pill.className = 'pill ok';
-      pill.textContent = '● sunucu çalışıyor';
-    } else {
-      pill.className = 'pill bad';
-      pill.textContent = authFail ? '● erişim anahtarı geçersiz' : '● sunucuya ulaşılamıyor';
-    }
+    const dot = $('#server-pill');
+    const label = ok ? 'sunucu çalışıyor' : authFail ? 'erişim anahtarı geçersiz' : 'sunucuya ulaşılamıyor';
+    dot.className = ok ? 'srv ok' : 'srv bad';
+    dot.title = label;
+    dot.setAttribute('aria-label', label);
   }
 
   const FAM_TEXT = { opus: 'Opus', sonnet: 'Sonnet', haiku: 'Haiku' };
@@ -308,7 +305,9 @@
     const m = p.lastMessage;
     if (!m && !p.lastSeenAt) { pill.hidden = true; return; }
     pill.hidden = false;
-    pill.textContent = m ? `son mesaj: ${m.name} · ${FAM_TEXT[m.fam] || 'model ?'} · ${timeAgo(m.ts)}` : `son temas: ${timeAgo(p.lastSeenAt)}`;
+    // Yeni kayıtlar "grup - rol: mesaj"; eski kayıtlarda (grup alanı yok) oturum adı gösterilir.
+    if (m) pill.textContent = m.group ? `${m.group} - ${m.role}: ${m.text}` : `${m.name} · ${FAM_TEXT[m.fam] || '?'} · ${timeAgo(m.ts)}`;
+    else pill.textContent = `temas: ${timeAgo(p.lastSeenAt)}`;
     const lines = [];
     if (p.lastSeenAt) lines.push(`Panelle son temas: ${timeAgo(p.lastSeenAt)}${p.lastAction ? ` (${p.lastAction})` : ''}`);
     for (const [fam, x] of Object.entries(p.byFam || {}).sort((a, b) => b[1].ts - a[1].ts)) {
@@ -326,6 +325,31 @@
       setServer(false, err.status === 401);
       throw err;
     }
+  }
+
+  // Durum kanalı: sunucu durum değişince tam yanıtı iter; kanal açıkken yoklama yalnızca seyrek bir güvencedir.
+  let stateWs = null;
+  let stateWsRetry = null;
+  const stateLive = () => !!stateWs && stateWs.readyState === 1;
+  function openStateChannel() {
+    if (!token || stateWs || stateWsRetry) return;
+    const proto = location.protocol === 'https:' ? 'wss' : 'ws';
+    const ws = new WebSocket(`${proto}://${location.host}/ws?t=${encodeURIComponent(token)}&ch=state`);
+    stateWs = ws;
+    ws.onmessage = (e) => {
+      let m;
+      try { m = JSON.parse(e.data); } catch { return; }
+      if (m.t !== 'state' || !m.d) return;
+      state = m.d;
+      setServer(true);
+      setPresence();
+      afterState();
+    };
+    ws.onclose = () => {
+      stateWs = null;
+      stateWsRetry = setTimeout(() => { stateWsRetry = null; openStateChannel(); }, 2000);
+    };
+    ws.onerror = () => { try { ws.close(); } catch {} };
   }
 
   const account = (id) => state.settings.accounts.find((a) => a.id === id);
@@ -385,7 +409,13 @@
 
   const ICON_PLUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
   const ICON_CROWN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>';
-  const ICON_CHEV = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
+  const ICON_MSGS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>';
+  const ICON_TERM ='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>';
+  const ICON_MAP = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>';
+  const ICON_TIME = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
+  const ICON_BOARD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>';
+  const ICON_NOTES = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>';
+  const ICON_CHEV ='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';
 
   // ---------- 1 · projeler ----------
 
@@ -1545,7 +1575,74 @@
     brightBlack: '#767676', brightRed: '#e74856', brightGreen: '#16c60c', brightYellow: '#f9f1a5', brightBlue: '#3b78ff', brightMagenta: '#b4009e', brightCyan: '#61d6d6', brightWhite: '#f2f2f2',
   };
 
-  function createTerm(sessionId, container) {
+  // Terminal menüsü: tek bir öge, sağ tıkla imlecin yanında açılır.
+  const termMenu = document.createElement('div');
+  termMenu.className = 'term-menu';
+  termMenu.setAttribute('role', 'menu');
+  termMenu.hidden = true;
+  document.body.appendChild(termMenu);
+  let termMenuTerm = null;
+  function closeTermMenu() {
+    termMenu.hidden = true;
+    termMenuTerm = null;
+  }
+  function openTermMenu(term, x, y) {
+    termMenuTerm = term;
+    termMenu.innerHTML = `
+      <button type="button" role="menuitem" data-tm="copy"${term.hasSelection() ? '' : ' disabled'}>Kopyala</button>
+      <button type="button" role="menuitem" data-tm="paste">Yapıştır</button>
+      <button type="button" role="menuitem" data-tm="all">Tümünü seç</button>`;
+    termMenu.hidden = false;
+    const r = termMenu.getBoundingClientRect();
+    termMenu.style.left = `${Math.max(4, Math.min(x, innerWidth - r.width - 4))}px`;
+    termMenu.style.top = `${Math.max(4, Math.min(y, innerHeight - r.height - 4))}px`;
+  }
+  termMenu.addEventListener('click', async (e) => {
+    const b = e.target.closest('[data-tm]');
+    const term = termMenuTerm;
+    closeTermMenu();
+    if (!b || !term) return;
+    try {
+      if (b.dataset.tm === 'copy') await navigator.clipboard.writeText(term.getSelection());
+      else if (b.dataset.tm === 'paste') term.paste(await navigator.clipboard.readText());
+      else term.selectAll();
+    } catch {
+      toast('Pano işlemi yapılamadı', true);
+    }
+    term.focus();
+  });
+  document.addEventListener('mousedown', (e) => {
+    if (!termMenu.hidden && !termMenu.contains(e.target)) closeTermMenu();
+  });
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') closeTermMenu();
+  });
+  window.addEventListener('resize', closeTermMenu);
+
+  // Sayfa değişince terminaller yok edilmez, kabıyla (holder) birlikte DOM'dan çıkarılıp saklanır; bağlantı açık kalır,
+  // gruba dönüşte 400 KB'lık geçmişi yeniden indirip ayrıştırmak gerekmez. Uzun süre dönülmezse yok edilir.
+  const TERM_STASH_MS = 5 * 60 * 1000;
+  const termStash = new Map();
+  function stashTerm(sid, obj) {
+    if (obj.closed) return obj.dispose();
+    obj.holder.remove();
+    termStash.set(sid, { obj, timer: setTimeout(() => { termStash.delete(sid); obj.dispose(); }, TERM_STASH_MS) });
+  }
+  function takeTerm(sid, body) {
+    const kept = termStash.get(sid);
+    if (!kept) return null;
+    clearTimeout(kept.timer);
+    termStash.delete(sid);
+    if (kept.obj.closed) { kept.obj.dispose(); return null; }
+    body.appendChild(kept.obj.holder);
+    requestAnimationFrame(() => { kept.obj.claimSize(); kept.obj.term.refresh(0, kept.obj.term.rows - 1); });
+    return kept.obj;
+  }
+
+  function createTerm(sessionId, body) {
+    const container = document.createElement('div');
+    container.style.cssText = 'width: 100%; height: 100%';
+    body.appendChild(container);
     const term = new Terminal({
       fontFamily: "'Cascadia Mono', Consolas, monospace",
       fontSize: 12,
@@ -1558,7 +1655,9 @@
     term.open(container);
     const proto = location.protocol === 'https:' ? 'wss' : 'ws';
     const ws = new WebSocket(`${proto}://${location.host}/ws?t=${encodeURIComponent(token)}&s=${encodeURIComponent(sessionId)}`);
-    const obj = { term, ws, closed: false };
+    // ready: bağlantının geçmişi yazıldıktan (ya da bağlantı koptuktan) sonra çözülür; açılış sırası bunu bekler.
+    let markReady;
+    const obj = { term, ws, closed: false, holder: container, ready: new Promise((r) => { markReady = r; }) };
 
     // Bu pencerenin istediği boyut; yalnızca bu pencere yazınca (ya da başka sahip yokken) uygulanır.
     const wanted = () => {
@@ -1572,23 +1671,32 @@
     ws.onopen = () => obj.claimSize();
     ws.onmessage = (e) => {
       const m = JSON.parse(e.data);
-      if (m.t === 'o') term.write(m.d);
+      if (m.t === 'o') term.write(m.d, markReady);
       else if (m.t === 's') term.resize(m.cols, m.rows);
       else if (m.t === 'x') {
         obj.closed = true;
         term.write('\r\n\x1b[90m[Oturum kapandı]\x1b[0m\r\n');
       }
     };
-    ws.onclose = () => { obj.closed = true; };
+    ws.onclose = () => { obj.closed = true; markReady(); };
     term.onData((d) => {
       if (ws.readyState === 1) ws.send(JSON.stringify({ t: 'i', d, ...wanted() }));
     });
     const ro = new ResizeObserver(() => obj.claimSize());
     ro.observe(container);
+    // Sağ tık: tarayıcı menüsü (İncele, tarayıcının yapıştırması) yerine uygulamanın terminal menüsü.
+    const onContext = (e) => {
+      e.preventDefault();
+      openTermMenu(term, e.clientX, e.clientY);
+    };
+    container.addEventListener('contextmenu', onContext);
     obj.dispose = () => {
       ro.disconnect();
+      container.removeEventListener('contextmenu', onContext);
+      if (termMenuTerm === term) closeTermMenu();
       try { ws.close(); } catch {}
       term.dispose();
+      container.remove();
     };
     return obj;
   }
@@ -1602,6 +1710,28 @@
     test: '#c9d45a', guvenlik: '#ff8a5c', dokuman: '#9fb3c8',
   };
   const EXTRA_COLORS = ['#a3e635', '#fbbf24', '#38bdf8', '#f472b6', '#94a3b8'];
+  // Sekmelerde rolün ikonu (rol rengiyle). Tanımsız roller genel kullanıcı ikonunu alır.
+  const ROLE_ICON_PATHS = {
+    sef: '<circle cx="9" cy="8" r="3"/><path d="M3 20a6 6 0 0 1 12 0"/><circle cx="17" cy="9" r="2.5"/><path d="M15 20a5 5 0 0 1 6-4"/>',
+    coder: '<path d="M8 8l-4 4 4 4M16 8l4 4-4 4M14 5l-4 14"/>',
+    review: '<path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/>',
+    debug: '<rect x="8" y="7" width="8" height="12" rx="4"/><path d="M12 7V4M8 12H4M20 12h-4M8 16l-3 3M16 16l3 3M9 4l2 2M15 4l-2 2"/>',
+    kalite: '<circle cx="12" cy="12" r="9"/><path d="M8 12l3 3 5-6"/>',
+    arastirma: '<circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/>',
+    ops: '<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M4.9 4.9l2.1 2.1M17 17l2.1 2.1M4.9 19.1L7 17M17 7l2.1-2.1"/>',
+    avukat: '<path d="M12 4v16M6 20h12M4 8h16M4 8l-2 5a3 3 0 0 0 4 0zM20 8l-2 5a3 3 0 0 0 4 0z"/>',
+    backend: '<ellipse cx="12" cy="5" rx="8" ry="3"/><path d="M4 5v14c0 1.7 3.6 3 8 3s8-1.3 8-3V5M4 12c0 1.7 3.6 3 8 3s8-1.3 8-3"/>',
+    frontend: '<rect x="3" y="4" width="18" height="13" rx="2"/><path d="M8 21h8M12 17v4"/>',
+    android: '<rect x="7" y="2" width="10" height="20" rx="2"/><path d="M11 18h2"/>',
+    test: '<path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 2 3h10a2 2 0 0 0 2-3l-5-9V3"/>',
+    guvenlik: '<path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/>',
+    dokuman: '<path d="M4 4h6a3 3 0 0 1 3 3v13a2 2 0 0 0-2-2H4zM20 4h-6a3 3 0 0 0-3 3v13a2 2 0 0 1 2-2h7z"/>',
+  };
+  const ROLE_ICON_DEFAULT = '<circle cx="12" cy="8" r="4"/><path d="M4 21a8 8 0 0 1 16 0"/>';
+  function roleIcon(s) {
+    const p = ROLE_ICON_PATHS[s && s.roleId] || ROLE_ICON_DEFAULT;
+    return `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${p}</svg>`;
+  }
   function roleColor(s) {
     if (!s) return '#8d95a8';
     if (ROLE_COLORS[s.roleId]) return ROLE_COLORS[s.roleId];
@@ -1649,6 +1779,8 @@
       this.dragCard = null;
       this.msgFilter = 'all';
       this.openMsgs = new Set();
+      this.msgBodies = new Map();
+      this.allBodies = false;
       this.mapWindow = ['15m', '1h', 'all'].includes(store(MAPWIN_KEY)) ? store(MAPWIN_KEY) : 'all';
       this.mapSel = null;
       this.mapKey = null;
@@ -1657,15 +1789,18 @@
       app.innerHTML = `
         <div class="work-bar">
           <div class="tabs" id="tabs" role="tablist" aria-label="Oturumlar"></div>
-          <button class="btn small" id="add-member" style="color: var(--accent)">${ICON_PLUS} Üye ekle</button>
+          <div class="quota-wrap" id="closed-wrap" hidden>
+            <button class="btn small" id="closed-btn" aria-expanded="false" aria-controls="closed-pop" aria-haspopup="true"></button>
+            <div class="quota-pop menu-pop closed-pop" id="closed-pop" role="dialog" aria-label="Kapalı üyeler" hidden></div>
+          </div>
+          <button class="btn small add-member" id="add-member" aria-label="Üye ekle" title="Üye ekle">${ICON_PLUS}</button>
           <div class="seg view-seg" role="group" aria-label="Görünüm" id="view-seg">
-            <button data-view="terms" aria-pressed="${this.view === 'terms'}">Terminaller</button>
-            <button data-view="map" aria-pressed="${this.view === 'map'}">Harita</button>
-            <button data-view="time" aria-pressed="${this.view === 'time'}">Zaman</button>
-            <button data-view="msgs" aria-pressed="${this.view === 'msgs'}">Mesajlar</button>
-            <button data-view="board" aria-pressed="${this.view === 'board'}">Pano</button>
-            <button data-view="notes" aria-pressed="${this.view === 'notes'}">Notlar</button>
-            <button data-view="bekci" aria-pressed="${this.view === 'bekci'}">Bekçi</button>
+            <button data-view="terms" aria-pressed="${this.view === 'terms'}" aria-label="Terminaller" title="Terminaller">${ICON_TERM}</button>
+            <button data-view="map" aria-pressed="${this.view === 'map'}" aria-label="Harita" title="Harita">${ICON_MAP}</button>
+            <button data-view="time" aria-pressed="${this.view === 'time'}" aria-label="Zaman" title="Zaman">${ICON_TIME}</button>
+            <button data-view="msgs" aria-pressed="${this.view === 'msgs'}" aria-label="Mesajlar" title="Mesajlar">${ICON_MSGS}</button>
+            <button data-view="board" aria-pressed="${this.view === 'board'}" aria-label="Pano" title="Pano">${ICON_BOARD}</button>
+            <button data-view="notes" aria-pressed="${this.view === 'notes'}" aria-label="Notlar" title="Notlar">${ICON_NOTES}</button>
           </div>
         </div>
         <div class="req-bar" id="req-bar" role="region" aria-label="Şefin onay bekleyen istekleri" hidden></div>
@@ -1684,6 +1819,14 @@
         this.applyView();
         this.poll();
       });
+      $('#bekci-btn').hidden = false;
+      this.onBekciBtn = () => {
+        this.view = 'bekci';
+        store(VIEW_KEY, this.view);
+        this.applyView();
+        this.poll();
+      };
+      $('#bekci-btn').addEventListener('click', this.onBekciBtn);
       const act$ = $('#activity');
       // Harita: zaman aralığı, düğüm seçimi, üzerine gelince ilgili okları vurgulama.
       const redrawMap = () => {
@@ -1754,6 +1897,49 @@
         const t = e.target.closest('[data-sid]');
         if (t) this.select(t.dataset.sid);
       });
+      // Üye sekmeleri basılı tutup sürüklenerek sıralanır; şef her zaman en solda kalır.
+      const tabsEl = $('#tabs');
+      let dragSid = null;
+      const clearDrop = () => tabsEl.querySelectorAll('.dragging, .drop-before, .drop-after').forEach((x) => x.classList.remove('dragging', 'drop-before', 'drop-after'));
+      tabsEl.addEventListener('dragstart', (e) => {
+        const tab = e.target.closest('.tab[data-tid]');
+        if (!tab) return;
+        dragSid = tab.dataset.tid;
+        e.dataTransfer.effectAllowed = 'move';
+        e.dataTransfer.setData('text/plain', dragSid);
+        tab.classList.add('dragging');
+      });
+      tabsEl.addEventListener('dragover', (e) => {
+        const tab = e.target.closest('.tab[data-tid]');
+        if (!dragSid || !tab || tab.dataset.tid === dragSid || tab.dataset.lead === 'true') return;
+        e.preventDefault();
+        const r = tab.getBoundingClientRect();
+        tabsEl.querySelectorAll('.drop-before, .drop-after').forEach((x) => x.classList.remove('drop-before', 'drop-after'));
+        tab.classList.add(e.clientX > r.left + r.width / 2 ? 'drop-after' : 'drop-before');
+      });
+      tabsEl.addEventListener('drop', async (e) => {
+        const tab = e.target.closest('.tab[data-tid]');
+        if (!dragSid || !tab || tab.dataset.tid === dragSid || tab.dataset.lead === 'true') return;
+        e.preventDefault();
+        const after = tab.classList.contains('drop-after');
+        const sid = dragSid;
+        dragSid = null;
+        clearDrop();
+        const ids = [...tabsEl.querySelectorAll('.tab[data-tid]')].map((x) => x.dataset.tid).filter((id) => id !== sid);
+        ids.splice(ids.indexOf(tab.dataset.tid) + (after ? 1 : 0), 0, sid);
+        try {
+          await api('PUT', `/api/groups/${encodeURIComponent(this.gid)}/order`, { ids });
+        } catch (err) {
+          toast(err.message, true);
+        }
+        this.poll();
+      });
+      tabsEl.addEventListener('dragend', () => {
+        dragSid = null;
+        clearDrop();
+      });
+      $('#closed-btn').addEventListener('click', () => ($('#closed-pop').hidden ? this.openClosed() : this.closeClosed()));
+      $('#closed-pop').addEventListener('click', (e) => this.onClosedAction(e));
       this.initLayoutMenu();
       this.initSplitter();
       const menu = $('#sess-menu');
@@ -1763,10 +1949,12 @@
       this.onDocClick = (e) => {
         if (!menu.hidden && !e.target.closest('#sess-menu') && !e.target.closest('[data-menu]')) this.closeMenu();
         if (!$('#layout-pop').hidden && !e.target.closest('#layout-wrap')) this.closeLayoutMenu();
+        if (!$('#closed-pop').hidden && !e.target.closest('#closed-wrap')) this.closeClosed();
       };
       this.onDocKey = (e) => {
         if (e.key !== 'Escape') return;
         if (!menu.hidden) this.closeMenu(true);
+        if (!$('#closed-pop').hidden) this.closeClosed(true);
         if (!$('#layout-pop').hidden) this.closeLayoutMenu(true);
       };
       document.addEventListener('click', this.onDocClick);
@@ -1946,6 +2134,69 @@
           <button class="btn small" data-act="renew" title="Devir notu yazdırıp aynı ad ve rolle sıfır context ile yeniden açar; pano ve notlar kalır">Sıfır context ile yenile</button>
           <button class="btn small ghost danger-text" data-act="remove">Gruptan çıkar</button>
         </div>`;
+    },
+
+    // Kapatılan üyeler sekmelerden düşer, sondaki "Kapalı (N)" düğmesinde toplanır; oradan açılır ya da gruptan çıkarılır.
+    renderClosed(closed) {
+      const pop = $('#closed-pop');
+      $('#closed-wrap').hidden = !closed.length;
+      $('#closed-btn').textContent = `Kapalı (${closed.length})`;
+      if (!closed.length) return this.closeClosed();
+      // Yalnızca liste değişince yeniden çizilir; yoksa iki saniyelik yenileme odaktaki düğmeyi düşürür.
+      const key = JSON.stringify(closed.map((s) => [s.id, s.roleLabel, s.accountId]));
+      if (pop.hidden || key === this.closedKey) return;
+      this.closedKey = key;
+      pop.innerHTML = `<div class="note">Kapalı üyeler · kaldığı yerden açılır</div>${closed.map((s) => `
+        <div class="closed-row">
+          <span class="dot off"></span>
+          <span class="cr-name" title="${esc(s.name)}">${esc(s.roleLabel)} · ${esc(s.accountId)}</span>
+          <button class="btn small primary" data-copen="${esc(s.id)}">Aç</button>
+          <button class="btn small ghost danger-text" data-cremove="${esc(s.id)}">Çıkar</button>
+        </div>`).join('')}`;
+    },
+
+    openClosed() {
+      const g = this.group();
+      if (!g) return;
+      $('#closed-pop').hidden = false;
+      $('#closed-btn').setAttribute('aria-expanded', 'true');
+      this.renderClosed(this.closedOf(g));
+      const first = $('#closed-pop').querySelector('button');
+      if (first) first.focus();
+    },
+
+    closeClosed(focus) {
+      $('#closed-pop').hidden = true;
+      this.closedKey = null;
+      $('#closed-btn').setAttribute('aria-expanded', 'false');
+      if (focus) $('#closed-btn').focus();
+    },
+
+    // Çalışan üye varken kapalı olanlar gizlenir; hiçbiri çalışmıyorsa (grup durmuş) hepsi sekmede kalır.
+    closedOf(g) {
+      const members = g.sessions.filter((s) => !s.removed);
+      return members.some((s) => s.running) ? members.filter((s) => !s.running) : [];
+    },
+
+    async onClosedAction(e) {
+      const b = e.target.closest('[data-copen], [data-cremove]');
+      if (!b) return;
+      if (b.dataset.copen) {
+        const sid = b.dataset.copen;
+        b.disabled = true;
+        const r = await act(() => api('POST', `/api/sessions/${sid}/start`), 'Oturum açılıyor…');
+        b.disabled = false;
+        if (!r) return;
+        this.selected = sid;
+        this.closeClosed();
+        await refresh();
+        return;
+      }
+      if (!confirm('Oturum gruptan çıkarılsın mı? Konuşması silinmez; proje sayfasından gruba geri eklenebilir.\n\nPanel, ekibi yöneten üyeye (şef) bu üyenin ayrıldığını bildirecek.')) return;
+      b.disabled = true;
+      const r = await act(() => api('POST', `/api/sessions/${b.dataset.cremove}/remove`, { notify: true }));
+      b.disabled = false;
+      if (r) toast(r.notified ? `Gruptan çıkarıldı; ${r.notified} oturumuna bildirildi.` : 'Gruptan çıkarıldı. Bildirilecek çalışan üye yoktu.');
     },
 
     // Görünüm (düzen) menüsü üst çubukta, Kota'nın yanında; yalnızca terminaller görünümünde.
@@ -2131,12 +2382,42 @@
 
     // ----- harita ve zaman çizelgesi -----
 
+    // Terminaller aynı anda değil sırayla açılır: önce şef, sonra seçili üye, sonra diğerleri sekme sırasıyla.
+    // Her biri geçmişini yazıp bitirince (ya da 2 sn dolunca) sıradaki açılır.
+    pumpTerms() {
+      if (this.pumping) return;
+      const gen = this.pumpGen = (this.pumpGen || 0) + 1;
+      const pick = () => {
+        const rank = (sid) => {
+          const s = this.group() && this.group().sessions.find((x) => x.id === sid);
+          return s && s.roleId === 'sef' ? 0 : sid === this.selected ? 1 : 2 + (this.openOrder || []).indexOf(sid);
+        };
+        const ids = [...this.panes].filter(([, p]) => p.want && !p.term && p.visible).map(([sid]) => sid);
+        return ids.sort((x, y) => rank(x) - rank(y))[0] || null;
+      };
+      const step = async () => {
+        const sid = pick();
+        const pane = sid && this.panes.get(sid);
+        if (!pane) { this.pumping = false; return; }
+        pane.want = false;
+        const body = pane.el.querySelector('.pane-body');
+        body.innerHTML = '';
+        pane.term = createTerm(sid, body);
+        await Promise.race([pane.term.ready, new Promise((r) => setTimeout(r, 2000))]);
+        if (gen !== this.pumpGen) return;
+        setTimeout(step, 80);
+      };
+      this.pumping = true;
+      step();
+    },
+
     applyView() {
       $('#terms').hidden = this.view !== 'terms';
       $('#layout-wrap').hidden = this.view !== 'terms';
       if (this.view !== 'terms') this.closeLayoutMenu();
       $('#activity').hidden = this.view === 'terms';
       app.querySelectorAll('#view-seg button').forEach((x) => x.setAttribute('aria-pressed', String(x.dataset.view === this.view)));
+      $('#bekci-btn').setAttribute('aria-pressed', String(this.view === 'bekci'));
     },
 
     async refreshActivity(g) {
@@ -2320,6 +2601,7 @@
       if (!a) return;
       const box = $('#activity');
       if (!$('#msg-tools')) {
+        this.msgKey = null;
         box.innerHTML = `
           <div class="card msgs">
             <div class="msg-tools" id="msg-tools">
@@ -2340,19 +2622,27 @@
           const d = e.target;
           if (!d.matches || !d.matches('details[data-mid]')) return;
           if (d.open) this.openMsgs.add(d.dataset.mid); else this.openMsgs.delete(d.dataset.mid);
+          if (d.open) this.loadBody(d);
         }, true);
       }
       const members = g.sessions;
+      const q = $('#msg-search').value.trim().toLocaleLowerCase('tr');
+      if (q) this.loadAllBodies();
+      // Mesaj listesi, filtre ve arama değişmediyse yeniden çizilmez (açık ayrıntılar ve kaydırma korunur).
+      // "Yeni" işareti için süre dilimi de anahtarda: 45 sn'lik pencere kapanınca liste bir kez yenilenir.
+      const key = JSON.stringify([g.id, members.map((s) => [s.id, s.roleLabel]), this.msgFilter, q, a.messages.length,
+        a.messages.length ? a.messages[a.messages.length - 1].ts : 0, Math.floor(a.now / 15000), this.msgBodies.size]);
+      if (key === this.msgKey) return;
+      this.msgKey = key;
       const label = (id, fallback) => {
         const s = members.find((x) => x.id === id);
         return s ? s.roleLabel : fallback || '?';
       };
       $('#msg-filter').innerHTML = [['all', 'Tümü'], ...members.map((s) => [s.id, s.roleLabel])]
         .map(([v, l]) => `<button data-mf="${esc(v)}" aria-pressed="${this.msgFilter === v}">${esc(l)}</button>`).join('');
-      const q = $('#msg-search').value.trim().toLocaleLowerCase('tr');
       const list = a.messages
         .filter((m) => this.msgFilter === 'all' || m.from === this.msgFilter || m.to === this.msgFilter)
-        .filter((m) => !q || `${m.text}\n${m.body || ''}`.toLocaleLowerCase('tr').includes(q))
+        .filter((m) => !q || `${m.text}\n${this.msgBodies.get(`${m.ts}-${m.from}`) || ''}`.toLocaleLowerCase('tr').includes(q))
         .slice(-300)
         .reverse();
       $('#msg-count').textContent = `${list.length} / ${a.messages.length} mesaj`;
@@ -2362,9 +2652,34 @@
         return `
           <details class="msg-item ${a.now - m.ts < 45000 ? 'hot' : ''}" data-mid="${esc(mid)}" ${this.openMsgs.has(mid) ? 'open' : ''}>
             <summary><span class="note">${esc(time)}</span> <b>${esc(label(m.from))}</b> → <b>${esc(label(m.to, m.toName))}</b> · ${esc(m.text)}</summary>
-            <div class="last">${esc(m.body || m.text)}</div>
+            <div class="last">${esc(this.msgBodies.get(mid) || m.text)}</div>
           </details>`;
       }).join('') : '<div class="note" style="padding: 12.5px">Eşleşen mesaj yok.</div>';
+    },
+
+    // Mesaj gövdesi listeyle gelmez; ayrıntı açılınca tek mesaj olarak alınır.
+    async loadBody(d) {
+      const mid = d.dataset.mid;
+      if (this.msgBodies.has(mid)) return;
+      const i = mid.indexOf('-');
+      try {
+        const r = await api('GET', `/api/groups/${this.gid}/message?from=${encodeURIComponent(mid.slice(i + 1))}&ts=${mid.slice(0, i)}`);
+        this.msgBodies.set(mid, r.body);
+        const box = d.querySelector('.last');
+        if (box) box.textContent = r.body;
+      } catch {}
+    },
+
+    // Arama gövdelerde de yapılır; bunun için tüm gövdeler bir kez alınır.
+    async loadAllBodies() {
+      if (this.allBodies) return;
+      this.allBodies = true;
+      try {
+        const r = await api('GET', `/api/groups/${this.gid}/activity?bodies=1`);
+        for (const m of r.messages) this.msgBodies.set(`${m.ts}-${m.from}`, m.body);
+        this.msgKey = null;
+        if (this.lastActivity && this.view === 'msgs') this.renderMsgs(this.group(), this.lastActivity);
+      } catch { this.allBodies = false; }
     },
 
     renderTimeline(g, a) {
@@ -2394,6 +2709,7 @@
       for (let t = Math.ceil(start / step) * step; t <= end; t += step) ticks.push(t);
       const hhmmOf = (t) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
+      const sums = {};
       const rows = members.map((s) => {
         const list = tl[s.id] || [];
         const totals = { busy: 0, waiting: 0, idle: 0, away: 0 };
@@ -2410,6 +2726,7 @@
             return out ? bar('away', e.s === 'waiting' ? 'onay bekliyor · sen yoktun' : LABEL.away, t0, t1) : bar(COLORS[e.s], LABEL[e.s], t0, t1);
           }).join('');
         }).join('');
+        sums[s.id] = totals;
         const marks = a.messages.filter((m) => m.from === s.id).map((m) => {
           const to = members.find((x) => x.id === m.to);
           return `<span class="msg-mark" style="left: ${pct(m.ts)}%" title="${hhmmOf(m.ts)} → ${esc(to ? to.roleLabel : m.toName)}: ${esc(m.text)}"></span>`;
@@ -2433,6 +2750,31 @@
             <div class="tl-sum note">${Math.round((a.awayMs || 600000) / 60000)} dk temas olmazsa uzakta sayılırsın</div>
           </div>` : '';
 
+      // İstatistik: toplamlar ve üye bazında dağılım; satırlardaki sayılarla aynı kaynaktan hesaplanır.
+      const sumOf = (k) => members.reduce((t, s) => t + sums[s.id][k], 0);
+      const sentBy = (id) => a.messages.filter((m) => m.from === id).length;
+      const awayTotal = away.reduce((t, [a0, a1]) => t + (a1 - a0), 0);
+      const tiles = [
+        ['Çalışma', fmtDur(sumOf('busy'))],
+        ['Onay bekleme', fmtDur(sumOf('waiting'))],
+        ['Sıra sende', fmtDur(sumOf('idle'))],
+        ['Sen uzaktaydın', fmtDur(awayTotal)],
+        ['Mesaj', String(a.messages.length)],
+      ];
+      const statsHtml = `
+        <div class="card tl-stats">
+          <div class="tl-tiles">${tiles.map(([l, v]) => `<div class="tl-tile"><span>${l}</span><strong>${v}</strong></div>`).join('')}</div>
+          <div class="tl-tbl-wrap">
+            <table class="tl-stats-tbl">
+              <thead><tr><th>Üye</th><th>Çalıştı</th><th>Çalışma oranı</th><th>Onay</th><th>Sıra sende</th><th>Gönderdiği mesaj</th></tr></thead>
+              <tbody>${members.map((s) => {
+                const t = sums[s.id];
+                return `<tr><td><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)}</td><td>${fmtDur(t.busy)}</td><td>${Math.round((t.busy / span) * 100)}%</td><td>${fmtDur(t.waiting)}</td><td>${fmtDur(t.idle)}</td><td>${sentBy(s.id)}</td></tr>`;
+              }).join('')}</tbody>
+            </table>
+          </div>
+        </div>`;
+
       $('#activity').innerHTML = `
         <div class="card tl">
           <div class="tl-row tl-axis">
@@ -2450,7 +2792,8 @@
             <span><i class="msg-mark"></i>gönderilen mesaj</span>
             <span>Kayıt yalnızca panel açıkken tutulur; boşluklar kapalı ya da kaydedilmemiş süredir.</span>
           </div>
-        </div>`;
+        </div>
+        ${statsHtml}`;
     },
 
     // ----- çalışırken üye ekleme -----
@@ -2778,10 +3121,10 @@
       const state = !c ? '' : c.running ? `çalışıyor (${esc(timeAgo(c.startedAt))} başladı)`
         : last ? `${esc(timeAgo(last.at))}${last.level && c.levels ? ` (${esc(c.levels[last.level] || last.level)})` : ''}: ${last.ok ? esc(last.changes) : 'tamamlanamadı'}` : 'henüz çalışmadı · ilk düzenlemeyi Şimdi düzenle başlatır';
       el.innerHTML = `
-        <div class="nf-row"><span class="nf-label" title="${last && last.text ? esc(last.text) : 'Notları aralıklı olarak toparlar: tekrarları birleştirir, çelişkileri şefe sorar. Senin yazdığın kısımlara dokunmaz.'}">Not düzenleyici</span>
-          <span class="note nf-state">${state}${c && c.open ? ` · şefte ${c.open} soru` : ''}</span>
-          ${c && c.levels ? `<select id="cur-run-level" class="small-select" title="Derinlik: düşük yalnızca yeni notlara bakar; orta bunlarla ilgili eski notları da ele alır, onaylanmış review zincirlerini katar; yüksek tüm notları kart ve konu gruplarıyla baştan toparlar, geçersiz kalanları işaretler, iddiaları projede doğrular (daha uzun ve pahalı)" ${c.running ? 'disabled' : ''}>${Object.entries(c.levels).map(([k, v]) => `<option value="${k}" ${k === c.level ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}
-          <button class="btn small ghost" data-nact="currun" ${c && c.running ? 'disabled' : ''}>Şimdi düzenle</button></div>
+        <div class="nf-row"><div class="nf-head"><span class="nf-label" title="${last && last.text ? esc(last.text) : 'Notları aralıklı olarak toparlar: tekrarları birleştirir, çelişkileri şefe sorar. Senin yazdığın kısımlara dokunmaz.'}">Not düzenleyici</span>
+          <span class="note nf-state">${state}${c && c.open ? ` · şefte ${c.open} soru` : ''}</span></div>
+          <div class="nf-actions">${c && c.levels ? `<select id="cur-run-level" class="small-select" title="Derinlik: düşük yalnızca yeni notlara bakar; orta bunlarla ilgili eski notları da ele alır, onaylanmış review zincirlerini katar; yüksek tüm notları kart ve konu gruplarıyla baştan toparlar, geçersiz kalanları işaretler, iddiaları projede doğrular (daha uzun ve pahalı)" ${c.running ? 'disabled' : ''}>${Object.entries(c.levels).map(([k, v]) => `<option value="${k}" ${k === c.level ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}
+          <button class="btn small ghost" data-nact="currun" ${c && c.running ? 'disabled' : ''}>Şimdi düzenle</button></div></div>
         ${archived ? `<button class="linkish" data-nact="arch">${this.showArchived ? '← Notlara dön' : `Arşiv (${archived})`}</button>` : ''}`;
     },
 
@@ -3579,12 +3922,14 @@
       const p = project(g.projectId);
       crumbs([{ label: 'Projeler', href: '#/' }, { label: p ? p.name : '?', href: `#/p/${g.projectId}` }, { label: g.name }]);
       // Orkestra şefi çalışma alanını yönettiği için sekmelerde ve panellerde her zaman en solda ve ayrı renkte durur.
-      const members = g.sessions.filter((s) => !s.removed).sort((a, b) => (b.roleId === 'sef') - (a.roleId === 'sef'));
+      // Kapatılan üyeler sekmede ve panelde görünmez, "Kapalı (N)" düğmesinde durur.
+      const closed = this.closedOf(g);
+      const members = g.sessions.filter((s) => !s.removed && !closed.includes(s)).sort((a, b) => (b.roleId === 'sef') - (a.roleId === 'sef'));
       if (!this.selected || !members.some((s) => s.id === this.selected)) {
         const first = members.find((s) => s.roleId === 'sef' && s.running) || members.find((s) => s.running) || members[0];
         this.selected = first && first.id;
       }
-      // Gruptan çıkarılan üyenin paneli kaldırılır.
+      // Gruptan çıkarılan ya da kapatılan üyenin paneli kaldırılır.
       for (const [sid, pane] of this.panes) {
         if (members.some((s) => s.id === sid)) continue;
         if (pane.term) pane.term.dispose();
@@ -3599,21 +3944,25 @@
         // Klavye odağı bir sekme düğmesindeyse yeniden çizimden sonra aynı düğmeye geri verilir.
         const fa = document.activeElement;
         const keep = fa && $('#tabs').contains(fa) ? (fa.dataset.menu ? `[data-menu="${CSS.escape(fa.dataset.menu)}"]` : `[data-sid="${CSS.escape(fa.dataset.sid || '')}"]`) : null;
+        // "Üye ekle" düğmesi son sekmenin yanında kalsın diye çizimden sonra aynı düğme (dinleyicisiyle) yeniden eklenir.
+        const addBtn = $('#add-member');
         $('#tabs').innerHTML = members.map((s) => `
-          <div class="tab" data-on="${s.id === this.selected}" data-st="${statusKey(s)}"${s.roleId === 'sef' ? ' data-lead="true" title="Orkestra şefi: ekibi yönetir"' : ''}>
-            <button class="tab-main" role="tab" data-sid="${esc(s.id)}" aria-selected="${s.id === this.selected}" >
-              <span class="dot ${statusKey(s)}"></span>${s.roleId === 'sef' ? `<span class="lead-mark" aria-hidden="true">${ICON_CROWN}</span>` : ''}${esc(s.roleLabel)}
+          <div class="tab" data-tid="${esc(s.id)}" draggable="${s.roleId === 'sef' ? 'false' : 'true'}" data-on="${s.id === this.selected}" data-st="${statusKey(s)}"${s.roleId === 'sef' ? ' data-lead="true" title="Orkestra şefi: ekibi yönetir"' : ''}>
+            <button class="tab-main" role="tab" data-sid="${esc(s.id)}" aria-selected="${s.id === this.selected}" aria-label="${esc(s.roleLabel)}">
+              <span class="dot ${statusKey(s)}"></span>${s.roleId === 'sef' ? `<span class="lead-mark" aria-hidden="true">${ICON_CROWN}</span>` : ''}<span class="tab-av" style="color: ${roleColor(s)}" aria-hidden="true">${roleIcon(s)}</span><span class="tab-name">${esc(s.roleLabel)}</span>
               ${s.status === 'waiting' && s.running ? `<span class="badge waiting">${s.waitKind === 'question' ? 'soru' : 'onay'}</span>` : ''}
             </button>
             <button class="tab-more" data-menu="${esc(s.id)}" aria-haspopup="dialog" aria-expanded="${this.menuSid === s.id}" aria-label="${esc(s.roleLabel)} · ayrıntılar ve işlemler" title="Ayrıntılar ve işlemler">⋯</button>
           </div>`).join('');
+        $('#tabs').appendChild(addBtn);
         if (keep) { const k = $('#tabs').querySelector(keep); if (k) k.focus(); }
       }
       // Üzerine gelince görünen "ne yapıyor" satırı sık değişir; sekmeyi yeniden çizmeden güncellenir.
       for (const s of members) {
         const b = $('#tabs').querySelector(`[data-sid="${CSS.escape(s.id)}"]`);
-        if (b) b.title = `${s.name} · ${statusLabel(s)}${s.running && s.activity ? ` · ${s.activity}` : ''}`;
+        if (b) b.querySelector('.tab-name').textContent = s.roleLabel;
       }
+      this.renderClosed(closed);
       this.renderRequests(g);
       if (this.menuSid) {
         this.renderMenu();
@@ -3639,6 +3988,10 @@
         pane.el.classList.toggle('selected', s.id === this.selected);
         pane.el.classList.toggle('waiting', s.running && s.status === 'waiting');
         pane.el.hidden = this.layout === 'tek' && s.id !== this.selected;
+        const visible = !pane.el.hidden && this.view === 'terms';
+        // Gizliyken çıkan çıktı sonrası gösterilen terminal yeniden çizilir.
+        if (visible && !pane.visible) pane.refresh = true;
+        pane.visible = visible;
 
         const body = pane.el.querySelector('.pane-body');
         if (s.running) {
@@ -3648,16 +4001,32 @@
             pane.term = null;
           }
           if (!pane.term) {
-            body.innerHTML = '';
-            pane.term = createTerm(s.id, body);
+            // Gizli kapta açılan terminal hücre boyutunu ölçemeyip bozuk çizer; yalnızca görünen pane açılır.
+            // Açılış sırayla yapılır (bkz. pumpTerms).
+            if (pane.visible) body.innerHTML = '';
+            const kept = pane.visible ? takeTerm(s.id, body) : null;
+            if (kept) pane.term = kept;
+            else {
+              pane.want = pane.visible;
+              if (pane.want && !body.querySelector('.pane-off')) body.innerHTML = '<div class="pane-off"><span>Bağlanıyor…</span></div>';
+            }
           }
         } else if (!pane.term) {
           body.innerHTML = `<div class="pane-off"><span>Oturum kapalı.</span><button class="btn" data-start="${esc(s.id)}">Başlat (kaldığı yerden)</button></div>`;
         }
       }
       this.placePanes(members);
+      this.openOrder = members.map((s) => s.id);
+      this.pumpTerms();
       requestAnimationFrame(() => {
-        for (const pane of this.panes.values()) if (pane.term && !pane.el.hidden) pane.term.claimSize();
+        for (const pane of this.panes.values()) {
+          if (!pane.term || pane.el.hidden) continue;
+          pane.term.claimSize();
+          if (pane.refresh && this.view === 'terms') {
+            pane.refresh = false;
+            pane.term.term.refresh(0, pane.term.term.rows - 1);
+          }
+        }
       });
       if (this.view === 'board') this.refreshBoard(g);
       else if (this.view === 'notes') this.refreshNotes(g);
@@ -3666,8 +4035,10 @@
     },
 
     cleanup() {
-      for (const pane of this.panes.values()) if (pane.term) pane.term.dispose();
+      for (const [sid, pane] of this.panes) if (pane.term) stashTerm(sid, pane.term);
       this.panes.clear();
+      this.pumping = false;
+      this.pumpGen = (this.pumpGen || 0) + 1;
       document.body.classList.remove('work');
       document.removeEventListener('click', this.onDocClick);
       document.removeEventListener('keydown', this.onDocKey);
@@ -3677,6 +4048,8 @@
       $('#layout-pop').hidden = true;
       $('#layout-btn').setAttribute('aria-expanded', 'false');
       $('#layout-wrap').hidden = true;
+      $('#bekci-btn').removeEventListener('click', this.onBekciBtn);
+      $('#bekci-btn').hidden = true;
     },
   };
 
@@ -4768,7 +5141,9 @@
       return;
     }
     try {
-      await refresh();
+      // Durum kanalı güncel tuttuğu için ekran beklemeden önceki durumla açılır; yenisi gelince kendiliğinden tazelenir.
+      if (state && stateLive()) refresh().then(afterState).catch(() => {});
+      else await refresh();
     } catch (err) {
       app.innerHTML = `<div class="page"><div class="empty">${err.status === 401
         ? 'Erişim anahtarı geçersiz. Sunucu penceresinde yazan adresi yeniden aç.'
@@ -4819,14 +5194,23 @@
   }
 
   // Durum iki saniyede bir yenilenir; açık ekranın canlı kısmı (varsa) yeniden çizilir.
+  function afterState() {
+    watchState();
+    if (current && current.poll && !document.hidden) current.poll();
+  }
+
+  let lastPoll = 0;
   setInterval(async () => {
     if (!token || document.hidden && store(NOTIFY_KEY) !== '1') return;
+    // Durum kanalı açıkken sunucu zaten itiyor; yoklama yalnızca kanalın sessiz kopmasına karşı 20 sn'de bir.
+    if (stateLive() && Date.now() - lastPoll < 20000) return;
+    lastPoll = Date.now();
     try {
       await refresh();
-      watchState();
-      if (current && current.poll && !document.hidden) current.poll();
+      afterState();
     } catch {}
   }, 2000);
 
+  openStateChannel();
   navigate();
 })();

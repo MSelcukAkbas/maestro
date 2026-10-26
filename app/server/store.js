@@ -273,6 +273,18 @@ function writeJson(name, value) {
   fs.renameSync(tmp, target);
 }
 
+// Yalnızca okuyan sık çağrılar (zamanlayıcılar, durum yanıtı) için: dosya değişmedikçe aynı nesne döner.
+// Döndürülen listeyi değiştirme; değiştirilecekse loadGroups kullanılır.
+let groupsView = null;
+function viewGroups() {
+  let st;
+  try { st = fs.statSync(file('groups.json')); } catch { return []; }
+  if (groupsView && groupsView.mtime === st.mtimeMs && groupsView.size === st.size) return groupsView.list;
+  const list = readJson('groups.json', []);
+  groupsView = { mtime: st.mtimeMs, size: st.size, list };
+  return list;
+}
+
 function loadSettings() {
   const saved = readJson('settings.json', null);
   const settings = { ...structuredClone(DEFAULT_SETTINGS), ...(saved || {}) };
@@ -321,7 +333,8 @@ module.exports = {
   loadProjects: () => readJson('projects.json', []),
   saveProjects: (p) => writeJson('projects.json', p),
   loadGroups: () => readJson('groups.json', []),
-  saveGroups: (g) => writeJson('groups.json', g),
+  viewGroups,
+  saveGroups: (g) => { writeJson('groups.json', g); groupsView = null; },
   loadTemplates: () => readJson('templates.json', []),
   saveTemplates: (t) => writeJson('templates.json', t),
   loadToken,

@@ -10,10 +10,10 @@
 <body>
 <header class="topbar">
   <a class="brand" href="#/"><span class="logo">&gt;_</span><span>Claude Panel</span></a>
+  <span class="srv" id="server-pill" role="img" aria-label="bağlanıyor" title="bağlanıyor"></span>
   <nav class="crumbs" id="crumbs"></nav>
   <span class="grow"></span>
   <span class="pill" id="presence-pill" hidden></span>
-  <span class="pill" id="server-pill">● bağlanıyor</span>
   <a class="btn icon" href="#/ayarlar" aria-label="Ayarlar" title="Ayarlar">
     <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 6h9M17 6h3M4 12h3M11 12h9M4 18h11M19 18h1"/><circle cx="15" cy="6" r="2"/><circle cx="9" cy="12" r="2"/><circle cx="17" cy="18" r="2"/></svg>
   </a>
@@ -32,12 +32,14 @@
     <div class="quota-pop notif-pop" id="notif-pop" hidden></div>
   </div>
   <div class="quota-wrap">
-    <button class="btn" id="quota-btn" aria-expanded="false" aria-controls="quota-pop">
+    <button class="btn icon" id="quota-btn" aria-expanded="false" aria-controls="quota-pop" aria-label="Kota" title="Kota">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#34d1a0" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 18a8 8 0 1 1 16 0"/><path d="M12 18l4-6"/></svg>
-      Kota
     </button>
     <div class="quota-pop" id="quota-pop" hidden></div>
   </div>
+  <button class="btn icon" id="bekci-btn" hidden aria-pressed="false" aria-label="Bekçi" title="Bekçi">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l8 3v6c0 5-3.5 8-8 9-4.5-1-8-4-8-9V6z"/><path d="M9 12l2 2 4-4"/></svg>
+  </button>
 </header>
 <main id="app"></main>
 <div class="toast" id="toast" role="status" hidden></div>

@@ -59,9 +59,9 @@ caps.projectDirs = () => store.loadProjects().map((p) => p.path);
 try { caps.learnFromTranscripts(path.join(sharedConfigDir(), 'projects')); } catch (err) { console.error('[panel] skill kataloğu:', err.message); }
 manager.onInput((sess) => presence.touch(`terminal: ${sess.name}`));
 const ops = new Ops({
-  member: (sid) => findSession(store.loadGroups(), sid),
+  member: (sid) => findSession(store.viewGroups(), sid),
   state: (sid) => {
-    const found = findSession(store.loadGroups(), sid);
+    const found = findSession(store.viewGroups(), sid);
     const p = manager.get(sid);
     if (!found || !p) return null;
     const live = discovery.liveSessions(sharedConfigDir());
@@ -72,7 +72,7 @@ const ops = new Ops({
   info: (sid) => meter.sessionInfo(sid),
   lastText: (sid) => lastText(sid),
   delivering: (sid) => {
-    const found = findSession(store.loadGroups(), sid);
+    const found = findSession(store.viewGroups(), sid);
     return !!found && (boards.hasPending(found.group.id, sid) || notes.hasPending(found.group.id, sid) || requests.hasInbox(sid));
   },
   paste: (sid, text, activity) => {
@@ -88,7 +88,7 @@ const ops = new Ops({
 const curator = new Curator({
   notes, dataDir: store.DATA_DIR, port: PORT, token: hookState.token,
   // Kapatılan (arşivlenen) grupların notları zamanlı düzenlemeye girmez.
-  groups: () => store.loadGroups().filter((g) => !g.archived),
+  groups: () => store.viewGroups().filter((g) => !g.archived),
   cards: (g) => boards.load(g.id).cards.map((c) => ({
     id: c.id, status: c.status, statusText: STATUS_TEXT[c.status], title: c.title, desc: c.desc,
     assignee: c.assignee ? actorLabel(g, c.assignee) : 'yok', lastNote: c.notes.length ? `${actorLabel(g, c.notes[c.notes.length - 1].by)}: ${c.notes[c.notes.length - 1].text}` : '',
@@ -205,12 +205,14 @@ function sessionStatus(s, live) {
 
 function buildState() {
   const live = discovery.liveSessions(sharedConfigDir());
-  const groups = store.loadGroups().map((g) => {
+  const groups = store.viewGroups().map((g) => {
     const sessions = g.sessions.map((s) => {
+      // Rol talimatı metni, dosya yolları ve oturuma özel yetenek ayarı arayüzde okunmaz; her 2 sn'lik yoklamada indirilmez.
+      const { rolePrompt, promptFile, taskFile, caps, ...rest } = s;
       const running = manager.has(s.id);
       const st = sessionStatus(s, live);
       const stats = sessionStats(discovery.transcriptPath(sharedConfigDir(), s.id));
-      return { ...s, running, ...st, status: running ? st.status : null, stats, drift: running ? launchDrift(s.id) : [], pending: pending.get(s.id) };
+      return { ...rest, running, ...st, status: running ? st.status : null, stats, drift: running ? launchDrift(s.id) : [], pending: pending.get(s.id) };
     });
     const active = sessions.some((s) => s.running);
     const reqs = requests.pending(g.id).map((r) => ({ ...r, kindText: KIND_TEXT[r.kind], text: describeRequest(g, r, settings.roles, settings.accounts) }));
@@ -465,7 +467,7 @@ const USER_TL = '_user';
 function sampleTimeline() {
   let live;
   try { live = discovery.liveSessions(sharedConfigDir()); } catch { return; }
-  for (const g of store.loadGroups()) {
+  for (const g of store.viewGroups()) {
     let changed = false;
     for (const s of g.sessions) {
       if (timeline.record(g.id, s.id, sessionStatus(s, live).status)) changed = true;
@@ -483,7 +485,7 @@ const meterSeen = new Map();
 function meterTick() {
   const now = Date.now();
   const list = [];
-  for (const g of store.loadGroups()) {
+  for (const g of store.viewGroups()) {
     for (const s of g.sessions) {
       if (manager.has(s.id)) meterSeen.set(s.id, now);
       const seen = meterSeen.get(s.id);
@@ -633,20 +635,21 @@ setInterval(() => { try { curator.tick(); } catch (err) { console.error('[panel]
 
 // Arayüz kapalıyken de ölçüm sürsün: üye çalışırken kota 5 dakikada bir (önbellek süresine uyarak) okunur.
 setInterval(() => {
-  if (!store.loadGroups().some((g) => g.sessions.some((s) => manager.has(s.id)))) return;
+  if (!store.viewGroups().some((g) => g.sessions.some((s) => manager.has(s.id)))) return;
   cachedQuota().catch((err) => console.error('[panel] kota:', err.message));
 }, 5 * 60 * 1000);
 
 // Grup içi mesajlar: her üyenin SendMessage çağrıları, alıcı adı grup üyeleriyle eşleştirilir.
-function groupActivity(gid) {
-  const g = store.loadGroups().find((x) => x.id === gid);
+// Mesaj gövdeleri yanıtın çoğunu tutar (yüzlerce mesajda ~1 MB); liste yalnızca özeti alır, gövde açılınca ya da aranınca istenir.
+function groupActivity(gid, bodies = false) {
+  const g = store.viewGroups().find((x) => x.id === gid);
   if (!g) throw new HttpError(404, 'Grup bulunamadı.');
   // Yenilenen üyenin eski ve yeni oturumu aynı adı taşır; ad güncel üyeye eşlenir.
   const byName = new Map([...g.sessions.filter((s) => s.removed), ...g.sessions.filter((s) => !s.removed)].map((s) => [s.name, s.id]));
   const messages = [];
   for (const s of g.sessions) {
     for (const m of sessionMessages(discovery.transcriptPath(sharedConfigDir(), s.id))) {
-      messages.push({ ts: m.ts, from: s.id, to: byName.get(m.to) || null, toName: m.to, text: m.text, body: m.body });
+      messages.push({ ts: m.ts, from: s.id, to: byName.get(m.to) || null, toName: m.to, text: m.text, ...(bodies ? { body: m.body } : {}) });
     }
   }
   messages.sort((a, b) => a.ts - b.ts);
@@ -1161,7 +1164,7 @@ const idleSeen = new Map();
 function boardIdleTick() {
   let live;
   try { live = discovery.liveSessions(sharedConfigDir()); } catch { return; }
-  for (const g of store.loadGroups()) {
+  for (const g of store.viewGroups()) {
     for (const s of g.sessions) {
       const p = manager.get(s.id);
       const h = hookState.get(s.id);
@@ -1241,7 +1244,17 @@ route('POST', '/api/groups/([\\w-]+)/resume', async (req, m) => {
 
 route('POST', '/api/groups/([\\w-]+)/sessions', async (req, m) => addSessionToGroup(m[1], await readBody(req)));
 
-route('GET', '/api/groups/([\\w-]+)/activity', async (req, m) => groupActivity(m[1]));
+route('GET', '/api/groups/([\\w-]+)/activity', async (req, m) => groupActivity(m[1], new URL(req.url, 'http://x').searchParams.get('bodies') === '1'));
+route('GET', '/api/groups/([\\w-]+)/message', async (req, m) => {
+  const q = new URL(req.url, 'http://x').searchParams;
+  const g = store.viewGroups().find((x) => x.id === m[1]);
+  const s = g && g.sessions.find((x) => x.id === q.get('from'));
+  if (!s) throw new HttpError(404, 'Mesaj bulunamadı.');
+  const ts = Number(q.get('ts'));
+  const hit = sessionMessages(discovery.transcriptPath(sharedConfigDir(), s.id)).find((x) => x.ts === ts);
+  if (!hit) throw new HttpError(404, 'Mesaj bulunamadı.');
+  return { body: hit.body };
+});
 
 route('GET', '/api/groups/([\\w-]+)/board', async (req, m) => {
   const b = boards.load(boardGroup(m[1]).id);
@@ -1936,6 +1949,20 @@ route('PUT', '/api/groups/([\\w-]+)/watch', async (req, m) => {
   return { ok: true, watch: groupWatchCfg(g) };
 });
 
+// Üye sekmelerinin sürüklenerek sıralanması. body.ids: görünen sıradaki oturum kimlikleri; listede olmayanlar sonda kalır.
+route('PUT', '/api/groups/([\\w-]+)/order', async (req, m) => {
+  const body = await readBody(req);
+  const groups = store.loadGroups();
+  const g = groups.find((x) => x.id === m[1]);
+  if (!g) throw new HttpError(404, 'Grup bulunamadı.');
+  const ids = Array.isArray(body.ids) ? body.ids.map(String) : [];
+  const rank = new Map(ids.map((id, i) => [id, i]));
+  const key = (s, i) => (rank.has(s.id) ? rank.get(s.id) : ids.length + i);
+  g.sessions = g.sessions.map((s, i) => ({ s, k: key(s, i) })).sort((a, b) => a.k - b.k).map((x) => x.s);
+  store.saveGroups(groups);
+  return { ok: true };
+});
+
 // Kullanıcının "sıfır context ile yenile" isteği. Çalışan üyeye devir notu yazdırılır (bekçinin yenilemesiyle aynı yol,
 // beklemeden). Kapalı üye not yazamaz; aynı ad ve rolle doğrudan sıfırdan açılır. Pano ve notlar grubundadır, kalır.
 route('POST', '/api/sessions/([\\w-]+)/renew', async (req, m) => {
@@ -2179,7 +2206,7 @@ const server = http.createServer(async (req, res) => {
         hookState.handle(body);
         if (body.hook_event_name === 'UserPromptSubmit') {
           const found = findSession(store.loadGroups(), body.session_id);
-          if (found) presence.prompt(body.session_id, body.prompt, manager.get(body.session_id), { name: found.session.name, gid: found.group.id, roleId: found.session.roleId });
+          if (found) presence.prompt(body.session_id, body.prompt, manager.get(body.session_id), { name: found.session.name, group: found.group.name, role: found.session.roleLabel, gid: found.group.id, roleId: found.session.roleId });
         }
         const out = boardDelivery(body);
         if (out) return sendJson(res, 200, out);
@@ -2271,8 +2298,30 @@ const wss = new WebSocketServer({
   },
 });
 
+// Durum kanalı (?ch=state): arayüz iki saniyede bir yoklamak yerine durum değişince tam yanıtı alır.
+// Değişiklik saniyede bir denetlenir; kimse bağlı değilse durum hiç kurulmaz.
+const stateClients = new Set();
+let stateSent = '';
+function pushState() {
+  if (!stateClients.size) return;
+  let json;
+  try { json = JSON.stringify({ t: 'state', d: buildState() }); } catch (err) { console.error('[panel] durum:', err.message); return; }
+  if (json === stateSent) return;
+  stateSent = json;
+  for (const ws of stateClients) if (ws.readyState === 1) ws.send(json);
+}
+setInterval(pushState, 1000);
+
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
+  if (url.searchParams.get('ch') === 'state') {
+    stateClients.add(ws);
+    ws.on('close', () => stateClients.delete(ws));
+    ws.on('error', () => stateClients.delete(ws));
+    // Yeni bağlanan hemen güncel durumu alır.
+    try { ws.send(JSON.stringify({ t: 'state', d: buildState() })); } catch {}
+    return;
+  }
   const s = manager.get(url.searchParams.get('s'));
   if (!s) {
     ws.send(JSON.stringify({ t: 'x', code: null }));
@@ -2308,7 +2357,22 @@ server.on('error', (err) => {
   throw err;
 });
 
+// Açılışta tüm konuşma kayıtlarının ilk ayrıştırması (arşivdekiler dahil birkaç saniye) ilk isteği bekletmesin diye
+// oturum oturum, aralarda olay döngüsüne dönerek yapılır.
+function warmStats() {
+  const ids = store.viewGroups().flatMap((g) => g.sessions.map((s) => s.id));
+  let i = 0;
+  const step = () => {
+    if (i >= ids.length) return;
+    try { sessionStats(discovery.transcriptPath(sharedConfigDir(), ids[i])); } catch {}
+    i += 1;
+    setImmediate(step);
+  };
+  setImmediate(step);
+}
+
 server.listen(PORT, '127.0.0.1', () => {
+  warmStats();
   const url = `http://127.0.0.1:${PORT}/?t=${token}`;
   console.log(`Claude Panel çalışıyor: ${url}`);
   console.log('Bu pencereyi kapatırsan paneldeki oturumlar da kapanır.');

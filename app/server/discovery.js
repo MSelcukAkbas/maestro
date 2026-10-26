@@ -13,7 +13,18 @@ function pidAlive(pid) {
 }
 
 // sessionId -> { pid, name, status, cwd, updatedAt, statusUpdatedAt }
+// Zamanlayıcılar ve durum yanıtı aynı saniyede birkaç kez çağırır; sonuç LIVE_TTL boyunca paylaşılır.
+const LIVE_TTL = 1000;
+let liveCache = null;
 function liveSessions(configDir) {
+  const now = Date.now();
+  if (liveCache && liveCache.dir === configDir && now - liveCache.at < LIVE_TTL) return liveCache.out;
+  const out = scanLive(configDir);
+  liveCache = { dir: configDir, at: now, out };
+  return out;
+}
+
+function scanLive(configDir) {
   const dir = path.join(configDir, 'sessions');
   const out = new Map();
   let files;
@@ -33,21 +44,31 @@ function liveSessions(configDir) {
 }
 
 const transcriptCache = new Map();
+// projects/ altında yüzlerce klasör olabilir; her oturum için tek tek aramak yerine klasörler bir geçişte dizinlenir.
+// Dizinde olmayan oturum için yeni tarama en erken MISS_TTL sonra yapılır (yeni açılan oturumun kaydı gecikmeden görünsün).
+const MISS_TTL = 5000;
+let indexedAt = 0;
+
+function indexTranscripts(root) {
+  indexedAt = Date.now();
+  let dirs;
+  try { dirs = fs.readdirSync(root); } catch { return; }
+  for (const d of dirs) {
+    let files;
+    try { files = fs.readdirSync(path.join(root, d)); } catch { continue; }
+    for (const f of files) {
+      if (f.endsWith('.jsonl')) transcriptCache.set(f.slice(0, -6), path.join(root, d, f));
+    }
+  }
+}
 
 function transcriptPath(configDir, sessionId) {
   const cached = transcriptCache.get(sessionId);
   if (cached && fs.existsSync(cached)) return cached;
-  const root = path.join(configDir, 'projects');
-  let dirs;
-  try { dirs = fs.readdirSync(root); } catch { return null; }
-  for (const d of dirs) {
-    const p = path.join(root, d, `${sessionId}.jsonl`);
-    if (fs.existsSync(p)) {
-      transcriptCache.set(sessionId, p);
-      return p;
-    }
-  }
-  return null;
+  if (Date.now() - indexedAt < MISS_TTL) return null;
+  indexTranscripts(path.join(configDir, 'projects'));
+  const found = transcriptCache.get(sessionId);
+  return found && fs.existsSync(found) ? found : null;
 }
 
 module.exports = { liveSessions, transcriptPath, pidAlive };

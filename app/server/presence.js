@@ -59,7 +59,8 @@ class Presence {
     // Enter'dan sonra panel yapıştırdıysa ya da istem panelin yapıştırdığı metinse mesaj panelindir.
     const t = squash(text);
     if (p.pastes.some((x) => x.t >= enterAt || (t && squash(x.text).slice(0, 200) && t.includes(squash(x.text).slice(0, 200))))) return false;
-    this.data.sessions[sid] = { sid, name: info.name, gid: info.gid, roleId: info.roleId, ts: now, fam: null, model: null };
+    // group / role / text: arayüzdeki kısa etiket için; text yalnızca ilk 10 karakter tutulur.
+    this.data.sessions[sid] = { sid, name: info.name, group: info.group, role: info.role, text: t.slice(0, 10), gid: info.gid, roleId: info.roleId, ts: now, fam: null, model: null };
     this.data.lastSid = sid;
     this.save();
     return true;

@@ -3,6 +3,16 @@
 const pty = require('@lydell/node-pty');
 
 const MAX_SCROLLBACK = 400000;
+
+// Sınır aşılınca baştan kesilir; kesim bir kaçış dizisinin ortasına düşerse yeniden oynatılan geçmiş ekranı bozar,
+// bu yüzden ilk satır sonuna kadar olan parça da atılır.
+function trimScrollback(text) {
+  if (text.length <= MAX_SCROLLBACK) return text;
+  const cut = text.slice(-MAX_SCROLLBACK);
+  const nl = cut.indexOf('\n');
+  return nl >= 0 && nl < 4000 ? cut.slice(nl + 1) : cut;
+}
+
 // Açılıştan sonra kapatmadan önce beklenen süreler (bkz. PtySession.kill).
 const KILL_WAIT = 3000;
 const KILL_SETTLE = 500;
@@ -76,7 +86,7 @@ class PtySession {
 
     this.pty.onData((data) => {
       this.firstDataAt = this.firstDataAt || Date.now();
-      this.scrollback = (this.scrollback + data).slice(-MAX_SCROLLBACK);
+      this.scrollback = trimScrollback(this.scrollback + data);
       this.broadcast({ t: 'o', d: data });
     });
     this.pty.onExit(({ exitCode }) => {
