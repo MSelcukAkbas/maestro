@@ -271,7 +271,13 @@ test('bekleyen değişiklik: uygulama anı ve istenen / gerçekleşen farkı', (
 
 test('store: rol göçü yeni rolleri ekler, elle değiştirilmemiş talimatı günceller, değiştirileni korur', () => {
   const dir = tmp('store');
-  const src = JSON.parse(fs.readFileSync(path.join(ROOT, 'data', 'settings.json'), 'utf8'));
+  // Canlı veriden bağımsız: boş klasörde varsayılan ayarlar üretilir, eski sürüm onların üstünde kurulur.
+  const fresh = tmp('store-defaults');
+  const d = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/store').loadSettings()))`], {
+    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: fresh }, encoding: 'utf8',
+  });
+  assert.strictEqual(d.status, 0, d.stderr);
+  const src = JSON.parse(d.stdout);
   // Eski sürüm: yeni roller yok, kalite talimatı elle değiştirilmiş.
   src.roleDefaultsVersion = 4;
   src.roles = src.roles.filter((r) => !['test', 'guvenlik', 'dokuman'].includes(r.id));

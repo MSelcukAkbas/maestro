@@ -6,17 +6,26 @@ const path = require('path');
 const { spawn } = require('child_process');
 
 const ROOT = path.join(__dirname, '..');
+// Deponun kökü (app/'in bir üstü): e2e oturumları burada açılır; Claude Code güveni deponun kökünden sorar.
+const REPO = path.join(ROOT, '..');
 const PORT = Number(process.env.TEST_PANEL_PORT) || 7799;
 const BASE = `http://127.0.0.1:${PORT}`;
 
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Canlı ayarların kopyasıyla geçici veri klasörü: hesaplar, roller, projeler ve yetenekler gerçek, gruplar boş.
+// Canlı veride panelin kendi projesi yoksa (ör. veri sıfırlandıysa) testlerin kullandığı "claude-panel" projesi eklenir.
 function makeDataDir(name = 'panel-test') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
   for (const f of ['settings.json', 'projects.json', 'caps.json']) {
     const src = path.join(ROOT, 'data', f);
     if (fs.existsSync(src)) fs.copyFileSync(src, path.join(dir, f));
+  }
+  const pf = path.join(dir, 'projects.json');
+  const projects = fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : [];
+  if (!projects.some((p) => path.resolve(p.path) === path.resolve(REPO))) {
+    projects.push({ id: 'test-claude-panel', name: 'claude-panel', path: REPO, addedAt: Date.now(), lastUsedAt: Date.now() });
+    fs.writeFileSync(pf, JSON.stringify(projects, null, 2));
   }
   return dir;
 }
@@ -83,4 +92,4 @@ async function until(fn, ms = 120000, step = 2000) {
   }
 }
 
-module.exports = { ROOT, PORT, wait, makeDataDir, startPanel, typeInto, transcript, until };
+module.exports = { ROOT, REPO, PORT, wait, makeDataDir, startPanel, typeInto, transcript, until };

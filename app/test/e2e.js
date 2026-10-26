@@ -3,9 +3,9 @@
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { ROOT, makeDataDir, startPanel, typeInto, transcript, until, wait } = require('./lib');
+const { REPO, makeDataDir, startPanel, typeInto, transcript, until, wait } = require('./lib');
 
-const PROJECT_PATH = ROOT;
+const PROJECT_PATH = REPO;
 let spent = 0;
 
 function projectId(api, state) {
