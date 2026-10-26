@@ -5,7 +5,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const llm = require('./llm');
+const llm = require('../core/llm');
 
 const TIMEOUT = 90 * 1000;
 const CWD = path.join(os.tmpdir(), 'claude-panel-helper');

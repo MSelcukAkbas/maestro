@@ -4,7 +4,7 @@
 // İstekler ve şefe gidecek sonuç bildirimleri data/requests.json'da tutulur; panel yeniden başlasa da kaybolmaz.
 const fs = require('fs');
 const path = require('path');
-const { EFFORTS } = require('./options');
+const { EFFORTS } = require('../core/options');
 
 class TeamError extends Error {
   constructor(status, message) {

@@ -2,7 +2,7 @@
 // kapanış özeti). Oturum kaydı bırakmadıkları için kota ekranında başka yerde görünmezler. data/ledger.json, son 500 çağrı.
 const fs = require('fs');
 const path = require('path');
-const { units } = require('./meter');
+const { units } = require('../watch/meter');
 
 const KEEP = 500;
 

@@ -6,6 +6,7 @@ const path = require('path');
 const os = require('os');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
+const { APP_ROOT } = require('../core/paths');
 
 const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
@@ -15,7 +16,7 @@ const RESERVED_MCP = 'panel';
 const SYNCED_PREFIX = 'anthropic-skills';
 // Panelle gelen skill'ler: depodaki skills/ klasörü (sürüm kontrolünde, panelden salt okunur). Varsayılan roller
 // skills/roles.json'da; kullanıcının rol değişikliği caps.json builtinRoles'a varsayılandan fark olarak yazılır.
-const BUILTIN_DIR = path.join(__dirname, '..', 'skills');
+const BUILTIN_DIR = path.join(APP_ROOT, 'skills');
 const READ_ONLY = 'Panelle gelen skill salt okunur; değişiklik depodaki skills/ klasöründe yapılır.';
 
 class CapError extends Error {

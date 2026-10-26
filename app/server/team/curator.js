@@ -6,9 +6,9 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const llm = require('./llm');
+const llm = require('../core/llm');
 const { CURATOR, plainBody, userBlocks } = require('./notes');
-const { TOKEN_ENV } = require('./hooks');
+const { TOKEN_ENV } = require('../session/hooks');
 
 const DEFAULTS = { enabled: true, everyH: 3, model: 'sonnet', level: 'orta' };
 const MIN_NOTES = 2;

@@ -7,7 +7,7 @@
 const fs = require('fs');
 const path = require('path');
 const os = require('os');
-const llm = require('./llm');
+const llm = require('../core/llm');
 
 // Proje incelemesiyle birlikte; tur sınırı incelemenin uzamasını keser.
 const TIMEOUT = 6 * 60 * 1000;
@@ -15,7 +15,7 @@ const READ_TOOLS = 'Read,Grep,Glob';
 const MAX_TURNS = 30;
 const MAX_ROWS = 12;
 const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
-const options = require('./options');
+const options = require('../core/options');
 
 const MODELS = ['', ...options.MODELS];
 // plan önerilmez: plan modundaki üye komut çalıştıramaz, ekiple çalışırken takılır.

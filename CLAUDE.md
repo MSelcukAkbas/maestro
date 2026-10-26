@@ -8,6 +8,8 @@ Claude Panel: birden çok Claude Code oturumunu rollere ayrılmış bir ekip ola
 
 Klasör düzeni: panelin tamamı `app/` altında (`server/`, `web/`, `skills/`, `test/`, `data/`, `node_modules/`, `package.json`, `attach.js`, `.bat`/`.vbs`); kökte yalnızca `app/`, `external resources/`, belgeler ve `.gitignore`. Bu dosyadaki tüm yollar ve komutlar `app/`'e göredir (komutları `app/` içinde çalıştır).
 
+Sunucu modülleri `server/` altında konuya göre: `core/` (store, options, llm, ledger, transcript, discovery, usage, paths), `session/` (sessions, hooks, presence, pending), `team/` (board, notes, team, curator, docs, exporter, timeline), `watch/` (meter, quota, watch, helper, ops), `setup/` (caps, optimizer). Uygulama kökü yalnızca `core/paths.js` `APP_ROOT`'tan alınır; modül kökü kendi `__dirname`'inden hesaplamaz.
+
 ## Komutlar
 
 ```bash
@@ -16,7 +18,7 @@ node --test test/unit.test.js  # birim testleri (model çağırmaz). Node 24'te 
 node --test --test-name-pattern "<ad>" test/unit.test.js   # tek birim testi
 node test/smoke.js             # ~74 API çağrısı, 7799'da geçici veriyle; 500 yok, panel ayakta (SMOKE_PC=1 → open-pc de)
 node test/e2e.js [senaryo ...] # gerçek Claude oturumları açar, KOTA HARCAR (Haiku). Senaryolar: launch builtinskills paste settings teamcaps account curator curatormerge optimize
-node --check server/<dosya>.js # hızlı sözdizimi kontrolü
+node --check server/<klasör>/<dosya>.js # hızlı sözdizimi kontrolü
 ```
 
 - **Canlı panel (7788) ile test paneli (7799) ayrıdır.** `test/lib.js` paneli `CLAUDE_PANEL_DATA=<geçici klasör>` ve `CLAUDE_PANEL_PORT=7799` ile açar, canlı `data/settings.json`, `projects.json`, `caps.json`'u kopyalar; gruplar boş başlar. Canlı veriye ve oturumlara dokunma.
@@ -66,8 +68,8 @@ Görev panosu kartları, grup notları ve ekip istek sonuçları dosyada "iletil
 
 Tekrarlanan kod ve dağınık kayıt ölçüm hatası ürettiği için parçalar ortak temele taşındı. Yeni iş yazarken:
 
-- **Yardımcı model çağrısı yalnızca `llm.run`** (`server/llm.js`). `claude -p`'yi doğrudan spawn etme. llm.js: hesabın config klasörü, `CLAUDE*/ANTHROPIC*` temizlenmiş ortam, `--setting-sources ""`, `--no-session-persistence`, `--strict-mcp-config`, JSON çıktı. Bu çağrılar oturum kaydı bırakmaz; harcama `onSpend` → `ledger.js` (data/ledger.json, son 500) ve `meter.addSpend` ile ölçüme eklenir. Atlanırsa kota artışı token'sız görünür ve oran şişer. Model hatası (`is_error`) fırlatmaz, `ok:false` döner.
-- **Seçenek listeleri yalnızca `server/options.js`** (`MODELS`, `MODEL_TEXT`, `EFFORTS`, `PERMISSION_MODES`). Yeni değer orada eklenir; varsayılanlar sahibi modülde kalır (`WATCH_DEFAULTS`, `CURATOR_DEFAULTS`, `ROLE_DEFAULT_EFFORT`).
+- **Yardımcı model çağrısı yalnızca `llm.run`** (`server/core/llm.js`). `claude -p`'yi doğrudan spawn etme. llm.js: hesabın config klasörü, `CLAUDE*/ANTHROPIC*` temizlenmiş ortam, `--setting-sources ""`, `--no-session-persistence`, `--strict-mcp-config`, JSON çıktı. Bu çağrılar oturum kaydı bırakmaz; harcama `onSpend` → `ledger.js` (data/ledger.json, son 500) ve `meter.addSpend` ile ölçüme eklenir. Atlanırsa kota artışı token'sız görünür ve oran şişer. Model hatası (`is_error`) fırlatmaz, `ok:false` döner.
+- **Seçenek listeleri yalnızca `server/core/options.js`** (`MODELS`, `MODEL_TEXT`, `EFFORTS`, `PERMISSION_MODES`). Yeni değer orada eklenir; varsayılanlar sahibi modülde kalır (`WATCH_DEFAULTS`, `CURATOR_DEFAULTS`, `ROLE_DEFAULT_EFFORT`).
 - **Konuşma kaydı yalnızca `transcript.js`** üzerinden okunur. Üye görüntüsü `memberSnapshot` bekçi ve `ekip_durumu` için ortaktır.
 - **Çalışan üyenin ayar değişikliği `pending.js` kuyruğuna** gider (kullanıcı menüsü, şef `uye_ayar_degistir` / `uye_yetenek_degistir`). `ready()`: üye boşta olmalı; model değişiminde ayrıca önbellek soğuk olmalı (effort 5.5 modellerde önbelleği korur). Uygulama = durdur + resume + yeni `--model/--effort`. "Şimdi uygula" `now:true`.
 - **Açılış doğrulaması `driftOf`**: istenen model/effort/kapalı skill, jsonl'de gerçekleşenle karşılaştırılır → arayüzde "ayar uyuşmuyor" rozeti. "Uygulandı" demek için bu kanıt kullanılır.

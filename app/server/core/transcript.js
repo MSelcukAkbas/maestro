@@ -1,7 +1,7 @@
 // Konuşma kaydı (projects/*/<id>.jsonl) için ortak okuyucu: dosya kaldığı yerden okunur, her satır bir kez ayrıştırılır
 // ve hem ölçüme (meter: token, tur, compact, hata, skill listesi) hem özete (usage: maliyet, son metin, mesajlar) verilir.
 const fs = require('fs');
-const meter = require('./meter');
+const meter = require('../watch/meter');
 const usage = require('./usage');
 
 const cache = new Map();

@@ -10,7 +10,7 @@ const ROOT = path.join(__dirname, '..');
 const tmp = (name) => fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
 
 test('presence: yalnızca Enter sonrası ve panel yapıştırması olmayan istem kullanıcı mesajıdır', () => {
-  const { Presence } = require('../server/presence');
+  const { Presence } = require('../server/session/presence');
   const pr = new Presence(tmp('presence'));
   const p = { lastEnterAt: 0, pastes: [] };
   const info = { name: 'coder', gid: 'g', roleId: 'coder' };
@@ -33,7 +33,7 @@ test('presence: yalnızca Enter sonrası ve panel yapıştırması olmayan istem
 });
 
 test('timeline: geriye tarihli kayıt önceki kaydın gerisine düşmez', () => {
-  const { Timeline } = require('../server/timeline');
+  const { Timeline } = require('../server/team/timeline');
   const tl = new Timeline(tmp('timeline'));
   tl.record('g', 'u', 'here', 1000);
   tl.record('g', 'u', 'away', 500);
@@ -41,14 +41,14 @@ test('timeline: geriye tarihli kayıt önceki kaydın gerisine düşmez', () => 
 });
 
 test('sessions: başlatma betiği model ve effort verir', () => {
-  const { buildScript } = require('../server/sessions');
+  const { buildScript } = require('../server/session/sessions');
   const s = buildScript({ name: 'x', sessionId: 'id', model: 'haiku', effort: 'low' });
   assert.match(s, /--model 'haiku' --effort 'low'/);
   assert.doesNotMatch(buildScript({ name: 'x', sessionId: 'id' }), /--effort/);
 });
 
 test('caps: skill listesi öğrenilir, türler ayrılır, kapatma skillOverrides olur', () => {
-  const { Caps } = require('../server/caps');
+  const { Caps } = require('../server/setup/caps');
   const dir = tmp('caps');
   const c = new Caps(dir);
   const proj = tmp('proj');
@@ -70,7 +70,7 @@ test('caps: skill listesi öğrenilir, türler ayrılır, kapatma skillOverrides
 });
 
 test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır, salt okunurdur', () => {
-  const { Caps } = require('../server/caps');
+  const { Caps } = require('../server/setup/caps');
   const repo = tmp('builtin');
   const mk = (name, desc) => {
     fs.mkdirSync(path.join(repo, name, 'references'), { recursive: true });
@@ -111,12 +111,12 @@ test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır
 });
 
 test('skills/: roles.json depodaki skill\'leri ve paneldeki rolleri gösterir', () => {
-  const { Caps } = require('../server/caps');
+  const { Caps } = require('../server/setup/caps');
   const map = JSON.parse(fs.readFileSync(path.join(ROOT, 'skills', 'roles.json'), 'utf8'));
   const names = new Caps(tmp('caps-r')).builtins().map((b) => b.name);
   assert.deepStrictEqual(Object.keys(map).sort(), [...names].sort(), 'roles.json ile skill klasörleri uyuşmuyor');
   // Varsayılan roller boş veri klasörüyle (canlı ayarlara dokunmadan) yüklenir.
-  const r = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/store').loadSettings().roles.map((x) => x.id)))`], {
+  const r = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/core/store').loadSettings().roles.map((x) => x.id)))`], {
     cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: tmp('store-r') }, encoding: 'utf8',
   });
   assert.strictEqual(r.status, 0, r.stderr);
@@ -126,7 +126,7 @@ test('skills/: roles.json depodaki skill\'leri ve paneldeki rolleri gösterir', 
 });
 
 test('optimizer: ekleme / çıkarma / effort doğrulanır', () => {
-  const o = require('../server/optimizer');
+  const o = require('../server/setup/optimizer');
   const rows = [
     { key: 'r1', roleId: 'sef', model: 'opus', effort: '', reportsTo: [], talkAll: true },
     { key: 'r2', roleId: 'coder', model: 'sonnet', effort: '', reportsTo: ['r1', 'r3'] },
@@ -149,7 +149,7 @@ test('optimizer: ekleme / çıkarma / effort doğrulanır', () => {
 });
 
 test('meter: skill listesi yakalanır, mesajdan sonraki ilk tur bulunur', () => {
-  const { Meter, newReader } = require('../server/meter');
+  const { Meter, newReader } = require('../server/watch/meter');
   const dir = tmp('meter');
   const f = path.join(dir, 's.jsonl');
   const lines = [
@@ -167,7 +167,7 @@ test('meter: skill listesi yakalanır, mesajdan sonraki ilk tur bulunur', () => 
 });
 
 test('meter: uzun sessizlikten sonraki otomatik compact boşta compact sayılır', () => {
-  const { Meter } = require('../server/meter');
+  const { Meter } = require('../server/watch/meter');
   const dir = tmp('meter3');
   const f = path.join(dir, 's.jsonl');
   const turn = (t, id) => ({ type: 'assistant', timestamp: new Date(t).toISOString(), message: { id, model: 'claude-sonnet-5-5', usage: { input_tokens: 1, output_tokens: 1 } } });
@@ -182,17 +182,17 @@ test('meter: uzun sessizlikten sonraki otomatik compact boşta compact sayılır
 });
 
 test('llm + defter: modelUsage aile token\'ına çevrilir, meter hesabına eklenir', () => {
-  const llm = require('../server/llm');
+  const llm = require('../server/core/llm');
   const tok = llm.usageTok({ modelUsage: { 'claude-haiku-5-5': { inputTokens: 1, outputTokens: 2, cacheReadInputTokens: 3, cacheCreationInputTokens: 4 }, 'claude-sonnet-5-5': { inputTokens: 5 } } });
   assert.deepStrictEqual(tok, { haiku: { in: 1, out: 2, cw: 4, cr: 3 }, sonnet: { in: 5, out: 0, cw: 0, cr: 0 } });
   const args = llm.argsOf({ model: 'haiku', effort: 'low', system: 'S', tools: '', excludeDynamic: true });
   assert.deepStrictEqual(args.slice(0, 7), ['-p', '--model', 'haiku', '--effort', 'low', '--tools', '']);
-  const { Meter } = require('../server/meter');
+  const { Meter } = require('../server/watch/meter');
   const m = new Meter(tmp('meter2'), tmp('proj2'));
   m.addSpend('a', tok);
   m.addSpend('a', tok);
   assert.strictEqual(m.acc.get('a').haiku.out, 4);
-  const { Ledger } = require('../server/ledger');
+  const { Ledger } = require('../server/core/ledger');
   const lg = new Ledger(tmp('ledger'));
   lg.add({ kind: 'bekçi yardımcısı', account: 'a', model: 'haiku', ok: true, costUSD: 0.01, tok });
   lg.add({ kind: 'bekçi yardımcısı', account: 'a', model: 'haiku', ok: false, costUSD: 0, tok: {} });
@@ -203,7 +203,7 @@ test('llm + defter: modelUsage aile token\'ına çevrilir, meter hesabına eklen
 });
 
 test('quota: sıfırlanma anı geçmiş pencere kullanılmamış sayılır, tahmin yeni pencerede beklemeye alınır', () => {
-  const { readBuckets, forecast } = require('../server/quota');
+  const { readBuckets, forecast } = require('../server/watch/quota');
   const now = Date.parse('2026-10-21T10:00:00Z');
   const b = readBuckets({ limits: [
     { kind: 'session', percent: 100, resets_at: '2026-10-21T09:00:00Z' },
@@ -225,7 +225,7 @@ test('quota: sıfırlanma anı geçmiş pencere kullanılmamış sayılır, tahm
 });
 
 test('bekçi: cevap bekleyen üyeye hamle yapılmaz, kullanıcı zorlarsa yapılır', () => {
-  const { Ops, asksUser } = require('../server/ops');
+  const { Ops, asksUser } = require('../server/watch/ops');
   assert.strictEqual(asksUser('Testleri yazdım.\nDevam edeyim mi?'), true);
   assert.strictEqual(asksUser('Bitti. Değişen dosyalar: a.js'), false);
   assert.strictEqual(asksUser('```js\nif (a?.b) {}\n```\nTamamlandı.'), false);
@@ -240,7 +240,7 @@ test('bekçi: cevap bekleyen üyeye hamle yapılmaz, kullanıcı zorlarsa yapıl
 });
 
 test('bekçi: bağlam eşikleri rol profili ve pencereyle sınırlanır', () => {
-  const { ctxLimits } = require('../server/watch');
+  const { ctxLimits } = require('../server/watch/watch');
   const cfg = { ctxWarn: 250000, ctxHigh: 500000 };
   const settings = { roles: [{ id: 'coder' }], contextWindows: { haiku: 200000, sonnet: 1000000 } };
   assert.deepStrictEqual(ctxLimits({ roleId: 'coder' }, { fam: 'sonnet' }, settings, cfg), { warn: 250000, high: 500000 });
@@ -250,7 +250,7 @@ test('bekçi: bağlam eşikleri rol profili ve pencereyle sınırlanır', () => 
 });
 
 test('bekleyen değişiklik: uygulama anı ve istenen / gerçekleşen farkı', () => {
-  const { Pending, driftOf } = require('../server/pending');
+  const { Pending, driftOf } = require('../server/session/pending');
   const p = new Pending(tmp('pending'));
   const e = p.add('s', 'g', { effort: 'medium' });
   assert.strictEqual(p.ready(e, { cacheWarm: true }, false), false, 'boşta değilken beklenir');
@@ -273,7 +273,7 @@ test('store: rol göçü yeni rolleri ekler, elle değiştirilmemiş talimatı g
   const dir = tmp('store');
   // Canlı veriden bağımsız: boş klasörde varsayılan ayarlar üretilir, eski sürüm onların üstünde kurulur.
   const fresh = tmp('store-defaults');
-  const d = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/store').loadSettings()))`], {
+  const d = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/core/store').loadSettings()))`], {
     cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: fresh }, encoding: 'utf8',
   });
   assert.strictEqual(d.status, 0, d.stderr);
@@ -284,7 +284,7 @@ test('store: rol göçü yeni rolleri ekler, elle değiştirilmemiş talimatı g
   const kalite = src.roles.find((r) => r.id === 'kalite');
   if (kalite) kalite.prompt = 'elle yazılmış talimat';
   fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(src));
-  const r = spawnSync(process.execPath, ['-e', `const s=require('./server/store').loadSettings();process.stdout.write(JSON.stringify(s))`], {
+  const r = spawnSync(process.execPath, ['-e', `const s=require('./server/core/store').loadSettings();process.stdout.write(JSON.stringify(s))`], {
     cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: dir }, encoding: 'utf8',
   });
   assert.strictEqual(r.status, 0, r.stderr);

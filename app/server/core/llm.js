@@ -3,7 +3,7 @@
 // Çağrılar --no-session-persistence ile çalıştığı için oturum kaydı bırakmaz; harcamaları buradan deftere yazılır ve
 // ölçüme (meter) eklenir. Yoksa kota yüzdesindeki artış token'sız görünür ve kota / birim oranı şişer.
 const { spawn } = require('child_process');
-const { family } = require('./meter');
+const { family } = require('../watch/meter');
 
 const listeners = [];
 

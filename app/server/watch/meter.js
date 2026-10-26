@@ -225,11 +225,11 @@ class Meter {
   reader(file, fromEnd) {
     let r = this.readers.get(file);
     if (!r && !fromEnd) {
-      r = require('./transcript').reader(file);
+      r = require('../core/transcript').reader(file);
       this.readers.set(file, r);
       return r;
     }
-    if (r && r.shared) return require('./transcript').reader(file);
+    if (r && r.shared) return require('../core/transcript').reader(file);
     if (!r) {
       let size = 0;
       if (fromEnd) try { size = fs.statSync(file).size; } catch {}
