@@ -5,6 +5,7 @@
 // Kayıtlar dosyada durduğu için panel yeniden başlasa da, üye o sırada kapalı olsa da iletim kaybolmaz.
 const fs = require('fs');
 const path = require('path');
+const prompts = require('../core/prompts');
 
 const STATUSES = ['todo', 'doing', 'review', 'done'];
 const STATUS_TEXT = { todo: 'yapılacak', doing: 'yapılıyor', review: 'review', done: 'bitti' };
@@ -261,7 +262,7 @@ function cardLine(group, c) {
 }
 
 function deliveryText(group, sid, items, removed) {
-  const lines = ['[Claude Panel · Görev panosu] Panoda seni ilgilendiren değişiklikler:'];
+  const lines = [];
   for (const { card, changes } of items) {
     lines.push(`- ${cardLine(group, card)} — ${changes.join('; ')}`);
     if (card.assignee === sid && card.desc && changes.some((x) => x === 'sana atandı' || x === 'açıklama güncellendi')) {
@@ -269,8 +270,7 @@ function deliveryText(group, sid, items, removed) {
     }
   }
   for (const r of removed) lines.push(`- #${r.id} "${r.title}" panodan silindi (${actorName(group, r.by)}); bu kart üzerinde çalışma.`);
-  lines.push('Kartın durumu değiştikçe (başladın, incelemeye hazır, bitti, takıldın) panel MCP aracı pano_guncelle ile güncelle; tüm kartlar için pano_listele.');
-  return lines.join('\n');
+  return prompts.message('gorev-panosu', { maddeler: lines.join('\n') });
 }
 
 // ---------- MCP: ekip üyelerinin panoyu okuyup değiştirdiği tool'lar ----------

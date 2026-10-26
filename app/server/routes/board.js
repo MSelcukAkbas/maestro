@@ -1,5 +1,6 @@
 // Görev panosu, grup notları, not düzenleyici, proje dokümanları ve hatırlatma.
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const { resolveMember } = require('../team/board');
 const { curatorLevels } = require('../team/curator');
 const { cleanRef, listDocs, readDoc, searchDocs } = require('../team/docs');
@@ -120,13 +121,7 @@ route('POST', '/api/groups/([\\w-]+)/remind', async (req, m) => {
   if (content && content.length > REMIND_MAX) content = `${content.slice(0, REMIND_MAX)}\n… (kısaltıldı; tamamı için kaynağa bak)`;
   const note = cleanText(body.note, 2000);
   const f = content ? fence(content) : '';
-  const msg = [
-    '[Claude Panel · Hatırlatma] Kullanıcı sana şunu hatırlatıyor.',
-    `Kaynak: ${label}`,
-    note ? `Kullanıcının notu: ${note}` : '',
-    content ? `${f}\n${content}\n${f}` : hint,
-    'Bunu şu anki işinde dikkate al.',
-  ].filter(Boolean).join('\n');
+  const msg = prompts.message('hatirlatma', { kaynak: label, not: note, icerik: content ? `${f}\n${content}\n${f}` : hint });
   notes.remind(g, to, msg);
   return { ok: true, to: to.length, chars: msg.length };
 });

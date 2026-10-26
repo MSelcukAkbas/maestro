@@ -5,6 +5,7 @@ const path = require('path');
 const crypto = require('crypto');
 
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const discovery = require('../core/discovery');
 const { sessionStats, sessionMessages } = require('../core/usage');
 const exporter = require('../team/exporter');
@@ -87,12 +88,7 @@ route('POST', '/api/groups/([\\w-]+)/ask-summary', async (req, m) => {
   if (!g) throw new HttpError(404, 'Grup bulunamadı.');
   const lead = runningLead(g);
   if (!lead) throw new HttpError(409, 'Grupta çalışan oturum yok.');
-  pasteTo(lead, [
-    '[Claude Panel] Kullanıcı grubu kapatmaya hazırlanıyor.',
-    'Gerekirse ekipten son durumu al, sonra bu terminalde "KAPANIŞ ÖZETİ" başlığıyla kısa bir özet yaz:',
-    'yapılanlar, değişen dosyalar, test / doğrulama sonuçları, açık kalanlar, sıradaki adım önerisi.',
-    'Özet bu grubun kapanış kaydına eklenecek; özetten sonra başka bir şey yazma.',
-  ].join('\n'));
+  pasteTo(lead, prompts.message('kapanis-ozeti-iste'));
   return { ok: true, to: lead.name };
 });
 

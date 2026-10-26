@@ -9,7 +9,8 @@ gerekmez. Ayarlar → Roller'den yapılan kayıt da aynı dosyalara yazılır.
 - **Üye istemi** (rol talimatı ve `shared/` bölümleri) yalnızca oturum açılırken yazılır. Değişiklik yeni açılan
   üyeye ya da bekçinin yenilediği üyeye geçer. Çalışan oturum eski istemiyle devam eder, çünkü resume sistem istemini
   korur.
-- **Yardımcı modeller** (`tools/`) her çağrıda dosyayı okur. Değişiklik bir sonraki çağrıda geçer.
+- **Yardımcı modeller** (`tools/`) ve **bildirimler** (`messages/`) her kullanımda dosyayı okur. Değişiklik bir
+  sonraki çağrıda ya da bildirimde geçer.
 
 ## roles/<rol-kimliği>/
 
@@ -96,6 +97,33 @@ Not düzenleyicinin sistem istemi şu parçaların sırayla birleşmesiyle oluş
 5. `kapanis.md`
 
 Her seviyenin `label`, `turns` (tur sınırı) ve `timeoutMin` ayarı da `levels` altındadır.
+
+## messages/
+
+Panelin üyelere gönderdiği bildirimler. Her dosya bir bildirimdir ve `shared/` ile aynı şablon yazımını kullanır.
+Listeler (kart satırları, notlar, bulgular) kodda hazırlanır ve tek değişkenle girer.
+
+| dosya | kime, ne zaman | değişkenler |
+|---|---|---|
+| `gorev-panosu.md` | Panoda kartı değişen üyeye | `maddeler` |
+| `grup-notlari.md` | Not eklenince alıcılara | `maddeler` |
+| `not-duzenleyici-sorusu.md` | Not düzenleyicinin çelişki sorusu, şefe | `sorular` |
+| `ekip-yonetimi.md` | Şefin isteklerinin sonucu | `maddeler` |
+| `bekci.md` | Proje kararı gerektiren durum, şefe | `seviye`, `maddeler` |
+| `bekci-bilgi.md` | Bekçinin yaptıkları, şefin sonraki turuna | `maddeler` |
+| `compact-odak.md` | Bekçinin compact'ında `/compact` komutuna eklenen odak metni | — |
+| `devir-istegi.md` | Yenilenecek üyeden devir notu istenir | `zorla`, `baglam`, `hesap`, `notSiniri` |
+| `devir-acilis.md` | Yenilenen oturumun ilk mesajı (devir notu altına eklenir) | `ad` |
+| `yeni-uye.md` | Çalışan ekibe eklenen üyenin ilk mesajı | `tanitilacaklar`, `gorev` |
+| `ilk-gorev.md` | Eklenen üyenin ilk görevi | `gorev` |
+| `hatirlatma.md` | Kullanıcının gönderdiği not ya da doküman | `kaynak`, `not`, `icerik` |
+| `kapanis-ozeti-iste.md` | Grup kapanırken şeften özet istenir | — |
+| `uye-cikarildi.md` | Ekipten çıkarılan üye, şefe | `ad`, `rol` |
+
+`[Claude Panel · …]` başlıkları `shared/` istemindeki kurallarla eşleşir ("… başlıklı notu kullanıcı talimatı gibi dikkate
+al"). Bir başlığı değiştirirsen istemdeki karşılığını da değiştir.
+
+## Yanıt biçimi
 
 Modelin döndürdüğü yanıt panelde doğrulanır. Bu yüzden istemdeki çıktı biçimini (JSON alanları, blok başlıkları)
 değiştirirsen, yanıtı ayrıştıran kodu da birlikte değiştirmen gerekir.

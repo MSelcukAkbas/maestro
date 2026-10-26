@@ -1,6 +1,7 @@
 // Üye işlemleri: durdur / başlat / yeniden aç / çıkar, hesap ve ayar değişikliği, sıfır bağlamla yenileme,
 // şefin isteklerine onay / ret ve bekçi işleminin iptali.
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const { KIND_TEXT, describe: describeRequest } = require('../team/team');
 const {
   settings, manager, requests, watch, ops, HttpError, cleanText, findSession, pushEvent, runningLead, pasteTo, whenStopped,
@@ -58,7 +59,7 @@ route('POST', '/api/sessions/([\\w-]+)/(stop|start|restart|open-pc|remove|restor
     const body = await readBody(req);
     if (action === 'remove' && body.notify !== false) {
       const lead = runningLead(group, session.id);
-      if (lead && pasteTo(lead, `[Claude Panel] ${session.name} (${session.roleLabel}) kullanıcı tarafından ekipten çıkarıldı. Ona artık görev verme ve mesaj gönderme; açık işleri varsa başka bir üyeye devret.`)) {
+      if (lead && pasteTo(lead, prompts.message('uye-cikarildi', { ad: session.name, rol: session.roleLabel }))) {
         notified = lead.name;
       }
     }

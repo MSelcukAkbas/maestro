@@ -3,6 +3,7 @@
 // ekledi") iletilir; notun tamamı not_oku ile okunur. İletim görev panosuyla aynı yoldan gider.
 const fs = require('fs');
 const path = require('path');
+const prompts = require('../core/prompts');
 
 class NoteError extends Error {
   constructor(status, message) {
@@ -380,10 +381,9 @@ class Notes {
     const now = Date.now();
     for (const q of fresh) q.sentAt = now;
     this.save(group.id, n);
-    const text = ['[Claude Panel · Not düzenleyici] Grup notlarını düzenlerken çelişen bilgiler buldum; hangisinin doğru olduğunu bilmem gerekiyor:']
-      .concat(fresh.map((q) => `- S${q.id}${q.notes.length ? ` (${q.notes.map((x) => `#${x}`).join(', ')})` : ''}: ${q.text}`))
-      .concat(['Bildiğin ya da ekipten öğrendiğin cevabı not_sorusu_cevapla ile yaz (soru numarası ve cevap); notları sonraki düzenlemede buna göre netleştiririm. Bilmiyorsan ya da önemsizse kısa öyle yaz.'])
-      .join('\n');
+    const text = prompts.message('not-duzenleyici-sorusu', {
+      sorular: fresh.map((q) => `- S${q.id}${q.notes.length ? ` (${q.notes.map((x) => `#${x}`).join(', ')})` : ''}: ${q.text}`).join('\n'),
+    });
     this.remind(group, [leadId], text);
     return fresh.length;
   }
@@ -434,13 +434,12 @@ class Notes {
   }
 
   noticeText(group, items) {
-    const lines = ['[Claude Panel · Grup notları] Ekibin not defterine eklenenler (bilgi amaçlı):'];
+    const lines = [];
     for (const { p, note } of items) {
       const who = actorName(group, p.kind === 'edit' ? note.updatedBy || note.by : note.by);
       lines.push(`- #${note.id} "${note.title}" — ${who} ${p.kind === 'edit' ? 'güncelledi' : 'ekledi'}${note.body ? `: ${short(plainBody(note.body), 160)}` : ''}`);
     }
-    lines.push('İşinle ilgiliyse not_oku ile tamamını oku; değilse yanıt yazmadan kaldığın işe devam et.');
-    return lines.join('\n');
+    return prompts.message('grup-notlari', { maddeler: lines.join('\n') });
   }
 }
 

@@ -2,6 +2,7 @@
 //   roles/<id>/role.json + prompt.md   rol ayarları ve rol talimatı (adı "_" ile başlayan klasör okunmaz)
 //   shared/*.md                         üye sistem isteminin ortak bölümleri (ad sırasıyla birleşir)
 //   tools/<ad>/tool.json + *.md         panelin yardımcı model çağrılarının (bekçi, kurulum danışmanı, …) metni ve ayarı
+//   messages/<ad>.md                    panelden üyelere giden bildirimler ("[Claude Panel · …]")
 // Dosyalar okunurken önbelleğe alınır; değişiklik zamanı / boyutu değişen dosya yeniden okunur, böylece elle yapılan
 // düzenleme yeniden başlatmadan bir sonraki kullanımda geçer. Panelden yapılan kayıt da aynı dosyalara yazılır.
 const fs = require('fs');
@@ -199,6 +200,13 @@ function render(template, vars) {
   return out.join('\n');
 }
 
+// Panelden üyeye giden bildirim: messages/<ad>.md şablonu değerlerle doldurulur. Dosya eksikse hata fırlatır.
+function message(name, vars = {}) {
+  const t = text(`messages/${name}.md`);
+  if (t == null) throw new Error(`prompts/messages/${name}.md bulunamadı`);
+  return render(t, vars);
+}
+
 // shared/ altındaki bölüm dosyaları, ad sırasıyla.
 function sharedSections() {
   let names = [];
@@ -206,4 +214,4 @@ function sharedSections() {
   return names.map((f) => text(`shared/${f}`)).filter((t) => t != null);
 }
 
-module.exports = { PROMPTS_DIR, ROLE_ID, text, json, roles, role, saveRoles, skillRoles, setSkillRoles, tool, render, sharedSections };
+module.exports = { PROMPTS_DIR, ROLE_ID, text, json, roles, role, saveRoles, skillRoles, setSkillRoles, tool, message, render, sharedSections };

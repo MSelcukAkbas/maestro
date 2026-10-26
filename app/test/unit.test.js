@@ -135,6 +135,16 @@ test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan
   for (const t of ['bekci', 'kurulum-danismani', 'not-duzenleyici', 'kapanis-ozeti']) assert.ok(prompts.tool(t).text().length > 100, t);
   const { systemPrompt, curatorLevels } = require('../server/team/curator');
   for (const lv of curatorLevels()) assert.ok(systemPrompt(lv).includes('Derinlik:'), lv);
+  // Koddaki her bildirim adının messages/ altında dosyası var.
+  const used = new Set();
+  const walk = (d) => fs.readdirSync(d, { withFileTypes: true }).forEach((e) => {
+    const p = path.join(d, e.name);
+    if (e.isDirectory()) walk(p);
+    else if (e.name.endsWith('.js')) for (const m of fs.readFileSync(p, 'utf8').matchAll(/\bmessage\('([a-z0-9-]+)'/g)) used.add(m[1]);
+  });
+  walk(path.join(ROOT, 'server'));
+  assert.ok(used.size >= 14, `bildirim adları bulunamadı: ${[...used]}`);
+  for (const n of used) assert.doesNotThrow(() => prompts.message(n, {}), n);
 });
 
 test('optimizer: ekleme / çıkarma / effort doğrulanır', () => {

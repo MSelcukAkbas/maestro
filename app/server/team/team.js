@@ -4,6 +4,7 @@
 // İstekler ve şefe gidecek sonuç bildirimleri data/requests.json'da tutulur; panel yeniden başlasa da kaybolmaz.
 const fs = require('fs');
 const path = require('path');
+const prompts = require('../core/prompts');
 const { EFFORTS } = require('../core/options');
 
 class TeamError extends Error {
@@ -109,7 +110,7 @@ class Requests {
     if (!list || !list.length) return null;
     delete r.inbox[sid];
     this.save(r);
-    return ['[Claude Panel · Ekip yönetimi] İsteklerinin sonucu:', ...list.map((t) => `- ${t}`)].join('\n');
+    return prompts.message('ekip-yonetimi', { maddeler: list.map((t) => `- ${t}`).join('\n') });
   }
 }
 

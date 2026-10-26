@@ -5,6 +5,7 @@ const crypto = require('crypto');
 const { spawn } = require('child_process');
 
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const discovery = require('../core/discovery');
 const { writeSettingsFile, writeMcpConfig } = require('../session/hooks');
 const { driftOf } = require('../session/pending');
@@ -245,26 +246,21 @@ function addSessionToGroup(groupId, body) {
   group.sessions.push(s);
   s.promptFile = writePromptFile(group, s, project, settings.accounts);
 
-  const parts = [];
+  const task = String(body.firstTask || '').trim();
+  let targets = [];
   if (body.introduce !== false && members.length) {
     const lead = members.find((m) => m.roleId === 'sef');
-    const targets = s.talkAll
+    targets = s.talkAll
       ? members.filter((m) => manager.has(m.id))
       : members.filter((m) => (lead && m.id === lead.id) || s.reportsTo.includes(m.id));
-    if (targets.length) {
-      parts.push(
-        'Ekibe çalışma sürerken yeni katıldın. Diğer üyeler seni henüz tanımıyor.',
-        `İlk iş olarak şu üyelere SendMessage ile kendini kısaca tanıt: ${targets.map((m) => m.name).join(', ')}.`,
-        'Tanıtımda adını, rolünü, kime rapor vereceğini ve hangi işleri alabileceğini yaz; ilk satır tek cümlelik özet olsun.',
-      );
-    }
   }
-  const task = String(body.firstTask || '').trim();
-  if (task) parts.push('', 'Kullanıcının ilk görevi:', task.slice(0, 8000));
-  else if (parts.length) parts.push('Tanıtımdan sonra görev bekle.');
+  const parts = [
+    prompts.message('yeni-uye', { tanitilacaklar: targets.map((m) => m.name).join(', '), gorev: task }),
+    task ? prompts.message('ilk-gorev', { gorev: task.slice(0, 8000) }) : '',
+  ].filter(Boolean);
   if (parts.length) {
     s.taskFile = path.join(store.PROMPT_DIR, `${s.id}.task.md`);
-    fs.writeFileSync(s.taskFile, parts.join('\n'), 'utf8');
+    fs.writeFileSync(s.taskFile, parts.join('\n\n'), 'utf8');
   }
   store.saveGroups(groups);
   startSessions(group, [s], false);
@@ -351,12 +347,8 @@ function renewSession(oldSid, note, accountId) {
   for (const m of group.sessions) if (m !== old) m.reportsTo = (m.reportsTo || []).map((id) => (id === old.id ? s.id : id));
   s.promptFile = writePromptFile(group, s, project, settings.accounts);
   s.taskFile = path.join(store.PROMPT_DIR, `${s.id}.task.md`);
-  fs.writeFileSync(s.taskFile, [
-    `[Claude Panel · Devir] Bu oturum, aynı roldeki önceki oturumun bağlamı büyüdüğü için panel tarafından sıfır bağlamla açıldı. Adın aynı (${s.name}); ekip sana aynı adla yazmaya devam eder, kendini tanıtma.`,
-    'Önceki oturumun devir notu aşağıda. Notta sürmekte olan bir iş varsa kaldığı yerden devam et; yoksa görev bekle. Gerekirse dosyaları yeniden oku, notta olmayan ayrıntıyı tahmin etme.',
-    '',
-    note,
-  ].join('\n'), 'utf8');
+  // Devir notu şablona girmez: şablonda boş satır atıldığı için araya boş satırla altına eklenir.
+  fs.writeFileSync(s.taskFile, `${prompts.message('devir-acilis', { ad: s.name })}\n\n${note}`, 'utf8');
   store.saveGroups(groups);
   boards.reassign(group.id, old.id, s.id);
   notes.reassign(group.id, old.id, s.id);

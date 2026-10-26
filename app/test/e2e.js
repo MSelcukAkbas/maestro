@@ -177,7 +177,8 @@ const SCENARIOS = {
       }, 150000);
       assert.ok(req, 'şef yetenek isteği göndermedi');
       await api('POST', `/api/requests/${req.id}/approve`, {});
-      const after = (await api('GET', '/api/state')).groups.find((x) => x.id === g.id).sessions.find((x) => x.id === member.id);
+      // /api/state oturumun caps alanını göndermez (state.js); kayıt doğrudan groups.json'dan okunur.
+      const after = JSON.parse(fs.readFileSync(path.join(dataDir, 'groups.json'), 'utf8')).find((x) => x.id === g.id).sessions.find((x) => x.id === member.id);
       assert.ok(after.caps && after.caps.off.includes('skill:dataviz'), `kayıt değişmedi: ${JSON.stringify(after.caps)}`);
       // Oturum boşta kalınca yeni ayar dosyasıyla yeniden açılır (dosya açılışta yazılır).
       const f = path.join(dataDir, 'session-settings', `${member.id}.json`);

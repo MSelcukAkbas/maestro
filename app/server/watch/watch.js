@@ -5,6 +5,7 @@
 // süre sürerse yeniden hatırlatılır.
 const fs = require('fs');
 const path = require('path');
+const prompts = require('../core/prompts');
 const { PRICE_IN } = require('./meter');
 
 const DEFAULTS = { enabled: true, act: true, ai: true, quotaHalf: 50, quotaLow: 15, ctxWarn: 250000, ctxHigh: 500000, errStreak: 4, stuckMin: 20 };
@@ -326,10 +327,9 @@ class Watch {
       }
       pending.sort((a, b) => LEVELS[b.level] - LEVELS[a.level]);
       const top = pending[0].level;
-      const text = [`[Claude Panel · Bekçi · ${LEVEL_TEXT[top]}] Proje kararı gerektiren durum:`]
-        .concat(pending.map((f) => `- (${LEVEL_TEXT[f.level]}) ${f.text}`))
-        .concat(['Compact, hesap taşıma ve bağlam yenilemeyi panel kendisi yapar; sen işin planına karar ver. Güncel durum için ekip_durumu. Gerekmiyorsa yok say.'])
-        .join('\n');
+      const text = prompts.message('bekci', {
+        seviye: LEVEL_TEXT[top], maddeler: pending.map((f) => `- (${LEVEL_TEXT[f.level]}) ${f.text}`).join('\n'),
+      });
       sends.push({ gid: group.id, lead, level: top, text });
       q.clear();
       this.lastBatch.set(group.id, now);

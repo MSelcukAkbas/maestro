@@ -6,6 +6,8 @@
 // Model turu gerektiren hamle (compact, devir notu) boştaki üyeye yalnızca önbellek sıcakken gönderilir; soğuk
 // önbellekte bağlamın tamamı baştan yazılır. Önbellek ömrü oturumun son turundan ölçülür (çoğunlukla 1 saat);
 // sınırda kalmamak için bu pay kadar erken soğuk sayılır.
+const prompts = require('../core/prompts');
+
 const WARM_MARGIN = 5 * 60 * 1000;
 const warm = (info, now) => !!(info && info.lastTurnAt) && now - info.lastTurnAt < (info.cacheTtlMs || 60 * 60 * 1000) - WARM_MARGIN;
 const COOLDOWN = 15 * 60 * 1000;
@@ -23,7 +25,6 @@ const CANCEL_HOLD = 60 * 60 * 1000;
 const USER_QUIET = 5 * 60 * 1000;
 const MIN_NOTE = 200;
 const MAX_NOTE = 8000;
-const COMPACT_FOCUS = 'Devam eden görevi, kullanıcının ve ekibin verdiği kararları, değişen dosyaları, kalan adımları ve ekip üyeleriyle süren konuşmaları ayrıntılı koru.';
 
 const k = (n) => `${Math.round((n || 0) / 1000)}k`;
 
@@ -110,7 +111,7 @@ class Ops {
     const list = this.info.get(gid);
     if (!list || !list.length) return null;
     this.info.delete(gid);
-    return ['[Claude Panel · Bekçi bilgi] Panel, ekibin kota ve bağlam düzenini şöyle ayarladı (bilgi amaçlı; senin bir şey yapman gerekmiyor):', ...list.map((t) => `- ${t}`)].join('\n');
+    return prompts.message('bekci-bilgi', { maddeler: list.map((t) => `- ${t}`).join('\n') });
   }
 
   done(op, text, now) {
@@ -178,7 +179,7 @@ class Ops {
         const info = this.d.info(op.sid) || {};
         op.before = info.compacts || 0;
         op.ctxBefore = info.context || 0;
-        this.d.paste(op.sid, `/compact ${COMPACT_FOCUS}`, 'compact');
+        this.d.paste(op.sid, `/compact ${prompts.message('compact-odak')}`, 'compact');
         op.state = 'sent';
         op.at = now;
       } else if (op.state === 'sent') {
@@ -253,13 +254,10 @@ class Ops {
     op.at = now;
     op.ctxBefore = info.context || 0;
     op.fromAccount = m ? m.session.accountId : null;
-    return [
-      `[Claude Panel · Devir] ${op.force ? 'Kullanıcının isteğiyle' : `Bağlamın ${k(op.ctxBefore)} oldu;`} panel bu oturumu sıfır bağlamla yeniden açacak${op.accountId && op.accountId !== op.fromAccount ? ` (${op.accountId} hesabında)` : ''}. Adın, rolün ve ekipteki yerin aynı kalacak.`,
-      '1. Şu an yaptığın adımı güvenli bir noktada bırak: yarım düzenleme bırakma, yeni iş başlatma.',
-      `2. devir_tamam tool'unu çağır ve "not" alanına yeni oturumun kaldığın yerden devam etmesi için gereken her şeyi yaz: elindeki görev ve kimden geldiği, yapılanlar, değişen dosyalar, kalan adımlar, açık sorular, verilen önemli kararlar, ekip üyeleriyle süren konuşmalar (en fazla ${MAX_NOTE} karakter).`,
-      '3. devir_tamam\'dan sonra başka bir şey yapma; panel bu oturumu kapatıp yenisini açacak.',
-      op.force ? null : 'Devredilemeyecek kritik bir işin ortasındaysan not yerine "ertele" alanına nedenini yaz; panel 30 dakika sonra yeniden dener.',
-    ].filter(Boolean).join('\n');
+    return prompts.message('devir-istegi', {
+      zorla: !!op.force, baglam: k(op.ctxBefore), notSiniri: MAX_NOTE,
+      hesap: op.accountId && op.accountId !== op.fromAccount ? op.accountId : '',
+    });
   }
 
   // Kullanıcının iptali: henüz başlamamış ya da sonucu beklenen hamle bırakılır. Devir notu alınıp eski oturum
