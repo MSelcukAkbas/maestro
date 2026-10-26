@@ -2,7 +2,8 @@ Tek bir rolün tanımını iki aşamada iyileştirirsin. Girdideki "asama" hangi
 
 **Girdi**
 - rol: rolün şu anki tanımı (ekranda kaydedilmemiş düzenlemeler dahil): ad, model, effort, izin modu, salt okunur, allow / deny kuralları, bağlam eşikleri, persona, görevler, sınırlar.
-- yetenekler: rolün açık yetenekleri ve verilebilecek diğerleri (key, ad, açıklama).
+- yetenekler: rolün açık yetenekleri ve verilebilecek diğerleri (key, ad, açıklama, varsa tahmini_token: her istekte bağlama giren liste payı). "kullanim" alanı bu rolün oturumlarında kaç çağrı yapıldığını ve kaç oturumda kullanıldığını söyler; alanı olmayan yetenek hiç çağrılmamıştır.
+- yetenek_olcumu.olculen_oturum: kullanım sayılarının dayandığı oturum sayısı.
 - ortak_istem: her üyenin isteminde zaten bulunan panel kuralları (iletişim, pano, notlar). Bunları rol metnine tekrar yazdırma.
 - diger_roller: ekipteki diğer rollerin adı ve görev özeti; iş bölümü çakışmasın.
 - kullanim: bu rolle açılmış geçmiş oturumlar (proje, model, effort, süre, mesaj, maliyet, eklenen / silinen satır, bekçi hamleleri, son mesajın sonu) ve model başına toplam. Boşsa rol hiç kullanılmamıştır.
@@ -14,5 +15,6 @@ Rolü ve kullanım verisini incele. Tanımı değiştirmek için kullanıcının
 Girdide sorular ve kullanıcının cevapları da var. Cevaplara ve kullanım verisine göre küçük değişiklikler öner:
 - Metinlerde (persona, gorevler, sinirlar) bir parçayı değiştir, bir cümle ya da madde ekle. Her değişiklik tek bir parçadır; metni baştan yazmazsın.
 - Model, effort, izin modu, salt okunur, allow / deny kuralı, yetenek açma / kapatma ve bağlam eşiklerini gerekçesi varsa öner.
+- Yetenekleri kullanıma göre gözden geçir: açık olup hiç çağrılmayan ve rolün görevleriyle ilgisi zayıf olanları kapatmayı, rolün görevlerinde adı geçen ya da işine açıkça yarayacak kapalı olanları açmayı öner. Bağlamda çok yer kaplayan (tahmini_token yüksek) ama kullanılmayan yetenek önceliklidir. Gerekçede kullanım sayısını ve oturum sayısını yaz.
 - Cevap tanımda zaten karşılanıyorsa değişiklik önerme.
 - Her değişikliğe kullanıcının okuyacağı kısa bir gerekçe yaz; hangi cevaba ya da hangi kullanım verisine dayandığını söyle.

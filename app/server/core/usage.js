@@ -17,6 +17,10 @@ function emptyState() {
     // Bu oturumun SendMessage ile gönderdiği mesajlar (iletişim haritası ve zaman çizelgesi için).
     sent: [],
     seenTool: new Set(),
+    // Çağrılan skill'ler (Skill aracı ve kullanıcının /ad komutu) ve MCP sunucuları: ad → sayı. Rol danışmanı ve rol
+    // sayfası hangi yeteneğin gerçekten kullanıldığını buradan görür.
+    skillCalls: {},
+    mcpCalls: {},
   };
 }
 
@@ -47,6 +51,8 @@ function applyObj(st, j) {
     const c = j.message.content;
     const isToolResult = Array.isArray(c) && c.some((x) => x && x.type === 'tool_result');
     if (!isToolResult && textOf(c).trim()) st.prompts++;
+    const cmd = !isToolResult && textOf(c).match(/<command-name>\/?([^<\s]+)<\/command-name>/);
+    if (cmd) st.skillCalls[cmd[1]] = (st.skillCalls[cmd[1]] || 0) + 1;
     if (ts && !st.firstAt) st.firstAt = ts;
     return;
   }
@@ -59,7 +65,19 @@ function applyObj(st, j) {
   if (m.model && m.model !== '<synthetic>') st.model = m.model;
   if (Array.isArray(m.content)) {
     for (const c of m.content) {
-      if (!c || c.type !== 'tool_use' || c.name !== 'SendMessage' || !c.input || st.seenTool.has(c.id)) continue;
+      if (!c || c.type !== 'tool_use' || !c.input || st.seenTool.has(c.id)) continue;
+      if (c.name === 'Skill' && typeof c.input.skill === 'string') {
+        st.seenTool.add(c.id);
+        st.skillCalls[c.input.skill] = (st.skillCalls[c.input.skill] || 0) + 1;
+        continue;
+      }
+      const mcp = String(c.name).match(/^mcp__(.+?)__/);
+      if (mcp) {
+        st.seenTool.add(c.id);
+        st.mcpCalls[mcp[1]] = (st.mcpCalls[mcp[1]] || 0) + 1;
+        continue;
+      }
+      if (c.name !== 'SendMessage') continue;
       st.seenTool.add(c.id);
       st.sent.push({
         ts: ts || Date.now(),
@@ -122,6 +140,8 @@ function sessionStats(file) {
     firstAt: st.firstAt,
     lastAt: st.lastAt,
     prompts: st.prompts,
+    skillCalls: st.skillCalls,
+    mcpCalls: st.mcpCalls,
   };
 }
 

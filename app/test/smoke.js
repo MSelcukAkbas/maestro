@@ -95,6 +95,9 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     const arch = await hit('GET', '/api/roles/review/archive');
     if (!Array.isArray(arch)) fails.push('GET /api/roles/review/archive → dizi değil');
     await hit('GET', '/api/roles/review/archive/20000101-000000', undefined, (s) => s === 404);
+    const cu = await hit('GET', '/api/roles/review/cap-usage');
+    if (typeof cu.oturum !== 'number' || !cu.keys) fails.push('GET /api/roles/review/cap-usage → biçim yanlış');
+    await hit('GET', '/api/roles/yok-boyle/cap-usage', undefined, (s) => s === 404);
     const s2 = await hit('GET', '/api/state');
     const saved = await hit('PUT', '/api/settings', s2.settings);
     // Kaydet / geri oku: rol alanları korunmalı (boş alanların false / null'a dönmesi dışında).

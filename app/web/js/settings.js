@@ -72,6 +72,8 @@ const SettingsView = {
     // Rol arşivleri (rolId → liste | { loading } | { error }) ve açık sürüm { rid, id, entry }.
     this.archives = {};
     this.archOpen = null;
+    // Rol sayfasındaki yeteneklerin kullanım sayıları (rolId → { oturum, keys } | { loading } | { error }).
+    this.capUse = {};
     this.caps = null;
     this.capTests = {};
     app.innerHTML = '<div class="page" id="settings"></div>';
@@ -90,6 +92,16 @@ const SettingsView = {
       this.caps = { error: err.message };
     }
     if ($('#settings') && ['yetenekler', 'roller'].includes(this.tab)) this.renderBody();
+  },
+
+  async loadCapUse(rid) {
+    this.capUse[rid] = { loading: true };
+    try {
+      this.capUse[rid] = await api('GET', `/api/roles/${encodeURIComponent(rid)}/cap-usage`);
+    } catch (err) {
+      this.capUse[rid] = { error: err.message };
+    }
+    if ($('#settings') && this.roleId === rid) this.renderBody();
   },
 
   // ---------- rol arşivi ----------
@@ -976,12 +988,21 @@ ${this.roleArchiveSection(r)}`;
     if (!c) return '<div class="note">Yetenekler yükleniyor…</div>';
     if (c.error) return `<div class="empty">Yetenekler alınamadı: ${esc(c.error)}</div>`;
     const inv = c.inventory || [];
+    const use = this.capUse[rid];
+    if (!use) this.loadCapUse(rid);
+    const measured = use && use.keys ? use.oturum : 0;
+    // Bu rolün oturumlarında kaç kez çağrıldı; ölçülmüş oturum varsa açık olup hiç çağrılmayan da belirtilir.
+    const used = (key, checked) => {
+      const u = measured && use.keys[key];
+      if (u) return `<span class="badge acc-green" title="${u.oturum}/${measured} oturumda kullanıldı">${u.cagri} çağrı</span>`;
+      return measured && checked ? `<span class="note" title="Bu rolün ${measured} oturumunda hiç çağrılmadı">kullanılmadı</span>` : '';
+    };
     const offOf = (key) => c.globalOff[key] || [];
     const on = (key) => !offOf(key).includes(rid);
     const row = (key, checked, name, badges, desc) => `
           <label class="cap-check">
             <input type="checkbox" data-cap="${esc(key)}" data-role="${esc(rid)}" ${checked ? 'checked' : ''}>
-            <span class="cc-main"><span class="cap-head"><span class="cap-name mono">${esc(name)}</span>${badges}</span>
+            <span class="cc-main"><span class="cap-head"><span class="cap-name mono">${esc(name)}</span>${badges}${key.startsWith('group:') ? '' : used(key, checked)}</span>
               ${desc ? `<span class="cap-desc">${esc(desc)}</span>` : ''}</span>
           </label>`;
     const tok = (x) => (x.chars ? `<span class="note">~${Math.round(x.chars / CHARS_PER_TOK)} tok</span>` : '');
@@ -1012,7 +1033,7 @@ ${this.roleArchiveSection(r)}`;
           </div>`;
     }).join('');
     return `
-        <p class="note">Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur. Yeni yetenek eklemek ve diğer rollerle birlikte görmek için <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler</a>.</p>
+        <p class="note">Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur. ${measured ? `Çağrı sayıları bu rolün ${measured} oturumundan (skill çağrıları, /komutlar ve MCP araçları).` : use && use.keys ? 'Bu rolle henüz ölçülmüş oturum yok; kullanım sayıları ilk oturumlardan sonra görünür.' : ''} Yeni yetenek eklemek ve diğer rollerle birlikte görmek için <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler</a>.</p>
         ${card('Panel yetenekleri', panel, 'Panelle gelen ya da panelden eklenen; yalnızca işaretli rollere verilir.')}
         ${card('Hesaplarda kurulu olanlar', global, 'İşareti kaldırınca bu roldeki oturumlarda kapanır; hesap ayarların değişmez.')}
         ${seen}`;

@@ -70,6 +70,50 @@ function usage(roleId, groups, projects, stats, events, limit) {
   return { oturum_sayisi: rows.length, model_basina: toplam, oturumlar: rows.slice(0, limit).map(({ at, ...r }) => ({ tarih: new Date(at).toISOString().slice(0, 10), ...r })) };
 }
 
+// Çağrılan skill / MCP adının yetenek kataloğundaki anahtarı. Skill: panel skill'i, hesaptaki skill ya da "eklenti:ad"
+// biçiminde eklentinin skill'i. MCP sunucusu: panel MCP'si, hesaptaki MCP ya da "plugin_<eklenti>_<sunucu>" (eklentinin).
+function capKeyOf(catalog, kind, name) {
+  const find = (f) => (catalog.find(f) || {}).key || null;
+  const plugin = (f) => find((x) => x.key.startsWith('plugin:') && f(x.ad));
+  if (kind === 'skill') {
+    const pfx = name.includes(':') ? name.split(':')[0] : null;
+    return find((x) => x.key === `pskill:${name}`) || find((x) => x.key === `skill:${name}`) || (pfx ? plugin((ad) => ad === pfx) : null);
+  }
+  return find((x) => x.key.startsWith('pmcp:') && x.ad === name) || find((x) => x.key === `mcp:${name}`) || plugin((ad) => name.startsWith(`plugin_${ad}_`));
+}
+
+// Rolün bütün oturumlarında yetenek başına çağrı: { oturum, keys: { key: { cagri, oturum } } }. stats(sid) -> sessionStats.
+// Panelin kendi MCP'si (pano / not araçları) yetenek değildir, sayılmaz.
+function capUsage(roleId, groups, stats, catalog) {
+  const keys = {};
+  let n = 0;
+  for (const g of groups) {
+    for (const s of g.sessions) {
+      if (s.roleId !== roleId) continue;
+      const st = stats(s.id);
+      if (!st || !st.lastAt) continue;
+      n++;
+      const seen = new Set();
+      const add = (kind, calls) => {
+        for (const [name, c] of Object.entries(calls || {})) {
+          if (kind === 'mcp' && name === 'panel') continue;
+          const key = capKeyOf(catalog, kind, name);
+          if (!key) continue;
+          const k = keys[key] || (keys[key] = { cagri: 0, oturum: 0 });
+          k.cagri += c;
+          if (!seen.has(key)) {
+            seen.add(key);
+            k.oturum++;
+          }
+        }
+      };
+      add('skill', st.skillCalls);
+      add('mcp', st.mcpCalls);
+    }
+  }
+  return { oturum: n, keys };
+}
+
 function ask(account, payload) {
   const t = prompts.tool('rol-danismani');
   fs.mkdirSync(CWD, { recursive: true });
@@ -154,4 +198,4 @@ function validateProposals(role, parsed, capKeys, onKeys) {
   return { changes: out.map((c, i) => ({ id: `d${i + 1}`, ...c })), rejected, summary: str(parsed && parsed.ozet, 800) };
 }
 
-module.exports = { usage, ask, validateQuestions, validateProposals };
+module.exports = { usage, capUsage, capKeyOf, ask, validateQuestions, validateProposals };

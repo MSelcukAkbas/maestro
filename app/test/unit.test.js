@@ -411,6 +411,38 @@ test('prompts: rol kaydında değişen dosyaların eski hali arşive girer, en f
   assert.strictEqual(o.sef, 0);
 });
 
+test('rol danışmanı: skill / MCP çağrıları sayılır, yetenek anahtarına eşlenir, rol başına toplanır', () => {
+  const usage = require('../server/core/usage');
+  const { capUsage, capKeyOf } = require('../server/setup/roleadvisor');
+  const st = usage.emptyState();
+  const tu = (id, name, input) => ({ type: 'assistant', timestamp: '2026-10-26T10:00:00Z', message: { id, model: 'claude-sonnet-5-5', content: [{ type: 'tool_use', id, name, input }] } });
+  usage.applyObj(st, tu('a', 'Skill', { skill: 'tdd' }));
+  usage.applyObj(st, tu('a', 'Skill', { skill: 'tdd' })); // aynı satır iki kez yazılırsa bir kez sayılır
+  usage.applyObj(st, tu('b', 'Skill', { skill: 'context7:docs' }));
+  usage.applyObj(st, tu('c', 'mcp__ljr__rank', {}));
+  usage.applyObj(st, tu('d', 'mcp__plugin_context7_context7__query-docs', {}));
+  usage.applyObj(st, tu('e', 'mcp__panel__pano_listele', {}));
+  usage.applyObj(st, { type: 'user', message: { content: '<command-name>/review</command-name>\n<command-args></command-args>' } });
+  assert.deepStrictEqual(st.skillCalls, { tdd: 1,'context7:docs': 1, review: 1 });
+  assert.deepStrictEqual(st.mcpCalls, { ljr: 1, plugin_context7_context7: 1, panel: 1 });
+  const catalog = [
+    { key: 'pskill:tdd', ad: 'tdd' }, { key: 'skill:review', ad: 'review' }, { key: 'plugin:context7@x', ad: 'context7' },
+    { key: 'mcp:ljr', ad: 'ljr' }, { key: 'pmcp:1', ad: 'baska' },
+  ];
+  assert.strictEqual(capKeyOf(catalog, 'skill', 'context7:docs'), 'plugin:context7@x');
+  assert.strictEqual(capKeyOf(catalog, 'mcp', 'plugin_context7_context7'), 'plugin:context7@x');
+  assert.strictEqual(capKeyOf(catalog, 'mcp', 'baska'), 'pmcp:1');
+  assert.strictEqual(capKeyOf(catalog, 'skill', 'yok'), null);
+  const stats = { s1: { lastAt: 1, skillCalls: st.skillCalls, mcpCalls: st.mcpCalls }, s2: { lastAt: 1, skillCalls: { tdd: 3 }, mcpCalls: {} }, s3: null };
+  const groups = [{ sessions: [{ id: 's1', roleId: 'coder' }, { id: 's2', roleId: 'coder' }, { id: 's3', roleId: 'coder' }, { id: 's4', roleId: 'review' }] }];
+  const u = capUsage('coder', groups, (sid) => stats[sid], catalog);
+  assert.strictEqual(u.oturum, 2);
+  assert.deepStrictEqual(u.keys['pskill:tdd'], { cagri: 4, oturum: 2 });
+  // Eklentinin skill'i ve MCP'si aynı anahtarda toplanır; panelin kendi MCP'si sayılmaz.
+  assert.deepStrictEqual(u.keys['plugin:context7@x'], { cagri: 2, oturum: 1 });
+  assert.deepStrictEqual(Object.keys(u.keys).sort(), ['mcp:ljr', 'plugin:context7@x', 'pskill:tdd', 'skill:review']);
+});
+
 test('rol danışmanı: öneriler küçük değişiklik kuralıyla doğrulanır, izin gevşetilmez', () => {
   const { validateProposals, validateQuestions, usage } = require('../server/setup/roleadvisor');
   const role = {

@@ -5,3 +5,4 @@
 - Rolün kimliğini değiştirmez, rolü silmeyi önermezsin.
 - Ortak istemde zaten bulunan panel kurallarını rol metnine yazmazsın.
 - Verilmeyen veriyi uydurmazsın: kullanım boşsa kullanım verisine dayanan gerekçe yazmazsın.
+- "Hiç çağrılmadı" gerekçesiyle yetenek kapatmayı yalnızca en az 3 ölçülen oturum varsa önerirsin; daha azında kapatma önerin rolün görevlerine dayanır. Rolün görevlerinde adı geçen yeteneği kapatmazsın; "kancasi_var" olan eklentiyi kapatırken arka plandaki işinin de duracağını gerekçede söylersin.

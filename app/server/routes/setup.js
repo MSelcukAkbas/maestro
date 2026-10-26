@@ -151,6 +151,7 @@ route('POST', '/api/roles/([\\w-]+)/optimize', async (req, m) => {
   const onKeys = caps.roleKeys(role.id, inventory);
   const stats = (sid) => sessionStats(discovery.transcriptPath(sharedConfigDir(), sid));
   const cfg = prompts.tool('rol-danismani').config;
+  const used = roleadvisor.capUsage(role.id, store.loadGroups(), stats, catalog);
   const payload = {
     asama: step,
     rol: {
@@ -158,7 +159,9 @@ route('POST', '/api/roles/([\\w-]+)/optimize', async (req, m) => {
       allow: role.allow, deny: role.deny.filter((t) => !prompts.READ_ONLY_TOOLS.includes(t)), baglam_esigi: role.ctxWarn, baglam_ust_siniri: role.ctxHigh,
       persona: role.persona, gorevler: role.gorevler, sinirlar: role.sinirlar,
     },
-    yetenekler: catalog.map((x) => ({ ...x, acik: onKeys.includes(x.key) })),
+    // kullanim: bu rolün ölçülen oturumlarında çağrı / oturum sayısı; olmayan yetenek hiç çağrılmamıştır.
+    yetenek_olcumu: { olculen_oturum: used.oturum },
+    yetenekler: catalog.map((x) => ({ ...x, acik: onKeys.includes(x.key), ...(used.keys[x.key] ? { kullanim: used.keys[x.key] } : {}) })),
     ortak_istem: prompts.sharedSections().join('\n\n'),
     diger_roller: settings.roles.filter((r) => r.id !== role.id).map((r) => ({ id: r.id, ad: r.label, gorev: String(r.gorevler || '').split('\n')[0].slice(0, 200) })),
     kullanim: roleadvisor.usage(role.id, store.loadGroups(), store.loadProjects(), stats, events, cfg.historySessions),
@@ -173,6 +176,14 @@ route('POST', '/api/roles/([\\w-]+)/optimize', async (req, m) => {
     ? roleadvisor.validateQuestions(res.parsed)
     : roleadvisor.validateProposals(role, res.parsed, catalog.map((x) => x.key), onKeys);
   return { step, ...out, usage: { sessions: payload.kullanim.oturum_sayisi }, account: res.account, costUSD: res.costUSD };
+});
+
+// Rol sayfasındaki yetenek listesinin kullanım sayıları (rolün bütün oturumlarındaki skill / MCP çağrıları).
+route('GET', '/api/roles/([\\w-]+)/cap-usage', async (req, m) => {
+  if (!settings.roles.some((r) => r.id === m[1])) throw new HttpError(404, 'Rol bulunamadı.');
+  const inventory = caps.inventory(settings.accounts).filter((x) => x.kind !== 'project');
+  const stats = (sid) => sessionStats(discovery.transcriptPath(sharedConfigDir(), sid));
+  return roleadvisor.capUsage(m[1], store.loadGroups(), stats, capCatalog(inventory));
 });
 
 route('POST', '/api/templates', async (req) => {

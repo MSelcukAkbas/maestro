@@ -126,7 +126,7 @@ metin bulunur. Sistem istemi bunların bu sırayla, kendi başlıklarının alt�
 | `kurulum-danismani` | Kurulum ekranındaki "optimize et" | `model`, `maxTurns`, `timeoutSec` |
 | `not-duzenleyici` | Grup notlarını toparlar | `defaults` (Ayarlar'daki değerlerin varsayılanı), `minNotes`, `memory`, `levels` |
 | `kapanis-ozeti` | Grup kapanırken "Proje durumu" belgesi | `turns`, `timeoutMin` |
-| `rol-danismani` | Rol sayfasındaki "Rolü optimize et": rolü ve geçmiş kullanımını inceler, soru sorar, cevaplara göre küçük değişiklik önerir | `model`, `effort`, `timeoutSec`, `maxQuestions`, `maxChanges`, `maxTextChange`, `historySessions` |
+| `rol-danismani` | Rol sayfasındaki "Rolü optimize et": rolü ve geçmiş kullanımını (yetenek başına çağrı sayısı dahil) inceler, soru sorar, cevaplara göre küçük değişiklik önerir | `model`, `effort`, `timeoutSec`, `maxQuestions`, `maxChanges`, `maxTextChange`, `historySessions` |
 
 Not düzenleyicide görevlerin sonuna iki parça daha eklenir (Sınırlar'dan önce):
 
