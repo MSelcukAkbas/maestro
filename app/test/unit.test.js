@@ -376,3 +376,38 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   assert.strictEqual(JSON.parse(s2.stdout).roles, undefined);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(data, 'settings.json'), 'utf8')).roles, undefined);
 });
+
+test('rol danışmanı: öneriler küçük değişiklik kuralıyla doğrulanır, izin gevşetilmez', () => {
+  const { validateProposals, validateQuestions, usage } = require('../server/setup/roleadvisor');
+  const role = {
+    persona: 'Kıdemli bir gözden geçiricisin.', gorevler: 'Diff\'i oku.\n- Bulguları yaz.\n- Testleri çalıştır.', sinirlar: '- Dosya değiştirmezsin.',
+    model: 'sonnet', effort: 'high', permissionMode: '', readOnly: true, allow: [], deny: ['Edit', 'Write', 'NotebookEdit'], ctxWarn: null, ctxHigh: null,
+  };
+  const r = validateProposals(role, { degisiklikler: [
+    { alan: 'gorevler', eski: '- Bulguları yaz.', yeni: '- Bulguları önem sırasıyla yaz.', neden: 'cevap' },
+    { alan: 'gorevler', eski: 'metinde olmayan', yeni: 'x' },
+    { alan: 'gorevler', eski: '- Testleri çalıştır.', yeni: '- Testleri çalıştır.' },
+    { alan: 'persona', eski: '', yeni: 'x'.repeat(2000) },
+    { alan: 'sinirlar', eski: '', yeni: '- Kanıtsız bulgu yazmazsın.' },
+    { alan: 'model', deger: 'opus' }, { alan: 'model', deger: 'fable' }, { alan: 'effort', deger: 'high' },
+    { alan: 'izin_modu', deger: 'plan' }, { alan: 'salt_okunur', deger: false }, { alan: 'salt_okunur', deger: true },
+    { alan: 'deny_ekle', deger: 'Bash(git push:*)' }, { alan: 'allow_ekle', deger: 'rm -rf; echo' },
+    { alan: 'yetenek_ac', deger: 'pskill:a' }, { alan: 'yetenek_ac', deger: 'pskill:yok' }, { alan: 'yetenek_kapat', deger: 'pskill:b' },
+    { alan: 'baglam_esigi', deger: 5 },
+  ] }, ['pskill:a', 'pskill:b'], ['pskill:b']);
+  const got = r.changes.map((c) => `${c.kind}:${c.field}:${c.kind === 'text' ? c.new.slice(0, 12) : c.value}${c.kind === 'cap' ? `:${c.on}` : ''}`);
+  assert.deepStrictEqual(got, ['text:gorevler:- Bulguları ', 'text:sinirlar:- Kanıtsız b', 'set:model:opus', 'rule:deny:Bash(git push:*)', 'cap:cap:pskill:a:true', 'cap:cap:pskill:b:false']);
+  // Metinde bir kez geçmeyen, değişiklik getirmeyen, sınırı aşan ve izin gevşeten öneriler atılır.
+  assert.ok(r.rejected.length >= 8);
+  const q = validateQuestions({ sorular: [{ soru: 'A?', secenekler: ['x', 'x', 'y'] }, { soru: '' }, ...Array.from({ length: 9 }, (_, i) => ({ soru: `S${i}?` }))] });
+  assert.strictEqual(q.questions.length, 6);
+  assert.deepStrictEqual(q.questions[0], { id: 's1', soru: 'A?', neden: '', secenekler: ['x', 'y'], coklu: false });
+  // Kullanım: yalnızca bu rolün kaydı olan oturumları, en yeni önce.
+  const groups = [{ id: 'g', projectId: 'p', name: 'G', sessions: [{ id: 'a', name: 'n-a', roleId: 'review', model: 'sonnet' }, { id: 'b', name: 'n-b', roleId: 'coder' }, { id: 'c', name: 'n-c', roleId: 'review' }] }];
+  const st = { a: { lastAt: 2e12, firstAt: 2e12 - 3600000, costUSD: 1.234, prompts: 4, model: 'claude-sonnet-5-5' }, c: null };
+  const u = usage('review', groups, [{ id: 'p', name: 'P' }], (sid) => st[sid] || null, [{ gid: 'g', source: 'bekci', text: 'n-a: compact yapıldı' }], 10);
+  assert.strictEqual(u.oturum_sayisi, 1);
+  assert.strictEqual(u.oturumlar[0].maliyet_usd, 1.23);
+  assert.strictEqual(u.oturumlar[0].bekci_hamleleri, 1);
+  assert.strictEqual(u.model_basina['sonnet-5-5'].oturum, 1);
+});

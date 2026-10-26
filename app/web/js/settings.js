@@ -48,6 +48,8 @@ const SettingsView = {
     this.dirty = false;
     // Açık rol sayfası (#/ayarlar/roller/<rol>); yoksa rol listesi.
     this.roleId = this.tab === 'roller' && role ? decodeURIComponent(role) : null;
+    // Rol danışmanının açık kartı: { rid, busy, questions, changes, … }.
+    this.ropt = null;
     this.caps = null;
     this.capTests = {};
     app.innerHTML = '<div class="page" id="settings"></div>';
@@ -131,6 +133,8 @@ const SettingsView = {
       this.dirty = true;
       this.openRole(null);
       this.renderHead();
+    } else if (a.startsWith('ropt-')) {
+      this.onRoleOpt(a);
     } else if (a === 'role-open') {
       this.openRole(b.dataset.rid);
     } else if (a === 'role-back') {
@@ -238,11 +242,180 @@ const SettingsView = {
   // değişiklikler kalır.
   openRole(id) {
     this.roleId = id;
+    if (this.ropt && this.ropt.rid !== id) this.ropt = null;
     history.replaceState(null, '', id ? `#/ayarlar/roller/${encodeURIComponent(id)}` : '#/ayarlar/roller');
     this.renderBody();
     window.scrollTo(0, 0);
     const focus = $(id ? '#set-body h2' : '#set-body .role-sum');
     if (focus) focus.focus({ preventScroll: true });
+  },
+
+  // ---------- rol danışmanı ----------
+
+  // Ekrandaki (kaydedilmemiş olabilir) rol tanımı: danışman bunun üzerinde çalışır, öneriler buna uygulanır.
+  roleDraft(r) {
+    const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
+    return {
+      label: r.label, model: r.model || '', effort: r.effort || '', permissionMode: r.permissionMode || '', readOnly: !!r.readOnly,
+      allow: lines(r.allowText), deny: lines(r.denyText), ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null,
+      persona: r.persona || '', gorevler: r.gorevler || '', sinirlar: r.sinirlar || '',
+    };
+  },
+
+  async onRoleOpt(a) {
+    const r = this.model.roles.find((x) => x.id === this.roleId);
+    if (!r) return;
+    if (a === 'ropt-cancel') {
+      this.ropt = null;
+      return this.renderBody();
+    }
+    // İstek sürerken kullanıcı başka role geçebilir ya da vazgeçebilir; yanıt yalnızca aynı oturuma işlenir.
+    const call = async (step, extra, busy) => {
+      const cur = { ...(this.ropt || {}), rid: r.id, busy, error: null };
+      this.ropt = cur;
+      this.renderBody();
+      try {
+        const res = await api('POST', `/api/roles/${encodeURIComponent(r.id)}/optimize`, { step, role: this.roleDraft(r), ...extra });
+        if (this.ropt !== cur) return null;
+        cur.busy = null;
+        cur.cost = (cur.cost || 0) + (res.costUSD || 0);
+        return res;
+      } catch (err) {
+        if (this.ropt === cur) {
+          cur.busy = null;
+          cur.error = err.message;
+          this.renderBody();
+        }
+        return null;
+      }
+    };
+    if (a === 'ropt-start') {
+      this.ropt = null;
+      const res = await call('sorular', {}, 'Rol ve kullanım verisi inceleniyor, sorular hazırlanıyor…');
+      if (!res) return;
+      Object.assign(this.ropt, { questions: res.questions, summary: res.summary, sessions: res.usage.sessions, changes: null });
+      if (!res.questions.length) this.ropt.error = 'Danışman soru üretmedi; yeniden dene.';
+      this.renderBody();
+    } else if (a === 'ropt-ask') {
+      const answers = this.ropt.questions.map((q) => {
+        const picked = [...document.querySelectorAll(`[data-ropt-q="${q.id}"]:checked`)].map((x) => x.value);
+        const other = ($(`#ropt-o-${q.id}`) || {}).value || '';
+        return { soru: q.soru, cevap: [...picked, other.trim()].filter(Boolean).join('; ') };
+      }).filter((x) => x.cevap);
+      if (!answers.length) return toast('En az bir soruyu cevapla.', true);
+      this.ropt.answers = answers;
+      const res = await call('oneriler', { answers }, 'Cevaplara göre öneriler hazırlanıyor…');
+      if (!res) return;
+      Object.assign(this.ropt, { changes: res.changes, rejected: res.rejected, proposalSummary: res.summary });
+      // Metin düzeltmeleri işaretli gelir; model, effort, izin, yetenek ve eşikler kullanıcı işaretlerse uygulanır.
+      this.ropt.selected = new Set(res.changes.filter((c) => c.kind === 'text').map((c) => c.id));
+      this.renderBody();
+    } else if (a === 'ropt-apply') {
+      const sel = new Set([...document.querySelectorAll('[data-ropt-sel]:checked')].map((x) => x.dataset.roptSel));
+      const chosen = this.ropt.changes.filter((c) => sel.has(c.id));
+      if (!chosen.length) return toast('Uygulanacak öneri seçilmedi.', true);
+      let form = 0;
+      const missed = [];
+      for (const c of chosen) {
+        if (c.kind === 'text') {
+          const cur = String(r[c.field] || '');
+          const i = c.old ? cur.indexOf(c.old) : -1;
+          if (c.old && i < 0) { missed.push(c); continue; }
+          r[c.field] = c.old ? cur.slice(0, i) + c.new + cur.slice(i + c.old.length) : `${cur.replace(/\s+$/, '')}${cur.trim() ? '\n' : ''}${c.new}`;
+          form++;
+        } else if (c.kind === 'set') {
+          r[c.field] = c.value;
+          form++;
+        } else if (c.kind === 'rule') {
+          const k = c.field === 'allow' ? 'allowText' : 'denyText';
+          r[k] = `${String(r[k] || '').replace(/\s+$/, '')}${String(r[k] || '').trim() ? '\n' : ''}${c.value}`;
+          form++;
+        }
+      }
+      // Yetenek işaretleri Yetenekler bölümündeki gibi hemen kaydedilir.
+      for (const c of chosen.filter((x) => x.kind === 'cap')) {
+        try {
+          this.caps = await api('PUT', '/api/caps/role', { key: c.value, roleId: r.id, on: c.on });
+        } catch (err) {
+          missed.push(c);
+        }
+      }
+      const caps = chosen.filter((c) => c.kind === 'cap' && !missed.includes(c)).length;
+      this.ropt = null;
+      if (form) this.dirty = true;
+      this.renderHead();
+      this.renderBody();
+      toast([
+        form ? `${form} öneri forma uygulandı; dosyaya yazmak için "Ayarları kaydet".` : '',
+        caps ? `${caps} yetenek değişikliği kaydedildi.` : '',
+        missed.length ? `${missed.length} öneri uygulanamadı (metin bu arada değişmiş olabilir).` : '',
+      ].filter(Boolean).join(' '), missed.length > 0);
+    }
+  },
+
+  // Rol sayfasının üstündeki danışman kartı: bekleme, sorular ya da öneriler.
+  roleOptCard(r) {
+    const o = this.ropt;
+    if (!o || o.rid !== r.id) return '';
+    const head = (title, note) => `
+          <div class="ropt-head"><h2>${title}</h2>${note ? `<span class="count">${note}</span>` : ''}<span class="grow"></span>
+            <button class="btn small ghost" data-act="ropt-cancel">Kapat</button></div>`;
+    const cost = o.cost ? `$${o.cost.toFixed(2)} harcandı` : '';
+    if (o.busy) return `<section class="card ropt" aria-live="polite">${head('Rol danışmanı', cost)}<p class="note">${esc(o.busy)}</p></section>`;
+    const err = o.error ? `<p class="note warn-note">${esc(o.error)}</p>` : '';
+    if (o.changes) {
+      const LABEL = { persona: 'Persona', gorevler: 'Görevler', sinirlar: 'Sınırlar', model: 'Model', effort: 'Effort', permissionMode: 'İzin modu', readOnly: 'Salt okunur', allow: 'Sormadan izin', deny: 'Kapalı araç', cap: 'Yetenek', ctxWarn: 'Bağlam eşiği', ctxHigh: 'Bağlam üst sınırı' };
+      const val = (c) => (c.field === 'permissionMode' ? (c.value ? permLabel(c.value) : 'grup varsayılanı') : c.field === 'readOnly' ? 'açık' : c.value === '' ? 'varsayılan' : String(c.value));
+      const cur = (c) => (c.field === 'permissionMode' ? (r.permissionMode ? permLabel(r.permissionMode) : 'grup varsayılanı') : String(r[c.field] || 'varsayılan'));
+      const body = (c) => {
+        if (c.kind === 'text') {
+          return `<div class="ropt-diff">${c.old ? `<del>${esc(c.old)}</del>` : '<span class="note">sona eklenir</span>'}<ins>${esc(c.new)}</ins></div>`;
+        }
+        if (c.kind === 'cap') return `<div class="mono">${esc(c.value.split(':').slice(1).join(':'))} · ${c.on ? 'aç' : 'kapat'}</div>`;
+        if (c.kind === 'rule') return `<div class="mono">+ ${esc(c.value)}</div>`;
+        return `<div>${esc(cur(c))} → <b>${esc(val(c))}</b></div>`;
+      };
+      return `
+        <section class="card ropt">
+          ${head('Rol danışmanı: öneriler', cost)}
+          ${o.proposalSummary ? `<p>${esc(o.proposalSummary)}</p>` : ''}
+          ${err}
+          ${o.changes.length ? `<div class="ropt-list">${o.changes.map((c) => `
+            <label class="ropt-item">
+              <input type="checkbox" data-ropt-sel="${c.id}" ${o.selected.has(c.id) ? 'checked' : ''}>
+              <span class="ropt-main"><span class="ropt-field">${esc(LABEL[c.field] || c.field)}${c.kind === 'cap' ? ' (hemen kaydedilir)' : ''}</span>
+                ${body(c)}
+                ${c.why ? `<span class="note">${esc(c.why)}</span>` : ''}</span>
+            </label>`).join('')}</div>` : '<p class="note">Danışman değişiklik önermedi; tanım cevaplarını zaten karşılıyor.</p>'}
+          ${o.rejected && o.rejected.length ? `<p class="note">${o.rejected.length} öneri küçük değişiklik kuralına uymadığı için gösterilmedi.</p>` : ''}
+          <div class="actions">
+            <button class="btn ghost" data-act="ropt-start">Baştan sor</button>
+            ${o.changes.length ? '<button class="btn primary" data-act="ropt-apply">Seçilenleri forma uygula</button>' : ''}
+          </div>
+        </section>`;
+    }
+    if (o.questions) {
+      return `
+        <section class="card ropt">
+          ${head('Rol danışmanı: sorular', [o.sessions ? `${o.sessions} geçmiş oturum incelendi` : 'geçmiş kullanım yok', cost].filter(Boolean).join(' · '))}
+          ${o.summary ? `<p>${esc(o.summary)}</p>` : ''}
+          ${err}
+          ${o.questions.map((q) => `
+            <fieldset class="ropt-q">
+              <legend>${esc(q.soru)}</legend>
+              ${q.neden ? `<p class="note">${esc(q.neden)}</p>` : ''}
+              <div class="ropt-opts">${q.secenekler.map((s) => `
+                <label class="check"><input type="${q.coklu ? 'checkbox' : 'radio'}" name="ropt-${q.id}" data-ropt-q="${q.id}" value="${esc(s)}">${esc(s)}</label>`).join('')}
+              </div>
+              <input id="ropt-o-${q.id}" aria-label="${esc(q.soru)}: kendi cevabın" placeholder="Kendi cevabın ya da ek not (isteğe bağlı)">
+            </fieldset>`).join('')}
+          <div class="actions">
+            <button class="btn primary" data-act="ropt-ask">Önerileri al</button>
+            <span class="note">Cevapsız sorular atlanır. Öneriler küçük değişikliklerdir; hiçbiri sen kaydetmeden yazılmaz.</span>
+          </div>
+        </section>`;
+    }
+    return `<section class="card ropt">${head('Rol danışmanı', cost)}${err}<div class="actions"><button class="btn" data-act="ropt-start">Yeniden dene</button></div></section>`;
   },
 
   async testCap(slot, payload) {
@@ -548,8 +721,12 @@ const SettingsView = {
           <h2 tabindex="-1">${esc(r.label || 'Adsız rol')}</h2>
           <span class="mono note" title="Rolün kimliği ve klasörü: prompts/roles/${esc(r.id)}/">${esc(r.id)}</span>
           <span class="grow"></span>
+          ${state.settings.roles.some((x) => x.id === r.id)
+    ? `<button class="btn small" data-act="ropt-start" ${this.ropt && this.ropt.rid === r.id && this.ropt.busy ? 'disabled' : ''} title="Rolü ve geçmiş kullanımını inceler, sana sorular sorar, cevaplarına göre küçük değişiklikler önerir (Sonnet, iki kısa çağrı)">✦ Rolü optimize et</button>`
+    : ''}
           <button class="btn small ghost danger-text" data-act="del-role" data-i="${i}">Rolü sil</button>
         </div>
+        ${this.roleOptCard(r)}
 
         <section class="section">
           <div class="section-head"><h2>Genel</h2></div>

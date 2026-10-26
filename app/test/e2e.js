@@ -296,6 +296,26 @@ const SCENARIOS = {
     assert.ok(Array.isArray(r.adds) && Array.isArray(r.removes));
     return `turns ${r.turns}, $${(r.costUSD || 0).toFixed(3)}, ekle ${r.adds.map((a) => a.roleId)}, çıkar ${r.removes.map((x) => x.key)}`;
   },
+
+  // Rol danışmanı (Sonnet): sorular → her sorunun ilk seçeneğiyle cevap → doğrulanmış öneriler. Hiçbir şey yazılmaz.
+  async roleopt({ api, dataDir }) {
+    const before = fs.readFileSync(path.join(dataDir, 'panel-prompts', 'roles', 'review', 'gorevler.md'), 'utf8');
+    const q = await api('POST', '/api/roles/review/optimize', { step: 'sorular' });
+    spent += q.costUSD || 0;
+    assert.ok(q.questions.length >= 1 && q.questions.length <= 6, `soru sayısı ${q.questions.length}`);
+    assert.ok(q.questions.every((x) => x.soru && Array.isArray(x.secenekler)));
+    const answers = q.questions.map((x) => ({ soru: x.soru, cevap: x.secenekler[0] || 'fark etmez' }));
+    const o = await api('POST', '/api/roles/review/optimize', { step: 'oneriler', answers });
+    spent += o.costUSD || 0;
+    assert.ok(Array.isArray(o.changes) && Array.isArray(o.rejected));
+    // Metin önerisinin "eski" parçası rolün metninde bir kez geçer; izin gevşetmesi gelmez.
+    for (const c of o.changes) {
+      if (c.kind === 'text' && c.old && c.field === 'gorevler') assert.strictEqual(before.split(c.old).length, 2, `eski parça metinde bir kez geçmiyor: ${c.old.slice(0, 60)}`);
+      assert.ok(!(c.field === 'readOnly' && c.value === false));
+    }
+    assert.strictEqual(fs.readFileSync(path.join(dataDir, 'panel-prompts', 'roles', 'review', 'gorevler.md'), 'utf8'), before, 'danışman dosyaya yazdı');
+    return `${q.questions.length} soru, ${o.changes.length} öneri (${o.rejected.length} elendi), $${((q.costUSD || 0) + (o.costUSD || 0)).toFixed(3)}`;
+  },
 };
 
 (async () => {

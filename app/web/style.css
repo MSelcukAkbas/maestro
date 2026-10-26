@@ -717,3 +717,22 @@ a.notif-item:hover { background: var(--surface-2); }
 .quota-pop.closed-pop { width: 300px; z-index: 30; gap: 2px; padding: 7px; }
 .closed-row { display: flex; align-items: center; gap: 7px; padding: 4px 7px; }
 .closed-row .cr-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* ayarlar: rol danışmanı */
+.ropt { padding: 16px; display: flex; flex-direction: column; gap: 12.5px; border-color: #2a6b57; }
+.ropt-head { display: flex; align-items: baseline; gap: 9px; }
+.ropt-head h2 { font-size: 15px; }
+.ropt-q { border: 1px solid var(--line); border-radius: 9px; padding: 11px 14.5px; margin: 0; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.ropt-q legend { padding: 0 5.5px; font-weight: 600; font-size: 12.5px; }
+.ropt-opts { display: flex; flex-direction: column; gap: 5.5px; }
+.ropt-opts .check { align-items: flex-start; }
+.ropt-list { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 9px; overflow: hidden; }
+.ropt-item { display: flex; gap: 9px; align-items: flex-start; padding: 11px 14.5px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.ropt-item:last-child { border-bottom: 0; }
+.ropt-item input { accent-color: var(--accent); margin: 2.5px 0 0; flex: none; }
+.ropt-item:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: -2px; }
+.ropt-main { display: flex; flex-direction: column; gap: 5.5px; min-width: 0; }
+.ropt-field { font-weight: 600; font-size: 12px; }
+.ropt-diff { display: flex; flex-direction: column; gap: 3.5px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
+.ropt-diff del { color: #ffb3b3; background: rgba(255, 90, 90, .08); text-decoration: line-through; padding: 3.5px 7px; border-radius: 5px; }
+.ropt-diff ins { color: var(--accent); background: rgba(52, 209, 160, .08); text-decoration: none; padding: 3.5px 7px; border-radius: 5px; }

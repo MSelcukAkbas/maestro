@@ -1,0 +1,9 @@
+{
+  "model": "sonnet",
+  "effort": "medium",
+  "timeoutSec": 300,
+  "maxQuestions": 6,
+  "maxChanges": 12,
+  "maxTextChange": 0.3,
+  "historySessions": 20
+}

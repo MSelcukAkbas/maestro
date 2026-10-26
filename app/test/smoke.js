@@ -89,6 +89,8 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
       await hit('PUT', `/api/templates/${tid}`, { name: 'duman şablonu 2' });
       await hit('DELETE', `/api/templates/${tid}`);
     }
+    // Rol danışmanı: bilinmeyen rol model çağırmadan 404.
+    await hit('POST', '/api/roles/yok-boyle/optimize', { step: 'sorular' });
     const s2 = await hit('GET', '/api/state');
     const saved = await hit('PUT', '/api/settings', s2.settings);
     // Kaydet / geri oku: rol alanları korunmalı (boş alanların false / null'a dönmesi dışında).

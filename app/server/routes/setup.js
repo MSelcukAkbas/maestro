@@ -1,4 +1,4 @@
-// Kurulum: ekip şablonları ve grup açılmadan önceki model önerisi (optimize).
+// Kurulum: ekip şablonları, grup açılmadan önceki model önerisi (optimize) ve tek rolün iyileştirilmesi (rol danışmanı).
 const crypto = require('crypto');
 
 const store = require('../core/store');
@@ -7,8 +7,10 @@ const { sessionStats } = require('../core/usage');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
 const helper = require('../watch/helper');
 const optimizer = require('../setup/optimizer');
+const roleadvisor = require('../setup/roleadvisor');
+const prompts = require('../core/prompts');
 const {
-  settings, boards, caps, notes, HttpError, isAllowedDir, sharedConfigDir, cleanText, cachedQuota, lastQuota,
+  settings, boards, caps, notes, events, HttpError, isAllowedDir, sharedConfigDir, cleanText, cachedQuota, lastQuota,
 } = require('../panel/context');
 const { capsOverride } = require('../panel/launch');
 const { route, readBody } = require('../panel/http');
@@ -19,6 +21,21 @@ route('GET', '/api/templates', async () => store.loadTemplates());
 const CAP_KIND_TEXT = {
   plugin: 'eklenti', skill: 'skill (hesapta kurulu)', mcp: 'mcp', bundled: 'skill (Claude Code yerleşik)', synced: 'skill (claude.ai)', project: 'skill (proje klasöründe)',
 };
+
+// Modele verilen yetenek kataloğu: hesaplarda kurulu olanlar (inventory) + panelin MCP ve skill'leri.
+function capCatalog(inventory) {
+  const c = caps.load();
+  return [
+    ...inventory.map((x) => ({
+      key: x.key, tur: CAP_KIND_TEXT[x.kind] || x.kind, ad: x.name, aciklama: String(x.description || '').slice(0, 160),
+      ...(x.chars ? { tahmini_token: Math.round(x.chars / 3) } : {}),
+      ...(x.skills ? { skilleri: x.skills } : {}),
+      ...(x.hooks ? { kancasi_var: true } : {}),
+    })),
+    ...c.mcps.map((m) => ({ key: `pmcp:${m.id}`, tur: 'mcp (panel)', ad: m.name, aciklama: m.url || [m.command, ...(m.args || [])].join(' ') })),
+    ...c.skills.map((k) => ({ key: `pskill:${k.name}`, tur: 'skill (panel)', ad: k.name, aciklama: String(k.description || '').slice(0, 160) })),
+  ];
+}
 
 route('POST', '/api/setup/optimize', async (req) => {
   const body = await readBody(req);
@@ -32,17 +49,7 @@ route('POST', '/api/setup/optimize', async (req) => {
   if (!account) throw new HttpError(409, 'Kotası olan hesap yok.');
 
   const inventory = caps.inventory(settings.accounts).filter((x) => x.kind !== 'project' || (x.projects || []).includes(project.path));
-  const c = caps.load();
-  const catalog = [
-    ...inventory.map((x) => ({
-      key: x.key, tur: CAP_KIND_TEXT[x.kind] || x.kind, ad: x.name, aciklama: String(x.description || '').slice(0, 160),
-      ...(x.chars ? { tahmini_token: Math.round(x.chars / 3) } : {}),
-      ...(x.skills ? { skilleri: x.skills } : {}),
-      ...(x.hooks ? { kancasi_var: true } : {}),
-    })),
-    ...c.mcps.map((m) => ({ key: `pmcp:${m.id}`, tur: 'mcp (panel)', ad: m.name, aciklama: m.url || [m.command, ...(m.args || [])].join(' ') })),
-    ...c.skills.map((k) => ({ key: `pskill:${k.name}`, tur: 'skill (panel)', ad: k.name, aciklama: String(k.description || '').slice(0, 160) })),
-  ];
+  const catalog = capCatalog(inventory);
   const rows = raw.map((r) => {
     const role = settings.roles.find((x) => x.id === r.roleId);
     const custom = r.roleId === 'custom';
@@ -111,6 +118,61 @@ route('POST', '/api/setup/optimize', async (req) => {
     p.why.accountId = a.why;
   }
   return { ...out, account: res.account, costUSD: res.costUSD, turns: res.turns };
+});
+
+// Rol danışmanı (rol sayfasındaki "Rolü optimize et"): step "sorular" kullanıcıya soru, step "oneriler" cevaplara göre
+// doğrulanmış değişiklik önerileri döner. Hiçbir şey yazılmaz; kullanıcı seçtiklerini forma uygular ve kaydeder.
+// body.role: ekrandaki (kaydedilmemiş olabilir) tanım; geçersiz alan kayıtlı değerle kalır.
+route('POST', '/api/roles/([\\w-]+)/optimize', async (req, m) => {
+  const body = await readBody(req);
+  const saved = settings.roles.find((r) => r.id === m[1]);
+  if (!saved) throw new HttpError(404, 'Rol bulunamadı; önce kaydet.');
+  const step = body.step === 'oneriler' ? 'oneriler' : 'sorular';
+  const d = body.role && typeof body.role === 'object' ? body.role : {};
+  const text = (k) => (typeof d[k] === 'string' ? d[k].slice(0, 40000) : saved[k] || '');
+  const rules = (k) => (Array.isArray(d[k]) ? d[k].map((x) => cleanText(x, 200)).filter(Boolean).slice(0, 100) : saved[k] || []);
+  const num = (k) => (Number(d[k]) >= 20000 && Number(d[k]) <= 10000000 ? Math.round(Number(d[k])) : saved[k] || null);
+  const role = {
+    id: saved.id, label: cleanText(d.label, 40) || saved.label,
+    model: MODELS.includes(d.model) || d.model === '' ? d.model : saved.model || '',
+    effort: EFFORTS.includes(d.effort) || d.effort === '' ? d.effort : saved.effort || '',
+    permissionMode: PERMISSION_MODES.includes(d.permissionMode) || d.permissionMode === '' ? d.permissionMode : saved.permissionMode || '',
+    readOnly: typeof d.readOnly === 'boolean' ? d.readOnly : !!saved.readOnly,
+    allow: rules('allow'), deny: rules('deny'), ctxWarn: num('ctxWarn'), ctxHigh: num('ctxHigh'),
+    persona: text('persona'), gorevler: text('gorevler'), sinirlar: text('sinirlar'),
+  };
+  const quota = await cachedQuota().catch(() => lastQuota());
+  const account = helper.pickAccount(settings.accounts, quota);
+  if (!account) throw new HttpError(409, 'Kotası olan hesap yok.');
+
+  // Proje skill'leri yalnızca kendi projesinde görünür; rolün genel tanımı için katalog dışı.
+  const inventory = caps.inventory(settings.accounts).filter((x) => x.kind !== 'project');
+  const catalog = capCatalog(inventory);
+  const onKeys = caps.roleKeys(role.id, inventory);
+  const stats = (sid) => sessionStats(discovery.transcriptPath(sharedConfigDir(), sid));
+  const cfg = prompts.tool('rol-danismani').config;
+  const payload = {
+    asama: step,
+    rol: {
+      id: role.id, ad: role.label, model: role.model, effort: role.effort, izin_modu: role.permissionMode, salt_okunur: role.readOnly,
+      allow: role.allow, deny: role.deny.filter((t) => !prompts.READ_ONLY_TOOLS.includes(t)), baglam_esigi: role.ctxWarn, baglam_ust_siniri: role.ctxHigh,
+      persona: role.persona, gorevler: role.gorevler, sinirlar: role.sinirlar,
+    },
+    yetenekler: catalog.map((x) => ({ ...x, acik: onKeys.includes(x.key) })),
+    ortak_istem: prompts.sharedSections().join('\n\n'),
+    diger_roller: settings.roles.filter((r) => r.id !== role.id).map((r) => ({ id: r.id, ad: r.label, gorev: String(r.gorevler || '').split('\n')[0].slice(0, 200) })),
+    kullanim: roleadvisor.usage(role.id, store.loadGroups(), store.loadProjects(), stats, events, cfg.historySessions),
+  };
+  if (step === 'oneriler') {
+    const qa = Array.isArray(body.answers) ? body.answers.slice(0, 10) : [];
+    payload.cevaplar = qa.map((x) => ({ soru: cleanText(x && x.soru, 400), cevap: String((x && x.cevap) || '').trim().slice(0, 1000) })).filter((x) => x.soru && x.cevap);
+    if (!payload.cevaplar.length) throw new HttpError(400, 'En az bir soruyu cevapla.');
+  }
+  const res = await roleadvisor.ask(account, payload).catch((err) => { throw new HttpError(502, `Rol danışmanı: ${err.message}`); });
+  const out = step === 'sorular'
+    ? roleadvisor.validateQuestions(res.parsed)
+    : roleadvisor.validateProposals(role, res.parsed, catalog.map((x) => x.key), onKeys);
+  return { step, ...out, usage: { sessions: payload.kullanim.oturum_sayisi }, account: res.account, costUSD: res.costUSD };
 });
 
 route('POST', '/api/templates', async (req) => {
