@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Claude Panel: birden çok Claude Code oturumunu rollere ayrılmış bir ekip olarak (orkestra şefi + coder/review/araştırma…) tek yerel web panelinden yöneten Node.js uygulaması. Yalnızca Windows'ta, yalnızca `127.0.0.1`'de çalışır. Kod, yorumlar, arayüz metinleri ve rol talimatları Türkçe; yeni kod da böyle yazılır. Derleme adımı yok: sunucu düz CommonJS, arayüz tek dosya vanilla JS (`web/app.js`, IIFE) + xterm. Bağımlılıklar yalnızca `ws`, `@lydell/node-pty`, `@xterm/*`. Node ≥ 22. Yerel git deposu (uzak depo yok); `data/`, `.remember/`, `external resources/` (kaynak olarak indirilen dış repolar) depo dışında.
 
+Klasör düzeni: panelin tamamı `app/` altında (`server/`, `web/`, `skills/`, `test/`, `data/`, `node_modules/`, `package.json`, `attach.js`, `.bat`/`.vbs`); kökte yalnızca `app/`, `external resources/`, belgeler ve `.gitignore`. Bu dosyadaki tüm yollar ve komutlar `app/`'e göredir (komutları `app/` içinde çalıştır).
+
 ## Komutlar
 
 ```bash

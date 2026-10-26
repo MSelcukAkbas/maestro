@@ -2,6 +2,8 @@
 
 Birden çok Claude Code oturumunu rollere ayrılmış bir ekip olarak tek panelden yönetmek için yerel web paneli.
 
+Panelin tamamı `app/` altındadır; başlatmak için `app/Claude-Panel.bat`. Aşağıdaki komutlar `app/` içinde çalıştırılır.
+
 ## Testler
 
 - `node --test test/` — model çağırmayan birim testleri.
