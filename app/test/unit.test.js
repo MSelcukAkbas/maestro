@@ -317,9 +317,11 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
     const coderSkills = p.skillRoles();
     list[0].gorevler = 'yeni talimat\\n\\nikinci';
     list.push({ id: 'yeni-rol', label: 'Yeni', short: 'yeni', gorevler: 'x', readOnly: true, model: 'haiku' });
+    list.push({ id: 'izinli', label: 'İzinli', gorevler: 'x', readOnly: false, allow: ['Bash(npm test:*)'], deny: ['WebFetch', 'Edit'] });
     p.saveRoles(list.filter((r) => r.id !== 'dokuman'));
     out.first = p.roles()[0].gorevler;
-    out.last = p.roles().at(-1).id;
+    out.last = p.roles().at(-2).id;
+    out.permAllow = JSON.parse(require('fs').readFileSync(require('path').join(p.PROMPTS_DIR, 'roles', 'izinli', 'permissions.json'), 'utf8'));
     out.hasDoc = p.roles().some((r) => r.id === 'dokuman');
     out.skillsKept = JSON.stringify(p.skillRoles()[Object.keys(coderSkills)[0]]) === JSON.stringify(coderSkills[Object.keys(coderSkills)[0]]);
     p.setSkillRoles('deneme-skill', ['yeni-rol']);
@@ -350,6 +352,8 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   // "Salt okunur" permissions.json deny'ına yazılır; review'da bu araçlar kapalı.
   assert.deepStrictEqual(o.perm, { mode: '', allow: [], deny: ['Edit', 'Write', 'NotebookEdit'] });
   assert.strictEqual(o.newRole.readOnly, true);
+  // Ekrandan gelen allow / deny yazılır; salt okunur araçlarını yalnızca "readOnly" belirler.
+  assert.deepStrictEqual(o.permAllow, { mode: '', allow: ['Bash(npm test:*)'], deny: ['WebFetch'] });
   assert.ok(o.review.readOnly && o.review.deny.includes('Write'));
   const sections = (t) => (t.match(/^## .+$/gm) || []);
   for (const h of ['## Persona', '## Görevler', '## Sınırlar']) assert.ok(sections(o.member).includes(h), `üye isteminde ${h} yok`);

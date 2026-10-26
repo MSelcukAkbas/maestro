@@ -15,7 +15,7 @@ function parseRoute() {
   if (parts[0] === 'p' && parts[1] && parts[2] === 'kurulum') return [SetupView, { id: parts[1] }];
   if (parts[0] === 'p' && parts[1]) return [ProjectView, { id: parts[1] }];
   if (parts[0] === 'g' && parts[1]) return [WorkView, { id: parts[1], sid: parts[2] }];
-  if (parts[0] === 'ayarlar') return [SettingsView, { tab: parts[1] }];
+  if (parts[0] === 'ayarlar') return [SettingsView, { tab: parts[1], role: parts[2] }];
   return [ProjectsView, {}];
 }
 

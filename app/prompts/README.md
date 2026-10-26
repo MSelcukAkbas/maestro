@@ -41,8 +41,9 @@ başlıkları); gerekirse `###` kullan.
 | `allow` | Sormadan izin verilen araçlar (Claude Code izin kuralı yazımı, ör. `Bash(npm test:*)`) |
 | `deny` | Kapalı araçlar. Edit, Write ve NotebookEdit'in üçü de varsa rol "Salt okunur" sayılır |
 
-Ayarlar ekranındaki "Salt okunur" kutusu bu üç aracı `deny`'a ekler ya da çıkarır. Elle yazdığın diğer `allow` /
-`deny` kuralları korunur.
+Her rolün Ayarlar → Roller altında kendi sayfası var (`#/ayarlar/roller/<kimlik>`). Bu sayfada rolün bütün ayarları
+düzenlenir: `role.json`, üç metin, `permissions.json` ve rolün yetenekleri. "Salt okunur" kutusu bu üç aracı `deny`'a
+ekler ya da çıkarır; diğer `allow` / `deny` kuralları sayfadaki iki alanda satır satır yazılır.
 
 **`role.json`** rolün ayarlarını tutar:
 

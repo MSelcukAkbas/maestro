@@ -41,6 +41,9 @@ route('GET', '/api/watch', async (req) => {
 
 route('GET', '/api/quota', async (req) => cachedQuota(new URL(req.url, 'http://x').searchParams.has('fresh')));
 
+// Rolün allow / deny kuralları: boş olmayan, tekrarsız, en fazla 100 kural.
+const permRules = (list) => [...new Set(list.map((x) => cleanText(x, 200)).filter(Boolean))].slice(0, 100);
+
 route('PUT', '/api/settings', async (req) => {
   const body = await readBody(req);
   const next = { ...settings };
@@ -96,6 +99,9 @@ route('PUT', '/api/settings', async (req) => {
       permissionMode: PERMISSION_MODES.includes(r.permissionMode) ? r.permissionMode : '',
       model: MODELS.includes(r.model) ? r.model : '',
       readOnly: !!r.readOnly,
+      // Claude Code izin kuralları (ör. "Bash(npm test:*)"); gelmezse permissions.json'daki korunur.
+      ...(Array.isArray(r.allow) ? { allow: permRules(r.allow) } : {}),
+      ...(Array.isArray(r.deny) ? { deny: permRules(r.deny) } : {}),
       effort: EFFORTS.includes(r.effort) ? r.effort : '',
       // Bağlam profili (token); boşsa rolün varsayılanı ya da genel ayar kullanılır.
       ctxWarn: Number(r.ctxWarn) >= 20000 && Number(r.ctxWarn) <= 10000000 ? Math.round(Number(r.ctxWarn)) : null,

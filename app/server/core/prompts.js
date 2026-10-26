@@ -141,10 +141,11 @@ function saveRoles(list) {
       model: r.model || '', effort: r.effort || '', ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null,
       skills: Array.isArray(old.skills) ? old.skills : [],
     };
-    // İzinler: ekrandan yalnızca mod ve "Salt okunur" gelir; elle yazılmış allow / deny korunur.
+    // İzinler: allow / deny listesi gelmediyse dosyadaki korunur. Salt okunur araçlarını yalnızca "readOnly" belirler.
     const oldPerm = json(`roles/${r.id}/permissions.json`) || {};
-    const deny = strList(oldPerm.deny).filter((t) => !READ_ONLY_TOOLS.includes(t));
-    const perm = { mode: r.permissionMode || '', allow: strList(oldPerm.allow), deny: r.readOnly ? [...READ_ONLY_TOOLS, ...deny] : deny };
+    const deny = strList(Array.isArray(r.deny) ? r.deny : oldPerm.deny).filter((t) => !READ_ONLY_TOOLS.includes(t));
+    const allow = strList(Array.isArray(r.allow) ? r.allow : oldPerm.allow);
+    const perm = { mode: r.permissionMode || '', allow, deny: r.readOnly ? [...READ_ONLY_TOOLS, ...deny] : deny };
     const writeJsonIfChanged = (rel, v) => {
       const t = `${JSON.stringify(v, null, 2)}\n`;
       if (text(rel) !== t.replace(/\n+$/, '')) writeFile(rel, t);

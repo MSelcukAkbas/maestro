@@ -13,6 +13,8 @@ const SETTINGS_TABS = [
 // "Ayarları kaydet" ile kaydedilen sekmeler; diğerlerindeki işlemler hemen uygulanır.
 const FORM_TABS = ['hesaplar', 'roller', 'genel'];
 const CAP_KIND = { plugin: 'eklenti', skill: 'skill', mcp: 'MCP' };
+// Salt okunur rolde kapatılan araçlar (server/core/prompts.js READ_ONLY_TOOLS ile aynı).
+const READ_ONLY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
 // "KEY=değer" / "Ad: değer" satırları ile nesne arasında.
 const pairsToText = (o, sep) => Object.entries(o || {}).map(([k, v]) => `${k}${sep}${v}`).join('\n');
@@ -33,13 +35,19 @@ const CURATOR_DEFAULTS = { enabled: true, everyH: 3, model: 'sonnet', level: 'or
 const CURATOR_LEVELS = [['dusuk', 'Düşük'], ['orta', 'Orta'], ['yuksek', 'Yüksek']];
 
 const SettingsView = {
-  mount({ tab }) {
+  mount({ tab, role }) {
     crumbs([{ label: 'Projeler', href: '#/' }, { label: 'Ayarlar' }]);
     this.tab = SETTINGS_TABS.some(([k]) => k === tab) ? tab : 'hesaplar';
     this.model = JSON.parse(JSON.stringify(state.settings));
     this.model.allowedText = this.model.allowedDirs.join('\n');
+    // İzin kuralları ekranda satır satır düzenlenir; salt okunur araçları "Salt okunur" kutusu yönetir.
+    for (const r of this.model.roles) {
+      r.allowText = (r.allow || []).join('\n');
+      r.denyText = (r.deny || []).filter((t) => !READ_ONLY_TOOLS.includes(t)).join('\n');
+    }
     this.dirty = false;
-    this.openRoles = new Set();
+    // Açık rol sayfası (#/ayarlar/roller/<rol>); yoksa rol listesi.
+    this.roleId = this.tab === 'roller' && role ? decodeURIComponent(role) : null;
     this.caps = null;
     this.capTests = {};
     app.innerHTML = '<div class="page" id="settings"></div>';
@@ -99,6 +107,7 @@ const SettingsView = {
     if (b.tagName === 'A') e.preventDefault();
     if (a === 'tab') {
       this.tab = b.dataset.tab;
+      this.roleId = null;
       history.replaceState(null, '', `#/ayarlar/${this.tab}`);
       this.render();
     } else if (a === 'add-acc') {
@@ -111,25 +120,37 @@ const SettingsView = {
       this.render();
     } else if (a === 'add-role') {
       const id = `rol${Date.now().toString(36)}`;
-      this.model.roles.push({ id, label: '', short: '', persona: '', gorevler: '', sinirlar: '', permissionMode: '', model: '' });
-      this.openRoles.add(id);
+      this.model.roles.push({ id, label: '', short: '', persona: '', gorevler: '', sinirlar: '', permissionMode: '', model: '', allowText: '', denyText: '' });
       this.dirty = true;
-      this.render();
+      this.openRole(id);
+      this.renderHead();
     } else if (a === 'del-role') {
       const r = this.model.roles[Number(b.dataset.i)];
       if (r && r.label && !confirm(`"${r.label}" rolü silinsin mi? Kaydedince yetenek atamaları da kalkar.`)) return;
       this.model.roles.splice(Number(b.dataset.i), 1);
       this.dirty = true;
-      this.render();
-    } else if (a === 'role-toggle') {
-      const id = b.dataset.rid;
-      if (this.openRoles.has(id)) this.openRoles.delete(id);
-      else this.openRoles.add(id);
+      this.openRole(null);
+      this.renderHead();
+    } else if (a === 'role-open') {
+      this.openRole(b.dataset.rid);
+    } else if (a === 'role-back') {
+      this.openRole(null);
+    } else if (a === 'role-move') {
+      // Sıra kurulumdaki rol listesinin sırasıdır; kaydedince role.json "order"a yazılır.
+      const i = Number(b.dataset.i);
+      const j = i + Number(b.dataset.dir);
+      const list = this.model.roles;
+      if (j < 0 || j >= list.length) return;
+      [list[i], list[j]] = [list[j], list[i]];
+      this.setDirty();
       this.renderBody();
+      const again = $(`[data-act="role-move"][data-i="${j}"][data-dir="${b.dataset.dir}"]`);
+      if (again && !again.disabled) again.focus();
     } else if (a === 'save') {
+      const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       const body = {
         accounts: this.model.accounts,
-        roles: this.model.roles,
+        roles: this.model.roles.map(({ allowText, denyText, ...r }) => ({ ...r, allow: lines(allowText), deny: lines(denyText) })),
         allowedDirs: this.model.allowedText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
         port: Number(this.model.port),
         autoRotate: !!this.model.autoRotate,
@@ -211,6 +232,17 @@ const SettingsView = {
     } else if (a.startsWith('dlg-')) {
       this.onDialog(a, b);
     }
+  },
+
+  // Rol sayfasını açar (id) ya da listeye döner (null). Adres değişir ama görünüm yeniden kurulmaz; kaydedilmemiş
+  // değişiklikler kalır.
+  openRole(id) {
+    this.roleId = id;
+    history.replaceState(null, '', id ? `#/ayarlar/roller/${encodeURIComponent(id)}` : '#/ayarlar/roller');
+    this.renderBody();
+    window.scrollTo(0, 0);
+    const focus = $(id ? '#set-body h2' : '#set-body .role-sum');
+    if (focus) focus.focus({ preventScroll: true });
   },
 
   async testCap(slot, payload) {
@@ -464,62 +496,164 @@ const SettingsView = {
   },
 
   tabRoles() {
+    const i = this.roleId ? this.model.roles.findIndex((r) => r.id === this.roleId) : -1;
+    if (i >= 0) return this.rolePage(this.model.roles[i], i);
+    this.roleId = null;
     const m = this.model;
-    const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
     const modelLabel = (v) => (MODELS.find(([x]) => x === v) || [v, v])[1];
     const firstLine = (t) => String(t || '').split('\n').map((s) => s.trim()).find(Boolean) || '';
+    const last = m.roles.length - 1;
     return `
         <section class="section">
-          <div class="section-head"><h2>Roller</h2><span class="count">${m.roles.length} rol · kurulumda seçilir</span></div>
+          <div class="section-head"><h2>Roller</h2><span class="count">${m.roles.length} rol · kurulumda bu sırayla listelenir</span></div>
           <div class="card role-list">
             ${m.roles.map((r, i) => {
-            const open = this.openRoles.has(r.id);
             const rc = this.roleCaps(r.id);
-            const capText = rc && (rc.add.length || rc.off.length)
-              ? [rc.add.length ? `+ ${rc.add.join(', ')}` : '', rc.off.length ? `kapalı: ${rc.off.join(', ')}` : ''].filter(Boolean).join(' · ')
-              : '';
             return `
-              <div class="role-row${open ? ' open' : ''}">
-                <button class="role-sum" data-act="role-toggle" data-rid="${esc(r.id)}" aria-expanded="${open}">
+              <div class="role-row">
+                <button class="role-sum" data-act="role-open" data-rid="${esc(r.id)}">
                   <span class="rdot" style="background: ${roleColor({ roleId: r.id, roleLabel: r.label })}"></span>
                   <span class="rs-main">
                     <span class="rs-top"><span class="rs-name">${esc(r.label || 'Adsız rol')}</span><span class="mono note">${esc(r.short || '')}</span>
-                      ${r.model ? `<span class="badge">${esc(modelLabel(r.model))}</span>` : ''}
+                      ${r.model ? `<span class="badge">${esc(modelLabel(r.model))}${r.effort ? ` · ${esc(r.effort)}` : ''}</span>` : ''}
                       ${r.permissionMode ? `<span class="badge">${esc(permLabel(r.permissionMode))}</span>` : ''}
+                      ${r.readOnly ? '<span class="badge">salt okunur</span>' : ''}
                       ${rc && rc.add.length ? `<span class="badge acc-green">+${rc.add.length} yetenek</span>` : ''}
                       ${rc && rc.off.length ? `<span class="badge">${rc.off.length} kapalı</span>` : ''}</span>
-                    <span class="rs-desc">${esc(firstLine(r.gorevler))}</span>
+                    <span class="rs-desc">${esc(firstLine(r.gorevler) || 'Görev yazılmadı')}</span>
                   </span>
-                  <span class="chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
+                  <span class="chev" aria-hidden="true">›</span>
                 </button>
-                ${open ? `
-                <div class="role-item">
-                  <div class="field"><label for="rl-${i}">Rol adı</label><input id="rl-${i}" data-f="roles.${i}.label" value="${esc(r.label)}" maxlength="40"></div>
-                  <div class="field"><label for="rs-${i}">Oturum adındaki kısa hali</label><input id="rs-${i}" data-f="roles.${i}.short" value="${esc(r.short)}" maxlength="24"></div>
-                  <div class="field"><label for="rmo-${i}">Varsayılan model</label>
-                    <select id="rmo-${i}" data-f="roles.${i}.model">${MODELS.map(([v, l]) => opt(v, l, r.model || '')).join('')}</select></div>
-                  <div class="field"><label for="ref-${i}">Varsayılan effort</label>
-                    <select id="ref-${i}" data-f="roles.${i}.effort">${EFFORTS.map(([v, l]) => opt(v, l, r.effort || '')).join('')}</select></div>
-                  <div class="field"><label for="rm-${i}">Varsayılan izin modu</label>
-                    <select id="rm-${i}" data-f="roles.${i}.permissionMode">
-                      ${opt('', 'Grup varsayılanı', r.permissionMode || '')}
-                      ${PERMISSION_LABELS.map(([v, l]) => opt(v, l, r.permissionMode)).join('')}
-                    </select></div>
-                  <label class="check" style="align-self: end" title="Oturumda dosya düzenleme araçları (Edit, Write, NotebookEdit) kapatılır; talimata ek olarak izinle uygulanır."><input type="checkbox" data-f="roles.${i}.readOnly" ${r.readOnly ? 'checked' : ''}>Salt okunur</label>
-                  <div class="field"><label for="rcw-${i}">Bağlam eşiği (token)</label><input id="rcw-${i}" type="number" step="10000" data-f="roles.${i}.ctxWarn" value="${esc(r.ctxWarn || '')}" placeholder="${esc(ROLE_CTX_DEFAULTS[r.id] ? ROLE_CTX_DEFAULTS[r.id][0] : 'genel ayar')}"></div>
-                  <div class="field"><label for="rch-${i}">Bağlam üst sınırı (token)</label><input id="rch-${i}" type="number" step="10000" data-f="roles.${i}.ctxHigh" value="${esc(r.ctxHigh || '')}" placeholder="${esc(ROLE_CTX_DEFAULTS[r.id] ? ROLE_CTX_DEFAULTS[r.id][1] : 'genel ayar')}"></div>
-                  <button class="btn icon" style="align-self: end" data-act="del-role" data-i="${i}" aria-label="Rolü kaldır" title="Rolü kaldır">✕</button>
-                  <div class="field" style="grid-column: 1 / -1"><label for="rpe-${i}">Persona (kimsin, nasıl düşünürsün)</label><textarea id="rpe-${i}" rows="5" data-f="roles.${i}.persona">${esc(r.persona)}</textarea></div>
-                  <div class="field" style="grid-column: 1 / -1"><label for="rp-${i}">Görevler (şef de bu metni görür; ilk satır tek cümlelik özet)</label><textarea id="rp-${i}" rows="10" data-f="roles.${i}.gorevler">${esc(r.gorevler)}</textarea></div>
-                  <div class="field" style="grid-column: 1 / -1"><label for="rsi-${i}">Sınırlar (ne yapmaz; zorlanabilenler "Salt okunur" ve izin modunda)</label><textarea id="rsi-${i}" rows="6" data-f="roles.${i}.sinirlar">${esc(r.sinirlar)}</textarea></div>
-                  <div class="note" style="grid-column: 1 / -1">Bağlam: eşiği geçen üye işi bitip 3 dakika boş kalınca, üst sınırı geçen ilk uygun anda bekçiden hamle alır; iki compact'tan sonraki hamle devir notuyla yenilemedir. Boş bırakılırsa rolün varsayılanı (yer tutucudaki değer) ya da genel ayar kullanılır.</div>
-                  <div class="note" style="grid-column: 1 / -1">Yetenekler: ${capText ? esc(capText) : 'global olanların hepsi açık, ek yetenek yok'} · <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler'de değiştir</a></div>
-                </div>` : ''}
+                <div class="role-move">
+                  <button class="btn icon small" data-act="role-move" data-i="${i}" data-dir="-1" ${i === 0 ? 'disabled' : ''} aria-label="${esc(r.label || 'Rol')}: yukarı taşı" title="Yukarı taşı">↑</button>
+                  <button class="btn icon small" data-act="role-move" data-i="${i}" data-dir="1" ${i === last ? 'disabled' : ''} aria-label="${esc(r.label || 'Rol')}: aşağı taşı" title="Aşağı taşı">↓</button>
+                </div>
               </div>`;
           }).join('')}
           </div>
           <div><button class="btn ghost" data-act="add-role">${ICON_PLUS} Rol ekle</button></div>
         </section>`;
+  },
+
+  // Tek rolün sayfası: rolün bütün ayarları (role.json, permissions.json, üç metin) ve yetenekleri.
+  rolePage(r, i) {
+    const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
+    const ctx = ROLE_CTX_DEFAULTS[r.id];
+    return `
+        <div class="role-page-top">
+          <button class="btn small ghost" data-act="role-back">← Roller</button>
+        </div>
+        <div class="role-title">
+          <span class="rdot" style="background: ${roleColor({ roleId: r.id, roleLabel: r.label })}"></span>
+          <h2 tabindex="-1">${esc(r.label || 'Adsız rol')}</h2>
+          <span class="mono note" title="Rolün kimliği ve klasörü: prompts/roles/${esc(r.id)}/">${esc(r.id)}</span>
+          <span class="grow"></span>
+          <button class="btn small ghost danger-text" data-act="del-role" data-i="${i}">Rolü sil</button>
+        </div>
+
+        <section class="section">
+          <div class="section-head"><h2>Genel</h2></div>
+          <div class="card set-card cols2">
+            <div class="field"><label for="rl-${i}">Rol adı</label><input id="rl-${i}" data-f="roles.${i}.label" value="${esc(r.label)}" maxlength="40"></div>
+            <div class="field"><label for="rs-${i}">Oturum adındaki kısa hali</label><input id="rs-${i}" data-f="roles.${i}.short" value="${esc(r.short)}" maxlength="24"></div>
+            <div class="field"><label for="rmo-${i}">Varsayılan model</label>
+              <select id="rmo-${i}" data-f="roles.${i}.model">${MODELS.map(([v, l]) => opt(v, l, r.model || '')).join('')}</select></div>
+            <div class="field"><label for="ref-${i}">Varsayılan effort</label>
+              <select id="ref-${i}" data-f="roles.${i}.effort">${EFFORTS.map(([v, l]) => opt(v, l, r.effort || '')).join('')}</select></div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head"><h2>Metinler</h2><span class="count">rolün sistem istemindeki bölümleri</span></div>
+          <div class="card set-card">
+            <div class="field"><label for="rpe-${i}">Persona</label><textarea id="rpe-${i}" rows="12" data-f="roles.${i}.persona">${esc(r.persona)}</textarea>
+              <span class="note">Kimsin, neye öncelik verirsin, deneyimle neyi fark edersin. Görev ya da yasak yazma; onların yeri aşağıda.</span></div>
+            <div class="field"><label for="rp-${i}">Görevler</label><textarea id="rp-${i}" rows="16" data-f="roles.${i}.gorevler">${esc(r.gorevler)}</textarea>
+              <span class="note">Ne yaparsın, hangi sırayla, hangi skill'i ne zaman çağırırsın. İlk satır tek cümlelik özet. Şef ekibin yalnızca bu metnini görür.</span></div>
+            <div class="field"><label for="rsi-${i}">Sınırlar</label><textarea id="rsi-${i}" rows="8" data-f="roles.${i}.sinirlar">${esc(r.sinirlar)}</textarea>
+              <span class="note">Ne yapmazsın ve neden. Zorlanabilenler aşağıdaki İzinler'de uygulanır.</span></div>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head"><h2>İzinler</h2><span class="count">oturuma zorlanır</span></div>
+          <div class="card set-card cols2">
+            <div class="field"><label for="rm-${i}">Varsayılan izin modu</label>
+              <select id="rm-${i}" data-f="roles.${i}.permissionMode">
+                ${opt('', 'Grup varsayılanı', r.permissionMode || '')}
+                ${PERMISSION_LABELS.map(([v, l]) => opt(v, l, r.permissionMode)).join('')}
+              </select></div>
+            <label class="check" style="align-self: end"><input type="checkbox" data-f="roles.${i}.readOnly" ${r.readOnly ? 'checked' : ''}>Salt okunur (Edit, Write, NotebookEdit kapalı)</label>
+            <div class="field"><label for="ral-${i}">Sormadan izin verilenler (her satıra bir kural)</label>
+              <textarea id="ral-${i}" class="mono" rows="4" data-f="roles.${i}.allowText" placeholder="Bash(npm test:*)">${esc(r.allowText)}</textarea></div>
+            <div class="field"><label for="rde-${i}">Kapalı araçlar (her satıra bir kural)</label>
+              <textarea id="rde-${i}" class="mono" rows="4" data-f="roles.${i}.denyText" placeholder="Bash(git push:*)">${esc(r.denyText)}</textarea></div>
+            <p class="note" style="grid-column: 1 / -1">Kurallar Claude Code izin yazımıyla: araç adı (<span class="mono">WebFetch</span>) ya da araç ve desen (<span class="mono">Bash(npm test:*)</span>). Yeni açılan ya da yenilenen oturumda geçerli olur.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head"><h2>Bağlam</h2><span class="count">bekçinin bu roldeki eşikleri</span></div>
+          <div class="card set-card cols2">
+            <div class="field"><label for="rcw-${i}">Bağlam eşiği (token)</label><input id="rcw-${i}" type="number" step="10000" data-f="roles.${i}.ctxWarn" value="${esc(r.ctxWarn || '')}" placeholder="${esc(ctx ? ctx[0] : 'genel ayar')}"></div>
+            <div class="field"><label for="rch-${i}">Bağlam üst sınırı (token)</label><input id="rch-${i}" type="number" step="10000" data-f="roles.${i}.ctxHigh" value="${esc(r.ctxHigh || '')}" placeholder="${esc(ctx ? ctx[1] : 'genel ayar')}"></div>
+            <p class="note" style="grid-column: 1 / -1">Eşiği geçen üye işi bitip 3 dakika boş kalınca, üst sınırı geçen ilk uygun anda bekçiden hamle alır; iki compact'tan sonraki hamle devir notuyla yenilemedir. Boş bırakılırsa rolün varsayılanı (yer tutucudaki değer) ya da genel ayar kullanılır.</p>
+          </div>
+        </section>
+
+        <section class="section">
+          <div class="section-head"><h2>Yetenekler</h2><span class="count">işaret hemen kaydedilir</span></div>
+          ${this.roleCapsEditor(r.id)}
+        </section>`;
+  },
+
+  // Rol sayfasındaki yetenek listesi: Yetenekler sekmesindeki işaretlerin yalnızca bu rol için olanı (aynı istek).
+  roleCapsEditor(rid) {
+    if (!state.settings.roles.some((x) => x.id === rid)) return '<p class="note">Rolü kaydedince yeteneklerini buradan seçebilirsin.</p>';
+    const c = this.caps;
+    if (!c) return '<div class="note">Yetenekler yükleniyor…</div>';
+    if (c.error) return `<div class="empty">Yetenekler alınamadı: ${esc(c.error)}</div>`;
+    const inv = c.inventory || [];
+    const offOf = (key) => c.globalOff[key] || [];
+    const on = (key) => !offOf(key).includes(rid);
+    const row = (key, checked, name, badges, desc) => `
+          <label class="cap-check">
+            <input type="checkbox" data-cap="${esc(key)}" data-role="${esc(rid)}" ${checked ? 'checked' : ''}>
+            <span class="cc-main"><span class="cap-head"><span class="cap-name mono">${esc(name)}</span>${badges}</span>
+              ${desc ? `<span class="cap-desc">${esc(desc)}</span>` : ''}</span>
+          </label>`;
+    const tok = (x) => (x.chars ? `<span class="note">~${Math.round(x.chars / CHARS_PER_TOK)} tok</span>` : '');
+    const card = (title, rows, note) => (rows.length ? `
+          <div class="section-head"><h3>${title}</h3><span class="count">${rows.length}</span></div>
+          ${note ? `<p class="note">${note}</p>` : ''}
+          <div class="card cap-list">${rows.join('')}</div>` : '');
+    const panel = [
+      ...c.mcps.map((m) => row(`pmcp:${m.id}`, m.roles.includes(rid), m.name, '<span class="badge acc-green">panel</span><span class="badge">MCP</span>', m.type === 'http' ? m.url : [m.command, ...(m.args || [])].join(' '))),
+      ...c.skills.map((s) => row(`pskill:${s.name}`, s.roles.includes(rid), s.name, `<span class="badge acc-green">${s.builtin ? 'panel' : 'yerel'}</span><span class="badge">skill</span>`, s.description)),
+    ];
+    const global = [
+      ...inv.filter((x) => x.kind === 'mcp').map((x) => row(x.key, on(x.key), x.name, '<span class="badge">MCP</span>', x.description)),
+      ...inv.filter((x) => x.kind === 'skill').map((x) => row(x.key, on(x.key), x.name, '<span class="badge">skill</span>', x.description)),
+      ...inv.filter((x) => x.kind === 'plugin').map((x) => row(x.key, on(x.key), x.name, `<span class="badge">eklenti</span>${x.hooks ? '<span class="badge warn" title="Kapatınca arka planda yaptığı iş de durur">kancalı</span>' : ''}${tok(x)}`, x.description)),
+    ];
+    // Oturumlarda görülen skill türleri kalabalık: tür başına "hepsi" işareti ve açılır liste.
+    const seen = [['synced', 'claude.ai skill\'leri'], ['project', 'Proje skill\'leri'], ['bundled', 'Claude Code yerleşik skill\'leri']].map(([kind, title]) => {
+      const list = inv.filter((x) => x.kind === kind);
+      if (!list.length) return '';
+      const openCount = list.filter((x) => on(x.key)).length;
+      return `
+          <div class="card cap-list">
+            ${row(`group:${kind}`, openCount > 0, `${title}: hepsi`, `<span class="note">${openCount}/${list.length} açık</span>`, 'İşareti kaldırınca bu roldeki hepsi kapanır.')}
+            <details class="cap-more"><summary>Tek tek seç</summary>
+              ${list.map((x) => row(x.key, on(x.key), x.name, tok(x), x.description)).join('')}
+            </details>
+          </div>`;
+    }).join('');
+    return `
+        <p class="note">Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur. Yeni yetenek eklemek ve diğer rollerle birlikte görmek için <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler</a>.</p>
+        ${card('Panel yetenekleri', panel, 'Panelle gelen ya da panelden eklenen; yalnızca işaretli rollere verilir.')}
+        ${card('Hesaplarda kurulu olanlar', global, 'İşareti kaldırınca bu roldeki oturumlarda kapanır; hesap ayarların değişmez.')}
+        ${seen}`;
   },
 
   // Rol işaret kutuları: panel yeteneğinde açık roller, global olanda kapatılmamış roller işaretli.
