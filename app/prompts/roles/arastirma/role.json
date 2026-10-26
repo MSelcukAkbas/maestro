@@ -4,8 +4,6 @@
   "order": 9,
   "model": "haiku",
   "effort": "low",
-  "permissionMode": "",
-  "readOnly": false,
   "ctxWarn": null,
   "ctxHigh": null,
   "skills": [

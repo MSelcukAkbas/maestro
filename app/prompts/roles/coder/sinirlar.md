@@ -1,0 +1,7 @@
+- Görevle ilgisiz yeniden düzenleme, biçim ya da adlandırma değişikliği yapma; diff'i şişirir, incelemeyi ve geri almayı zorlaştırır.
+- Aynı işi yapan yapı varken yenisini yazma; iki kopya zamanla ayrışır ve hata birinde düzeltilip ötekinde kalır.
+- Yeni bağımlılık eklemeden ya da derleme / yapılandırma ayarını geniş etkili biçimde değiştirmeden önce görevi verene sor; bunlar tüm ekibin ortamını etkiler.
+- Başarısız testi atlama, devre dışı bırakma ya da kodu geçirsin diye beklentisini gevşetme; hatayı gizler.
+- Belirsizlikte varsayımla ilerleme; yanlış varsayımla yazılan kod incelemede ve yeniden yazımda iki kez ödenir. Görevi verene sor.
+- Görev ya da kullanıcı istemedikçe commit, push, dal değiştirme gibi git işlemleri yapma; diğer üyeler aynı çalışma ağacında.
+- Parola, anahtar ve token'ı koda, loglara ve mesajlara yazma; depoya ya da loga düşen sır sızmış sayılır.

@@ -54,7 +54,7 @@ route('POST', '/api/setup/optimize', async (req) => {
       key: cleanText(r.key, 20), roleId: custom ? 'custom' : role ? role.id : '', label: custom ? cleanText(r.customLabel, 40) : role ? role.label : '?',
       model: MODELS.includes(r.model) ? r.model : '', effort: EFFORTS.includes(r.effort) ? r.effort : '', permissionMode: PERMISSION_MODES.includes(r.permissionMode) ? r.permissionMode : '',
       talkAll: !!r.talkAll, reportsTo: Array.isArray(r.reportsTo) ? r.reportsTo.map(String) : [],
-      prompt: custom ? String(r.customPrompt || '') : typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt : (role && role.prompt) || '',
+      prompt: custom ? String(r.customPrompt || '') : typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt : (role && role.gorevler) || '',
       manualPrompt: custom ? !!String(r.customPrompt || '').trim() : !!r.promptManual, caps: [...on], accountId: cleanText(r.accountId, 12),
     };
   });
@@ -76,7 +76,7 @@ route('POST', '/api/setup/optimize', async (req) => {
     proje: optimizer.projectSummary(project.path),
     kullanici_notu: String(body.goal || '').trim() || null,
     grup_varsayilan_izin: PERMISSION_MODES.includes(body.permissionMode) ? body.permissionMode : 'manual',
-    rol_katalogu: settings.roles.map((r) => ({ id: r.id, ad: r.label, varsayilan_model: r.model || '', varsayilan_effort: r.effort || '', gorev: String(r.prompt || '').split('\n')[0].slice(0, 200) })),
+    rol_katalogu: settings.roles.map((r) => ({ id: r.id, ad: r.label, varsayilan_model: r.model || '', varsayilan_effort: r.effort || '', gorev: String(r.gorevler || '').split('\n')[0].slice(0, 200) })),
     yetenekler: catalog,
     gecmis_harcama: optimizer.history(groups, stats),
     son_grup: recent,

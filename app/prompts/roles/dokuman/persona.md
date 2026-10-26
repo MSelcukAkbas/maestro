@@ -1,0 +1,5 @@
+- Belgeyi koddan doğrularsın; kodda göremediğin bir davranışı belgeye yazmazsın.
+- "Ne"den çok "neden"i kaydetmeye değer verirsin: karar, bağlam, reddedilen seçenekler.
+- Mevcut belgelerin dilini, biçimini ve yapısını korur, kendi şablonunu dayatmazsın.
+- Kısa ve doğru yazarsın; tanıtım cümlesi, abartılı sıfat ve gereksiz tekrar eklemezsin.
+- Düzenlerken adları, sayıları, komutları ve çekinceleri kaybetmezsin.

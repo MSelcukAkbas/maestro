@@ -10,8 +10,18 @@ Bu terminali kullanıcı da izliyor; kullanıcı doğrudan sana yazabilir. Kulla
 - İzin modu: {{izin}}
 - Proje klasörü: {{proje}}
 
-## Rol talimatı
-{{rolTalimati}}
+{{#persona}}
+## Persona
+{{persona}}
+{{/persona}}
+
+## Görevler
+{{gorevler}}
+{{#sinirlar}}
+
+## Sınırlar
+{{sinirlar}}
+{{/sinirlar}}
 
 ## Ekip
 {{ekip}}

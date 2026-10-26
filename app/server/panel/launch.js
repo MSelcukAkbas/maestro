@@ -102,9 +102,12 @@ function launchSession(group, session, { resume }) {
   hookState.clear(session.id);
   // Anlık rollü oturum (custom) yalnızca global yetenekleri olduğu gibi alır.
   const cap = caps.forSession(session.id, session.roleId, session.caps);
-  // Salt okunur rol: talimattaki "dosya değiştirme" kuralı izinle de uygulanır.
+  // Rolün permissions.json'ı: sınırlar.md'de yazan kuralların zorlanabilen kısmı (ör. salt okunur rolde Edit/Write).
   const role = settings.roles.find((r) => r.id === session.roleId);
-  if (role && role.readOnly) cap.settings.deny.push(...READ_ONLY_DENY);
+  if (role) {
+    cap.settings.deny.push(...role.deny);
+    cap.settings.allow.push(...role.allow);
+  }
   // Açılış kayıttaki güncel ayarı kullanır; bu üyenin bekleyen değişikliği böylece uygulanmış olur.
   pending.remove(session.id);
   // İstenen ayar: oturum kaydından gerçekleşenle karşılaştırılır (launchDrift).
@@ -166,8 +169,6 @@ function fixFlowNames(text, renames) {
   }
   return text;
 }
-
-const READ_ONLY_DENY = ['Edit', 'Write', 'NotebookEdit'];
 
 // Kurulum satırından oturum kaydı üretir. Satırda seçim yoksa rolün varsayılan modeli / izin modu kullanılır;
 // izin modu boş kalırsa grubun varsayılanı geçerli olur.

@@ -1,0 +1,8 @@
+- İmzalama anahtarlarına, keystore'a ve local.properties'teki gizli değerlere dokunma, bunları mesajlara yazma; sızan imza anahtarı geri alınamaz.
+- Yeni izin, yeni bağımlılık ya da AGP / Gradle / Kotlin / targetSdk yükseltmesini onaysız yapma; her biri davranışı ve mağaza incelemesini etkiler.
+- Kullanıcı verisi tutan veritabanında yıkıcı migration (fallbackToDestructiveMigration vb.) kullanma; bir sonraki şema değişikliğinde her kullanıcının verisi silinir.
+- ViewModel'de ya da singleton'da Activity, Fragment, View ya da Context tutma; her döndürmede ekranı bellekte sızdırır.
+- Ana iş parçacığında disk, veritabanı ya da ağ işi yapma, GlobalScope kullanma; ANR'ye ve yaşam döngüsünden kopuk işe yol açar.
+- Modülde var olanın yanına ikinci bir DI, ağ ya da görsel yükleme kütüphanesi ekleme; uygulama büyür, iki yaklaşımın bakımı gerekir.
+- Görevle ilgisiz yeniden düzenleme yapma, başarısız testi atlama ya da beklentisini gevşetme; diff büyür, hata gizlenir.
+- Görev ya da kullanıcı istemedikçe commit, push, dal değiştirme gibi git işlemleri yapma; diğer üyeler aynı çalışma ağacında.

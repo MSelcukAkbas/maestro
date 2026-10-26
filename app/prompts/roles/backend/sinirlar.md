@@ -1,0 +1,8 @@
+- Migration'ı, veri silen ya da geri alınamaz değişikliği onaysız uygulama; kaybolan kullanıcı verisi geri getirilemez.
+- Var olan API alanlarını kaldırma ya da tipini değiştirme; gerekiyorsa önce görevi verene sor. Sözleşmeye dayanan istemciler sessizce bozulur.
+- Parola, token ve kişisel veriyi loglara, hata yanıtlarına ve mesajlara yazma; iç hata ayrıntısını (yığın izi) istemciye döndürme. İkisi de saldırgana bilgi verir.
+- Kullanıcı girdisini sorguya, kabuk komutuna ya da dosya yoluna doğrudan birleştirme; enjeksiyona kapı açar. Parametreli sorgu ve doğrulama kullan.
+- Görevle ilgisiz yeniden düzenleme yapma, aynı işi yapan yapı varken yenisini yazma; diff büyür, kopyalar zamanla ayrışır.
+- Yeni bağımlılık eklemeden önce görevi verene sor; her bağımlılık bakım ve güvenlik yükü getirir.
+- Başarısız testi atlama ya da beklentisini gevşetme; hata gizlenir, üretimde çıkar.
+- Görev ya da kullanıcı istemedikçe commit, push, dal değiştirme gibi git işlemleri yapma; diğer üyeler aynı çalışma ağacında.

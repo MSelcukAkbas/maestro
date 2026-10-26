@@ -111,7 +111,7 @@ const SettingsView = {
       this.render();
     } else if (a === 'add-role') {
       const id = `rol${Date.now().toString(36)}`;
-      this.model.roles.push({ id, label: '', short: '', prompt: '', permissionMode: '', model: '' });
+      this.model.roles.push({ id, label: '', short: '', persona: '', gorevler: '', sinirlar: '', permissionMode: '', model: '' });
       this.openRoles.add(id);
       this.dirty = true;
       this.render();
@@ -488,7 +488,7 @@ const SettingsView = {
                       ${r.permissionMode ? `<span class="badge">${esc(permLabel(r.permissionMode))}</span>` : ''}
                       ${rc && rc.add.length ? `<span class="badge acc-green">+${rc.add.length} yetenek</span>` : ''}
                       ${rc && rc.off.length ? `<span class="badge">${rc.off.length} kapalı</span>` : ''}</span>
-                    <span class="rs-desc">${esc(firstLine(r.prompt))}</span>
+                    <span class="rs-desc">${esc(firstLine(r.gorevler))}</span>
                   </span>
                   <span class="chev" aria-hidden="true">${open ? '▾' : '▸'}</span>
                 </button>
@@ -509,7 +509,9 @@ const SettingsView = {
                   <div class="field"><label for="rcw-${i}">Bağlam eşiği (token)</label><input id="rcw-${i}" type="number" step="10000" data-f="roles.${i}.ctxWarn" value="${esc(r.ctxWarn || '')}" placeholder="${esc(ROLE_CTX_DEFAULTS[r.id] ? ROLE_CTX_DEFAULTS[r.id][0] : 'genel ayar')}"></div>
                   <div class="field"><label for="rch-${i}">Bağlam üst sınırı (token)</label><input id="rch-${i}" type="number" step="10000" data-f="roles.${i}.ctxHigh" value="${esc(r.ctxHigh || '')}" placeholder="${esc(ROLE_CTX_DEFAULTS[r.id] ? ROLE_CTX_DEFAULTS[r.id][1] : 'genel ayar')}"></div>
                   <button class="btn icon" style="align-self: end" data-act="del-role" data-i="${i}" aria-label="Rolü kaldır" title="Rolü kaldır">✕</button>
-                  <div class="field" style="grid-column: 1 / -1"><label for="rp-${i}">Rol talimatı</label><textarea id="rp-${i}" rows="8" data-f="roles.${i}.prompt">${esc(r.prompt)}</textarea></div>
+                  <div class="field" style="grid-column: 1 / -1"><label for="rpe-${i}">Persona (kimsin, nasıl düşünürsün)</label><textarea id="rpe-${i}" rows="5" data-f="roles.${i}.persona">${esc(r.persona)}</textarea></div>
+                  <div class="field" style="grid-column: 1 / -1"><label for="rp-${i}">Görevler (şef de bu metni görür; ilk satır tek cümlelik özet)</label><textarea id="rp-${i}" rows="10" data-f="roles.${i}.gorevler">${esc(r.gorevler)}</textarea></div>
+                  <div class="field" style="grid-column: 1 / -1"><label for="rsi-${i}">Sınırlar (ne yapmaz; zorlanabilenler "Salt okunur" ve izin modunda)</label><textarea id="rsi-${i}" rows="6" data-f="roles.${i}.sinirlar">${esc(r.sinirlar)}</textarea></div>
                   <div class="note" style="grid-column: 1 / -1">Bağlam: eşiği geçen üye işi bitip 3 dakika boş kalınca, üst sınırı geçen ilk uygun anda bekçiden hamle alır; iki compact'tan sonraki hamle devir notuyla yenilemedir. Boş bırakılırsa rolün varsayılanı (yer tutucudaki değer) ya da genel ayar kullanılır.</div>
                   <div class="note" style="grid-column: 1 / -1">Yetenekler: ${capText ? esc(capText) : 'global olanların hepsi açık, ek yetenek yok'} · <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler'de değiştir</a></div>
                 </div>` : ''}

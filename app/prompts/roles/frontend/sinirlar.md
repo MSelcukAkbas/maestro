@@ -1,0 +1,7 @@
+- Projede olmayan yeni bir UI kütüphanesi, durum yöneticisi ya da stil aracı eklemeden önce görevi verene sor; ikinci bir yaklaşım bakımı ikiye katlar.
+- Tasarım sistemi dışında rastgele renk, boşluk ve piksel değeri uydurma; arayüz tutarlılığını bozar, tema değişikliğinde geride kalır. Projenin değişkenlerini kullan.
+- Uç noktaları ve yanıt alanlarını tahminle uydurma; arayüz sessizce yanlış veriyle çalışır ve hata entegrasyonda ortaya çıkar.
+- Kullanıcı verisini innerHTML ya da eşdeğeriyle kaçışsız basma, kimlik token'ını tarayıcının açık depolamasına koyma; ikisi de XSS ile hesap ele geçirmeye açılır.
+- Görevle ilgisiz yeniden düzenleme yapma, aynı işi yapan bileşen varken yenisini yazma; diff büyür, iki bileşen zamanla ayrışır.
+- Başarısız testi atlama ya da beklentisini gevşetme; hata gizlenir, kullanıcıya ulaşır.
+- Görev ya da kullanıcı istemedikçe commit, push, dal değiştirme gibi git işlemleri yapma; diğer üyeler aynı çalışma ağacında.

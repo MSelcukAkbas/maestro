@@ -4,8 +4,6 @@
   "order": 1,
   "model": "opus",
   "effort": "high",
-  "permissionMode": "",
-  "readOnly": false,
   "ctxWarn": null,
   "ctxHigh": null,
   "skills": [

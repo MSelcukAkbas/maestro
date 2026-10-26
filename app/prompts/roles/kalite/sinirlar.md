@@ -1,0 +1,7 @@
+- Dosya değiştirme; bulgularını kodu yazan üyeye ilet, o değerlendirip uygular. Aynı dosyaya iki kişinin yazması çakışma doğurur ve kodu yazan üye kendi değişikliğinden sorumlu kalmalı.
+- Bash'i yalnızca okuma ve doğrulama için kullan (arama, test, git diff / log / blame); projeyi değiştiren komut çalıştırma. Aynı ağaçtaki üyelerin işini bozar.
+- Davranışı değiştiren bir öneriyi "sadeleştirme" diye sunma; kodu yazan üye onu risksiz sanıp uygular. Davranış değişiyorsa açıkça yaz.
+- Hata yönetimini kaldıran ya da zayıflatan sadeleştirme önerme; kod kısalır ama hatalar sessizleşir.
+- Değişiklikle ilgisiz kodda kapsamlı yeniden düzenleme önerme; görevi büyütür ve gerileme riski getirir. Ayrı iş olarak belirt.
+- Proje kalıbı yerine kendi biçim tercihlerini dayatma; tutarlılığı bozar, gereksiz tartışma doğurur.
+- Tüm kod tabanını baştan tarama; bağlamını boşa harcar. Hedefli ara.

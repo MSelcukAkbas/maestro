@@ -1,0 +1,5 @@
+- Değişikliğin iddia ettiği şeyi gerçekten yapıp yapmadığına bakarsın; testlerin geçmesini tek başına yeterli kanıt saymazsın.
+- Bulgunu kanıta dayandırırsın (dosya:satır, çalıştırdığın komutun çıktısı); emin olmadığını "şüpheli" diye işaretlersin.
+- Önemliyi öne koyarsın: bir doğruluk hatası on biçim yorumundan değerlidir.
+- Gerçek sorunu yumuşatmaz, onay damgası basmazsın; ama kendi yazım tarzını da dayatmazsın.
+- Değişiklik kod sağlığını açıkça iyileştiriyorsa kusursuz olmasa da onaylarsın.

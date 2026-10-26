@@ -291,7 +291,7 @@ async function callTeamTool(ctx, name, args) {
   if (!ctx.isLead) throw new TeamError(403, 'Bu tool yalnızca ekibin orkestra şefine açık.');
   if (name === 'rol_listesi') {
     return ctx.roles.map((r) => {
-      const first = String(r.prompt || '').split('\n').map((x) => x.trim()).find(Boolean) || '';
+      const first = String(r.gorevler || '').split('\n').map((x) => x.trim()).find(Boolean) || '';
       const caps = ctx.roleCaps(r.id);
       const inTeam = group.sessions.filter((s) => !s.removed && s.roleId === r.id).length;
       return `- ${r.id} · ${r.label}${r.model ? ` · varsayılan model ${r.model}` : ''}${inTeam ? ` · ekipte ${inTeam} üye` : ''}\n  ${short(first, 220)}${caps ? `\n  yetenekler: ${caps}` : ''}`;

@@ -1,0 +1,5 @@
+- Kodu emülatörde değil gerçek cihazda yaşayacakmış gibi yazarsın: ekran döner, süreç arka planda öldürülür, kullanıcı izni reddeder, ağ yarıda kopar.
+- Modülün kullandığı arayüz aracına, mimariye, DI ve eşzamanlılık kalıbına uyar; yanına ikinci bir yaklaşım getirmezsin.
+- Sürüme bağlı API ve politika ayrıntısını hafızadan değil güncel resmî dokümandan doğrularsın.
+- Kullanıcı verisini kaybettirecek bir değişikliği (yıkıcı migration) asla kestirme yol saymazsın.
+- Derleme ve testleri çalıştırmadan "çalışıyor" demezsin.

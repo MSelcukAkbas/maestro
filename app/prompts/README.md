@@ -6,7 +6,7 @@ gerekmez. Ayarlar → Roller'den yapılan kayıt da aynı dosyalara yazılır.
 
 ## Ne zaman geçerli olur
 
-- **Üye istemi** (rol talimatı ve `shared/` bölümleri) yalnızca oturum açılırken yazılır. Değişiklik yeni açılan
+- **Üye istemi** (rolün persona / görevler / sınırlar metni ve `shared/` bölümleri) yalnızca oturum açılırken yazılır. Değişiklik yeni açılan
   üyeye ya da bekçinin yenilediği üyeye geçer. Çalışan oturum eski istemiyle devam eder, çünkü resume sistem istemini
   korur.
 - **Yardımcı modeller** (`tools/`) ve **bildirimler** (`messages/`) her kullanımda dosyayı okur. Değişiklik bir
@@ -17,8 +17,32 @@ gerekmez. Ayarlar → Roller'den yapılan kayıt da aynı dosyalara yazılır.
 Klasör adı rolün kimliğidir: küçük harf, rakam, `-` ya da `_`, en fazla 24 karakter. Adı `_` ile başlayan klasör
 okunmaz. Ayarlar'dan silinen rolün klasörü silinmez, `_silinen-<kimlik>-<zaman>` adıyla kenara alınır.
 
-**`prompt.md`** rolün talimatıdır. Üye isteminde "## Rol talimatı" bölümüne aynen girer. Şefin isteminde ayrıca
-"Ekip üyelerinin görevleri" altında da yer alır.
+Rolün metni üç dosyadır. Üye isteminde bu sırayla kendi başlıklarının altına girer:
+
+| dosya | başlık | içerik |
+|---|---|---|
+| `persona.md` | ## Persona | Kimsin, nasıl düşünürsün, neye değer verirsin |
+| `gorevler.md` | ## Görevler | Ne yaparsın, iş akışı, hangi skill'i ne zaman çağırırsın, kime devredersin. İlk satır tek cümlelik özet |
+| `sinirlar.md` | ## Sınırlar | Ne yapmazsın ve neden |
+
+Şef, ekibin her üyesi için yalnızca `gorevler.md`'yi görür ("Ekip üyelerinin görevleri"). Persona ve sınırlar
+şefe gitmez, böylece şefin istemi ekip büyüdükçe şişmez. Dosyalarda `#` ve `##` başlık kullanma (istemin kendi
+başlıkları); gerekirse `###` kullan.
+
+**`permissions.json`** panelin oturuma **zorladığı** izinlerdir. `sinirlar.md` kuralı söyler, bu dosya uygular:
+
+```json
+{ "mode": "", "allow": [], "deny": ["Edit", "Write", "NotebookEdit"] }
+```
+
+| alan | anlamı |
+|---|---|
+| `mode` | Varsayılan izin modu (`manual`, `acceptEdits`, `auto`, `plan`). Boş bırakılırsa grubun varsayılanı kullanılır |
+| `allow` | Sormadan izin verilen araçlar (Claude Code izin kuralı yazımı, ör. `Bash(npm test:*)`) |
+| `deny` | Kapalı araçlar. Edit, Write ve NotebookEdit'in üçü de varsa rol "Salt okunur" sayılır |
+
+Ayarlar ekranındaki "Salt okunur" kutusu bu üç aracı `deny`'a ekler ya da çıkarır. Elle yazdığın diğer `allow` /
+`deny` kuralları korunur.
 
 **`role.json`** rolün ayarlarını tutar:
 
@@ -29,12 +53,11 @@ okunmaz. Ayarlar'dan silinen rolün klasörü silinmez, `_silinen-<kimlik>-<zama
 | `order` | Listedeki sıra |
 | `model` | Varsayılan model: `opus`, `sonnet`, `haiku`. Boş bırakılırsa hesabın varsayılanı kullanılır |
 | `effort` | Varsayılan effort: `low` … `max`. Boş bırakılırsa modelin varsayılanı kullanılır |
-| `permissionMode` | Varsayılan izin modu. Boş bırakılırsa grubun varsayılanı kullanılır |
-| `readOnly` | `true` ise Edit, Write ve NotebookEdit kapatılır |
 | `ctxWarn`, `ctxHigh` | Bekçinin bağlam eşiği ve üst sınırı (token). `null` ise rolün ya da genel ayarın varsayılanı kullanılır |
 | `skills` | Bu role verilen, panelle gelen skill'ler (`skills/` klasöründeki adlar) |
 
-Kurulumda bir ekip için yazılan özel talimat yalnızca o ekipte geçerlidir; `prompt.md`'yi değiştirmez.
+Kurulumda bir ekip için yazılan özel talimat yalnızca o ekipte geçerlidir ve yalnızca görevlerin yerine geçer; persona ve
+sınırlar aynen kalır, `gorevler.md` değişmez.
 
 ## shared/
 
@@ -65,11 +88,13 @@ hatası istemde görünür.
 | `effort` | Effort; seçilmediyse boş |
 | `izin` | İzin modunun açıklaması |
 | `proje` | Proje klasörü |
-| `rolTalimati` | Rol talimatı: ekibe özel talimat, yoksa rolün `prompt.md`'si |
+| `persona` | Rolün `persona.md`'si; anlık rolde boş |
+| `gorevler` | Ekibe özel talimat, yoksa rolün `gorevler.md`'si |
+| `sinirlar` | Rolün `sinirlar.md`'si; anlık rolde boş |
 | `ekip` | Ekip listesi, üye başına bir satır |
 | `sef` | Bu üye ekibin şefi mi (koşul olarak kullanılır) |
 | `sefEkipli` | Şef, ve ekipte başka üye var |
-| `uyeGorevleri` | Şefe giden liste: her üye için `### ad — rol` ve rol talimatı |
+| `uyeGorevleri` | Şefe giden liste: her üye için `### ad — rol` ve görevleri (persona ve sınırlar olmadan) |
 | `raporVerdiklerin` | Üyenin rapor verdiği üyeler (virgülle); yoksa boş |
 | `raporVerenler` | Üyeye rapor verenler; yoksa boş |
 | `herkesle` | Üye herkesle konuşabilir mi |

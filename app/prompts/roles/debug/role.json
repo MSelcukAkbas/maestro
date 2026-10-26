@@ -4,8 +4,6 @@
   "order": 7,
   "model": "sonnet",
   "effort": "high",
-  "permissionMode": "",
-  "readOnly": false,
   "ctxWarn": null,
   "ctxHigh": null,
   "skills": [

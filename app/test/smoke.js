@@ -92,7 +92,7 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     const s2 = await hit('GET', '/api/state');
     const saved = await hit('PUT', '/api/settings', s2.settings);
     // Kaydet / geri oku: rol alanları korunmalı (boş alanların false / null'a dönmesi dışında).
-    const norm = (rs) => JSON.stringify(rs.map((r) => ({ id: r.id, label: r.label, model: r.model || '', effort: r.effort || '', mode: r.permissionMode || '', prompt: r.prompt, ro: !!r.readOnly, w: r.ctxWarn || null, h: r.ctxHigh || null })));
+    const norm = (rs) => JSON.stringify(rs.map((r) => ({ id: r.id, label: r.label, model: r.model || '', effort: r.effort || '', mode: r.permissionMode || '', persona: r.persona, gorevler: r.gorevler, sinirlar: r.sinirlar, ro: !!r.readOnly, w: r.ctxWarn || null, h: r.ctxHigh || null })));
     if (norm((saved.settings || saved).roles) !== norm(s2.settings.roles)) fails.push('PUT /api/settings rol alanlarını korumadı');
     await hit('POST', '/api/caps/mcp', { name: 'duman-mcp', type: 'http', url: 'https://example.invalid/mcp' });
     const mid = ((await hit('GET', '/api/caps')).mcps.find((m) => m.name === 'duman-mcp') || {}).id;

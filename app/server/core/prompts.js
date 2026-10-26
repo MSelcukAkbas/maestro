@@ -1,5 +1,6 @@
 // İstem ve rol klasörü (app/prompts/): kullanıcının elle düzenlediği metinler .md, ayarlar .json.
-//   roles/<id>/role.json + prompt.md   rol ayarları ve rol talimatı (adı "_" ile başlayan klasör okunmaz)
+//   roles/<id>/                         role.json (ayarlar), persona.md, gorevler.md, sinirlar.md, permissions.json
+//                                       (panelin zorladığı izinler); adı "_" ile başlayan klasör okunmaz
 //   shared/*.md                         üye sistem isteminin ortak bölümleri (ad sırasıyla birleşir)
 //   tools/<ad>/tool.json + *.md         panelin yardımcı model çağrılarının (bekçi, kurulum danışmanı, …) metni ve ayarı
 //   messages/<ad>.md                    panelden üyelere giden bildirimler ("[Claude Panel · …]")
@@ -14,6 +15,11 @@ const PROMPTS_DIR = process.env.CLAUDE_PANEL_PROMPTS || path.join(APP_ROOT, 'pro
 const ROLE_ID = /^[a-z0-9][a-z0-9_-]{0,23}$/;
 // Rol klasörü taraması en fazla bu sıklıkta yenilenir (settings.roles sık okunur).
 const ROLE_RECHECK_MS = 1000;
+// Rol klasöründeki metin dosyaları (üye isteminde bu sırayla) ve izin dosyası.
+const ROLE_TEXTS = ['persona', 'gorevler', 'sinirlar'];
+const ROLE_FILES = ['role.json', ...ROLE_TEXTS.map((k) => `${k}.md`), 'permissions.json'];
+// Salt okunur rol: bu araçlar permissions.json "deny"de. Ayarlar ekranındaki "Salt okunur" kutusu bunları ekler / çıkarır.
+const READ_ONLY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
 const files = new Map();
 
@@ -65,18 +71,24 @@ function roleDirs() {
   } catch { return []; }
 }
 
+const strList = (v) => (Array.isArray(v) ? v.filter((x) => typeof x === 'string' && x) : []);
+
 function readRole(id) {
   const cfg = json(`roles/${id}/role.json`);
   if (!cfg || !cfg.label) return null;
+  const perm = json(`roles/${id}/permissions.json`) || {};
+  const deny = strList(perm.deny);
   return {
     role: {
       id,
       label: String(cfg.label),
       short: String(cfg.short || cfg.label),
-      prompt: text(`roles/${id}/prompt.md`) || '',
-      permissionMode: cfg.permissionMode || '',
+      ...Object.fromEntries(ROLE_TEXTS.map((k) => [k, text(`roles/${id}/${k}.md`) || ''])),
+      permissionMode: perm.mode || '',
+      allow: strList(perm.allow),
+      deny,
+      readOnly: READ_ONLY_TOOLS.every((t) => deny.includes(t)),
       model: cfg.model || '',
-      readOnly: !!cfg.readOnly,
       effort: cfg.effort || '',
       ctxWarn: cfg.ctxWarn || null,
       ctxHigh: cfg.ctxHigh || null,
@@ -91,7 +103,7 @@ function loadRoles() {
   const now = Date.now();
   if (roleCache && now - roleCache.at < ROLE_RECHECK_MS) return roleCache;
   const ids = roleDirs();
-  const sig = ids.map((id) => ['role.json', 'prompt.md'].map((f) => {
+  const sig = ids.map((id) => ROLE_FILES.map((f) => {
     const st = statOf(path.join(PROMPTS_DIR, 'roles', id, f));
     return st ? `${st.mtimeMs}:${st.size}` : '-';
   }).join('/') + `@${id}`).join('|');
@@ -101,7 +113,8 @@ function loadRoles() {
   return roleCache;
 }
 
-// [{ id, label, short, prompt, permissionMode, model, readOnly, effort, ctxWarn, ctxHigh }], role.json "order" sırasıyla.
+// [{ id, label, short, persona, gorevler, sinirlar, permissionMode, allow, deny, readOnly, model, effort, ctxWarn, ctxHigh }],
+// role.json "order" sırasıyla.
 // Dönen diziyi değiştirme.
 function roles() {
   return loadRoles().list;
@@ -125,14 +138,23 @@ function saveRoles(list) {
     const old = json(`roles/${r.id}/role.json`) || {};
     const cfg = {
       label: r.label, short: r.short || r.label, order: i + 1,
-      model: r.model || '', effort: r.effort || '', permissionMode: r.permissionMode || '',
-      readOnly: !!r.readOnly, ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null,
+      model: r.model || '', effort: r.effort || '', ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null,
       skills: Array.isArray(old.skills) ? old.skills : [],
     };
-    const cfgText = `${JSON.stringify(cfg, null, 2)}\n`;
-    if (text(`roles/${r.id}/role.json`) !== cfgText.replace(/\n+$/, '')) writeFile(`roles/${r.id}/role.json`, cfgText);
-    const prompt = String(r.prompt || '').replace(/\r\n/g, '\n').replace(/\n+$/, '');
-    if ((text(`roles/${r.id}/prompt.md`) ?? null) !== prompt) writeFile(`roles/${r.id}/prompt.md`, `${prompt}\n`);
+    // İzinler: ekrandan yalnızca mod ve "Salt okunur" gelir; elle yazılmış allow / deny korunur.
+    const oldPerm = json(`roles/${r.id}/permissions.json`) || {};
+    const deny = strList(oldPerm.deny).filter((t) => !READ_ONLY_TOOLS.includes(t));
+    const perm = { mode: r.permissionMode || '', allow: strList(oldPerm.allow), deny: r.readOnly ? [...READ_ONLY_TOOLS, ...deny] : deny };
+    const writeJsonIfChanged = (rel, v) => {
+      const t = `${JSON.stringify(v, null, 2)}\n`;
+      if (text(rel) !== t.replace(/\n+$/, '')) writeFile(rel, t);
+    };
+    writeJsonIfChanged(`roles/${r.id}/role.json`, cfg);
+    writeJsonIfChanged(`roles/${r.id}/permissions.json`, perm);
+    for (const k of ROLE_TEXTS) {
+      const v = String(r[k] || '').replace(/\r\n/g, '\n').replace(/\n+$/, '');
+      if ((text(`roles/${r.id}/${k}.md`) ?? '') !== v) writeFile(`roles/${r.id}/${k}.md`, `${v}\n`);
+    }
   });
   roleCache = null;
 }
@@ -214,4 +236,4 @@ function sharedSections() {
   return names.map((f) => text(`shared/${f}`)).filter((t) => t != null);
 }
 
-module.exports = { PROMPTS_DIR, ROLE_ID, text, json, roles, role, saveRoles, skillRoles, setSkillRoles, tool, message, render, sharedSections };
+module.exports = { PROMPTS_DIR, ROLE_ID, ROLE_TEXTS, READ_ONLY_TOOLS, text, json, roles, role, saveRoles, skillRoles, setSkillRoles, tool, message, render, sharedSections };

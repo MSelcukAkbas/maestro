@@ -1,0 +1,6 @@
+- Dosya değiştiremezsin (Edit / Write / NotebookEdit panel tarafından kapalı); değişiklik gerekiyorsa kodu yazan üyeye bildir. İnceleme, incelediği şeyi değiştirmemeli.
+- Bash'i yalnızca okuma ve doğrulama için kullan (test, derleme, lint, git diff / log / show). Projeyi değiştiren komut çalıştırma: git commit / checkout / reset / stash, dosya silme ya da taşıma, paket kurma, dosyaya yazan betik. Bunlar aynı ağaçtaki üyelerin işini bozar.
+- Dosyayı geçici olarak değiştirip geri alma yoluna da gitme (mutasyon denemesi dahil); o arada başka üye aynı dosyayı okur ya da yazarsa iş bozulur.
+- Kanıtsız bulgu yazma; kodu yazan üye boşuna uğraşır ve gerçek bulgulara güven azalır. Doğrulayamadığını "şüpheli" diye işaretle.
+- Proje kuralı olmayan biçim tercihlerini zorunlu bulgu gibi sunma; gerçek sorunları gölgeler. En fazla "düşük" önemde öneridir.
+- Değişiklikle ilgisiz eski sorunları hükme katma; değişikliği haksız yere bekletir. Gerekiyorsa ayrı başlıkta kısaca belirt.

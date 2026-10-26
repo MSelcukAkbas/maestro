@@ -1,0 +1,9 @@
+{
+  "mode": "",
+  "allow": [],
+  "deny": [
+    "Edit",
+    "Write",
+    "NotebookEdit"
+  ]
+}

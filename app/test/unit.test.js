@@ -119,7 +119,7 @@ test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan
   const roles = prompts.roles();
   const ids = roles.map((r) => r.id);
   assert.ok(ids.length >= 14, 'rol klasörleri okunamadı');
-  for (const r of roles) assert.ok(r.label && r.prompt.trim(), `${r.id}: ad ya da talimat boş`);
+  for (const r of roles) assert.ok(r.label && r.persona.trim() && r.gorevler.trim() && r.sinirlar.trim(), `${r.id}: ad, persona, görevler ya da sınırlar boş`);
   // Kullanıcı kararı (CLAUDE.md): şef opus, araştırma / doküman haiku, diğerleri sonnet; Fable yok.
   const model = Object.fromEntries(roles.map((r) => [r.id, r.model]));
   assert.strictEqual(model.sef, 'opus');
@@ -307,18 +307,28 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
     const list = p.roles().map((r) => ({ ...r }));
     out.n = list.length;
     const coderSkills = p.skillRoles();
-    list[0].prompt = 'yeni talimat\\n\\nikinci';
-    list.push({ id: 'yeni-rol', label: 'Yeni', short: 'yeni', prompt: 'x', model: 'haiku' });
+    list[0].gorevler = 'yeni talimat\\n\\nikinci';
+    list.push({ id: 'yeni-rol', label: 'Yeni', short: 'yeni', gorevler: 'x', readOnly: true, model: 'haiku' });
     p.saveRoles(list.filter((r) => r.id !== 'dokuman'));
-    out.first = p.roles()[0].prompt;
+    out.first = p.roles()[0].gorevler;
     out.last = p.roles().at(-1).id;
     out.hasDoc = p.roles().some((r) => r.id === 'dokuman');
     out.skillsKept = JSON.stringify(p.skillRoles()[Object.keys(coderSkills)[0]]) === JSON.stringify(coderSkills[Object.keys(coderSkills)[0]]);
     p.setSkillRoles('deneme-skill', ['yeni-rol']);
     out.skill = p.skillRoles()['deneme-skill'];
-    require('fs').writeFileSync(require('path').join(p.PROMPTS_DIR, 'roles', 'sef', 'prompt.md'), 'elle\\r\\n');
+    require('fs').writeFileSync(require('path').join(p.PROMPTS_DIR, 'roles', 'sef', 'persona.md'), 'elle\\r\\n');
     const t0 = Date.now(); while (Date.now() - t0 < 1100);
-    out.manual = p.role('sef').prompt;
+    out.manual = p.role('sef').persona;
+    out.perm = JSON.parse(require('fs').readFileSync(require('path').join(p.PROMPTS_DIR, 'roles', 'yeni-rol', 'permissions.json'), 'utf8'));
+    out.newRole = p.role('yeni-rol');
+    out.review = p.role('review');
+    // Üye istemi: persona / görevler / sınırlar bölümleri; şefe üyenin yalnızca görevleri gider.
+    const { buildPrompt } = require('./server/panel/prompt');
+    const mk = (id, roleId, extra) => ({ id, name: id, roleId, roleLabel: roleId, accountId: 'x', reportsTo: [], ...extra });
+    const g = { name: 'G', permissionMode: 'manual', sessions: [mk('a', 'sef'), mk('b', 'review'), mk('c', 'coder', { rolePrompt: 'ekibe özel görev' })] };
+    out.lead = buildPrompt(g, g.sessions[0], { path: 'C:/p' }, []);
+    out.member = buildPrompt(g, g.sessions[1], { path: 'C:/p' }, []);
+    out.custom = buildPrompt(g, g.sessions[2], { path: 'C:/p' }, []);
     process.stdout.write(JSON.stringify(out));`;
   const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_PROMPTS: dir, CLAUDE_PANEL_DATA: tmp('prompts-data') }, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
@@ -329,6 +339,20 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   assert.ok(o.skillsKept);
   assert.deepStrictEqual(o.skill, ['yeni-rol']);
   assert.strictEqual(o.manual, 'elle');
+  // "Salt okunur" permissions.json deny'ına yazılır; review'da bu araçlar kapalı.
+  assert.deepStrictEqual(o.perm, { mode: '', allow: [], deny: ['Edit', 'Write', 'NotebookEdit'] });
+  assert.strictEqual(o.newRole.readOnly, true);
+  assert.ok(o.review.readOnly && o.review.deny.includes('Write'));
+  const sections = (t) => (t.match(/^## .+$/gm) || []);
+  for (const h of ['## Persona', '## Görevler', '## Sınırlar']) assert.ok(sections(o.member).includes(h), `üye isteminde ${h} yok`);
+  assert.ok(o.member.includes(o.review.persona.split('\n')[0]) && o.member.includes(o.review.sinirlar.split('\n')[0]));
+  // Şefin "Ekip üyelerinin görevleri" bölümünde review'ın görevleri var, personası / sınırları yok.
+  const tasks = o.lead.split('## Ekip üyelerinin görevleri')[1].split('\n## ')[0];
+  assert.ok(tasks.includes(o.review.gorevler.split('\n')[0]));
+  assert.ok(!tasks.includes(o.review.persona.split('\n')[0]) && !tasks.includes(o.review.sinirlar.split('\n')[0]));
+  assert.ok(tasks.includes('ekibe özel görev'));
+  // Ekibe özel talimat yalnızca görevlerin yerine geçer.
+  assert.ok(o.custom.includes('## Görevler\nekibe özel görev') && sections(o.custom).includes('## Persona'));
   assert.ok(fs.readdirSync(path.join(dir, 'roles')).some((d) => d.startsWith('_silinen-dokuman-')));
   // Roller settings.json'a yazılmaz.
   const data = tmp('store');

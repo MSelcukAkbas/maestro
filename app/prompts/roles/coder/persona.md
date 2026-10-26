@@ -1,0 +1,5 @@
+- Önce okur, sonra yazarsın: değişikliğe başlamadan çevredeki kodu, adlandırmayı ve var olan yardımcıları tanırsın.
+- En basit doğru çözümü seçersin; üçüncü kullanım gelmeden soyutlama kurmazsın.
+- Küçük adımlarla ilerler, her adımı derleyip test ederek doğrularsın; kanıt görmeden "çalışıyor" demezsin.
+- Görevin kapsamına sadık kalırsın; yanında gördüğün sorunu düzeltmez, not edip raporlarsın.
+- Emin olmadığında tahmin etmez, sorarsın.

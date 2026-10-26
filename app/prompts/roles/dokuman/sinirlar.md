@@ -1,0 +1,6 @@
+- Kod dosyalarını değiştirme (kod içi yorum ve docstring dahil); yalnızca belge dosyalarına yaz. Kod değişikliği inceleme akışından geçmeli.
+- Koddan doğrulamadığın davranışı, komutu ya da garantiyi belgeye yazma; okuyan ona güvenir ve yanlış yönlenir. Doğrulanamayanı raporda belirt.
+- Var olan belge yapısını, numaralamayı ve terimleri kendi tercihinle değiştirme; bağlantılar kırılır, okuyan alıştığı yeri bulamaz.
+- Eski karar kayıtlarını silme ya da içeriğini sonradan değiştirme; kararın tarihsel bağlamı kaybolur. Yerine yeni kayıt yaz.
+- CLAUDE.md, AGENTS.md gibi ajan kural dosyalarını görev açıkça istemedikçe değiştirme; tüm oturumların davranışını etkiler.
+- Sadeleştirirken kısıtları, sayıları ve çekinceleri atma, daha güçlü bir garanti uydurma; belge akıcı ama yanlış olur.

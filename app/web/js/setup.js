@@ -162,7 +162,7 @@ const SetupView = {
   },
 
   rolePromptOf(row) {
-    return row.prompt != null ? row.prompt : (this.roleOf(row) || {}).prompt || '';
+    return row.prompt != null ? row.prompt : (this.roleOf(row) || {}).gorevler || '';
   },
 
   roleOf(row) {
@@ -636,7 +636,7 @@ const SetupView = {
               ${capsHtml ? `<details class="row-more"${'caps' in mk || this.openMore.has(r.key) ? ' open' : ''}><summary>Yetenekler</summary>${capsHtml}</details>` : ''}` : `
               <details class="row-more"${'prompt' in mk || 'caps' in mk || this.openMore.has(r.key) ? ' open' : ''}>
                 <summary>Talimat ve yetenekler${r.prompt != null ? ' <span class="badge">bu ekibe özel talimat</span>' : ''}</summary>
-                <div class="field"${om('prompt')}><label for="rp-${r.key}">Rol talimatı (yalnızca bu grupta; rolün kayıtlı talimatı değişmez)</label>
+                <div class="field"${om('prompt')}><label for="rp-${r.key}">Görevler (yalnızca bu grupta; rolün kayıtlı görevleri değişmez, persona ve sınırlar aynen kalır)</label>
                   <textarea id="rp-${r.key}" data-f="prompt" rows="6">${esc(this.rolePromptOf(r))}</textarea></div>
                 ${capsHtml}
               </details>`}

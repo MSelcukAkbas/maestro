@@ -34,12 +34,15 @@ function isLead(group, s) {
   return lead ? lead.id === s.id : false;
 }
 
-// Oturum kaydındaki talimat yalnızca kurulumda bu ekip için yazılmışsa (ya da anlık rolse) doludur; değilse rolün
-// klasöründeki güncel talimat kullanılır, böylece prompt.md düzenlemesi yeni / yenilenen oturuma geçer.
-function rolePromptOf(s) {
-  if (s.rolePrompt) return s.rolePrompt;
+// Rolün persona / görevler / sınırlar metni rolün klasöründen okunur, böylece md düzenlemesi yeni / yenilenen oturuma
+// geçer. Oturum kaydındaki talimat (kurulumda bu ekip için yazılan ya da anlık rolün talimatı) görevlerin yerine geçer.
+function roleTextOf(s) {
   const role = s.roleId === 'custom' ? null : prompts.role(s.roleId);
-  return (role && role.prompt) || '(talimat yok)';
+  return {
+    persona: (role && role.persona) || '',
+    gorevler: s.rolePrompt || (role && role.gorevler) || '(talimat yok)',
+    sinirlar: (role && role.sinirlar) || '',
+  };
 }
 
 function memberLine(group, m, self, accounts) {
@@ -71,11 +74,12 @@ function promptVars(fullGroup, session, project, accounts) {
     effort: session.effort || '',
     izin: PERMISSION_TEXT[permissionOf(group, session)] || permissionOf(group, session),
     proje: project.path,
-    rolTalimati: rolePromptOf(session),
+    ...roleTextOf(session),
     ekip: group.sessions.map((m) => memberLine(group, m, session, accounts)).join('\n'),
     sef: lead,
     sefEkipli: lead && others.length > 0,
-    uyeGorevleri: lead ? others.map((m) => `### ${m.name} — ${m.roleLabel}\n${rolePromptOf(m)}`).join('\n') : '',
+    // Şefe her üyenin yalnızca görevleri gider; persona ve sınırlar istemini gereksiz büyütür.
+    uyeGorevleri: lead ? others.map((m) => `### ${m.name} — ${m.roleLabel}\n${roleTextOf(m).gorevler}`).join('\n') : '',
     raporVerdiklerin: namesOf(group, session.reportsTo).join(', '),
     raporVerenler: group.sessions.filter((s) => s.reportsTo.includes(session.id)).map((s) => s.name).join(', '),
     herkesle: !!session.talkAll,
@@ -97,4 +101,4 @@ function writePromptFile(group, session, project, accounts) {
   return file;
 }
 
-module.exports = { PERMISSION_TEXT, permissionOf, rolePromptOf, buildPrompt, writePromptFile };
+module.exports = { PERMISSION_TEXT, permissionOf, roleTextOf, buildPrompt, writePromptFile };
