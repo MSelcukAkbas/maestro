@@ -3,9 +3,10 @@
 const fs = require('fs');
 
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
 const { WATCH_DEFAULTS } = require('../watch/watch');
-const { CURATOR_DEFAULTS, CURATOR_LEVELS } = require('../team/curator');
+const { curatorDefaults, curatorLevels } = require('../team/curator');
 const {
   PORT, settings, replaceSettings, rotateToken, caps, meter, watch, ledger, ops, HttpError, cleanText, cachedQuota,
   groupWatchCfg, shutdown,
@@ -61,12 +62,12 @@ route('PUT', '/api/settings', async (req) => {
     next.watch = w;
   }
   if (body.curator && typeof body.curator === 'object') {
-    const c = { ...CURATOR_DEFAULTS, ...(settings.curator || {}) };
+    const c = { ...curatorDefaults(), ...(settings.curator || {}) };
     if (body.curator.enabled != null) c.enabled = !!body.curator.enabled;
     const h = Number(body.curator.everyH);
     if (body.curator.everyH != null && Number.isFinite(h) && h >= 1 && h <= 168) c.everyH = Math.round(h);
     if (MODELS.includes(body.curator.model)) c.model = body.curator.model;
-    if (CURATOR_LEVELS.includes(body.curator.level)) c.level = body.curator.level;
+    if (curatorLevels().includes(body.curator.level)) c.level = body.curator.level;
     next.curator = c;
   }
   if (body.contextWindows && typeof body.contextWindows === 'object') {
@@ -83,12 +84,13 @@ route('PUT', '/api/settings', async (req) => {
     })).filter((a) => a.id && a.configDir);
     if (!next.accounts.length) throw new HttpError(400, 'En az bir hesap gerekli.');
   }
+  let roles = null;
   if (Array.isArray(body.roles)) {
-    next.roles = body.roles.map((r) => ({
+    roles = body.roles.map((r) => ({
       id: cleanText(r.id, 24),
       label: cleanText(r.label, 40),
       short: cleanText(r.short, 24),
-      prompt: String(r.prompt || '').slice(0, 4000),
+      prompt: String(r.prompt || '').slice(0, 40000),
       permissionMode: PERMISSION_MODES.includes(r.permissionMode) ? r.permissionMode : '',
       model: MODELS.includes(r.model) ? r.model : '',
       readOnly: !!r.readOnly,
@@ -96,7 +98,7 @@ route('PUT', '/api/settings', async (req) => {
       // Bağlam profili (token); boşsa rolün varsayılanı ya da genel ayar kullanılır.
       ctxWarn: Number(r.ctxWarn) >= 20000 && Number(r.ctxWarn) <= 10000000 ? Math.round(Number(r.ctxWarn)) : null,
       ctxHigh: Number(r.ctxHigh) >= 20000 && Number(r.ctxHigh) <= 10000000 ? Math.round(Number(r.ctxHigh)) : null,
-    })).filter((r) => r.id && r.label && r.id !== 'custom');
+    })).filter((r) => prompts.ROLE_ID.test(r.id) && r.label && r.id !== 'custom');
   }
   if (body.port != null) {
     const port = Number(body.port);
@@ -105,6 +107,8 @@ route('PUT', '/api/settings', async (req) => {
   }
   replaceSettings(next);
   store.saveSettings(settings);
+  // Roller prompts/roles/<id>/ klasörlerine yazılır (role.json + prompt.md).
+  if (roles) prompts.saveRoles(roles);
   if (Array.isArray(body.roles)) caps.pruneRoles(settings.roles.map((r) => r.id));
   return { settings, restartNeeded: body.port != null && Number(body.port) !== PORT };
 });

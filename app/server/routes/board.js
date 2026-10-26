@@ -1,7 +1,7 @@
 // Görev panosu, grup notları, not düzenleyici, proje dokümanları ve hatırlatma.
 const store = require('../core/store');
 const { resolveMember } = require('../team/board');
-const { CURATOR_LEVELS } = require('../team/curator');
+const { curatorLevels } = require('../team/curator');
 const { cleanRef, listDocs, readDoc, searchDocs } = require('../team/docs');
 const { boards, notes, curator, HttpError, cleanText, boardGroup } = require('../panel/context');
 const { route, readBody } = require('../panel/http');
@@ -192,7 +192,7 @@ route('POST', '/api/groups/([\\w-]+)/curator/run', async (req, m) => {
   const g = boardGroup(m[1]);
   if (curator.status(g.id).running) throw new HttpError(409, 'Not düzenleyici bu grupta zaten çalışıyor.');
   const body = await readBody(req).catch(() => ({}));
-  curator.run(g, true, CURATOR_LEVELS.includes(body && body.level) ? body.level : null).catch((err) => console.error('[panel] not düzenleyici:', err.message));
+  curator.run(g, true, curatorLevels().includes(body && body.level) ? body.level : null).catch((err) => console.error('[panel] not düzenleyici:', err.message));
   return curator.status(g.id);
 });
 

@@ -8,11 +8,9 @@ const fs = require('fs');
 const path = require('path');
 const os = require('os');
 const llm = require('../core/llm');
+const { tool: promptTool } = require('../core/prompts');
 
-// Proje incelemesiyle birlikte; tur sınırı incelemenin uzamasını keser.
-const TIMEOUT = 6 * 60 * 1000;
 const READ_TOOLS = 'Read,Grep,Glob';
-const MAX_TURNS = 30;
 const MAX_ROWS = 12;
 const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
 const options = require('../core/options');
@@ -21,46 +19,6 @@ const MODELS = ['', ...options.MODELS];
 // plan önerilmez: plan modundaki üye komut çalıştıramaz, ekiple çalışırken takılır.
 const MODES = ['', ...options.PERMISSION_MODES.filter((m) => m !== 'plan')];
 const EFFORTS = ['', ...options.EFFORTS];
-
-const SYSTEM = [
-  'Sen Claude Panel\'in kurulum danışmanısın. Kullanıcı bir yazılım projesinde birden çok Claude Code oturumundan oluşan bir ekip kuruyor; her satır bir üye (rol).',
-  'Görevin: ekibi bu projeye ve işe göre optimize etmek. Kullanıcının çoğu zaman net bir hedefi yok; hedefi proje özetinden, son grubun notlarından ve kartlarından çıkar.',
-  'Proje klasöründesin ve Read, Grep, Glob araçların var (yalnızca okuma). Kullanıcı notu varsa notun dokunduğu kodu mutlaka hedefli incele; not yoksa ve özet yetmiyorsa da incele: '
-    + 'hedefle ilgili klasörler, giriş noktaları, testlerin varlığı, kullanılan teknolojiler. Rol ekleme / çıkarma ve yetenek kararlarını bu incelemeye dayandır. '
-    + 'En fazla 15 civarı dosyaya bak, büyük dosyaları baştan sona okuma, özette verilen dosyaları tekrar okuma. İnceleme bitince yalnızca istenen çıktıyı yaz.',
-  'Neleri ayarlarsın (satır başına):',
-  '- model: opus (en güçlü, en pahalı; zor tasarım, karmaşık hata, orkestrasyon), sonnet (kod yazma ve review için dengeli), haiku (ucuz; basit araştırma, tarama, özet) ya da "" (hesap varsayılanı). '
-    + 'Kullanıcının temel tercihi: orkestra şefi opus, kod yazan roller (coder, backend, frontend, android) sonnet, araştırma haiku. Bundan yalnızca güçlü bir gerekçe varsa (kullanıcı notu, geçmiş veri) sap ve nedenini yaz. '
-    + 'Diğer roller için geçmiş harcama verisini kullan: bir rol pahalı modelde az iş çıkardıysa düşür, ucuz modelde yetersiz kaldıysa yükselt.',
-  '- effort: modelin düşünme derinliği: low, medium, high, xhigh, max ya da "" (modelin varsayılanı). Yüksek effort daha çok çıktı ve düşünme token\'ı harcar, işi yavaşlatır; '
-    + 'düşük effort rutin işte (tarama, özet, basit düzenleme) kotayı korur. Zor tasarım, karmaşık hata ve orkestrasyon high/xhigh; rutin kod ve review medium/high; araştırma ve tarama low/medium. '
-    + 'Önce effort\'u ayarla, modeli düşürmek gerekmeyebilir. Gerekçesiz değiştirme; emin değilsen "" bırak.',
-  '- izin: manual (her işlemde sor), acceptEdits (dosya düzenlemelerini kabul et), auto (otomatik), plan (yalnızca plan), "" (grubun varsayılanı). Kod yazan role acceptEdits uygundur; kod yazmayan rollere düzenleme izni verme, onları "" ya da manual bırak; altyapı/sunucu işi yapan role manual ver. '
-    + 'plan seçme: plan modundaki üye komut çalıştıramaz, test yapamaz ve ekiple çalışırken takılır.',
-  '- herkesle: üye ekipteki herkesle doğrudan konuşur mu (genelde yalnızca şef). rapor_verir: işini bitirince kime bildirir (satır anahtarları). Gereksiz bağlantı kurma; her mesaj alıcının bağlamını büyütür.',
-  '- talimat: rolün bu ekipteki tam talimatı. Mevcut talimatın kurallarını ve sorumluluklarını koru, kısaltma; projeye ve işe özel odak, dosya/klasör, dikkat noktası ve ekipteki iş akışını ekle. '
-    + 'Talimatı JSON\'a yazma: JSON\'dan SONRA her satır için ayrı blok olarak yaz (biçim aşağıda). Değiştirmeye değmiyorsa o satır için blok yazma. '
-    + 'Kullanıcının elle yazdığı talimata (elle_yazildi true) dokunma.',
-  '- yetenek_ac / yetenek_kapat: verilen yetenek anahtarlarından bu rolde açılması ya da kapatılması gerekenler (yetenekler listesindeki key değerleri). Gereksiz yetenek bağlamı şişirir; ihtiyaç olanı aç. '
-    + 'Her açık skill\'in açıklaması (tahmini_token) her istekte bağlama girer; Claude Code yerleşik ve claude.ai skill\'leri dahil. Rolün bu projede kullanmayacağı skill\'leri kapat '
-    + '(ör. kod yazan role belge/sunum/tablo ve zamanlama skill\'leri genelde gerekmez; şef ve araştırma rolüne daha geniş bırakılabilir). Projenin teknolojisiyle ilgili olanı açık bırak: '
-    + 'arayüz yazan ya da arayüzü test eden rolde tarayıcı ve web skill\'leri, Claude/LLM çağıran projede claude-api kalsın. '
-    + 'kancasi_var olan eklentiyi kapatırsan bağlamın yanında arka planda yaptığı iş de durur (ör. hafıza kaydı); yalnızca gerçekten gereksizse kapat ve nedeninde bunu belirt.',
-  'Rol ekleme / çıkarma: yeni_satirlar ile rol_katalogu\'ndaki bir rolden üye ekleyebilir, cikar ile var olan satırı çıkarabilirsin. Var olan satırın rolünü değiştiremezsin (gerekirse çıkar + ekle). '
-    + 'Şefi çıkarma. Kullanıcının seçtiği rolü yalnızca işte gerçekten karşılığı yoksa çıkar. Ekip en fazla 12 üye olur. Her üye maliyet ve koordinasyon yükü getirir; yeni üyeyi yalnızca iş gerektiriyorsa ekle '
-    + '(ör. yetki, şema ya da dışa açık uç nokta değişikliğinde Güvenlik; davranış ya da API değişikliğinde Test ve Dokümantasyon; ayrı katmanlar varsa Backend / Frontend). '
-    + 'Yeni satıra yeni_1, yeni_2 gibi key ver; rapor_verir\'de mevcut ve yeni key\'leri kullanabilirsin, talimat bloğu da yazabilirsin. Emin olmadığın ekleme / çıkarmayı oneriler\'e yaz.',
-  'akis_eki: ekibin iş akışına eklenecek en fazla 6 kısa madde (üye adı yazma, rol adı kullan). Gerek yoksa boş bırak.',
-  'oneriler, akis_eki ve neden metinlerini kullanıcı okur: satır anahtarlarını (r1, yeni_1) yazma, rol adını kullan.',
-  'Her değişiklik için neden yaz (en fazla 20 kelime). Değiştirmediğin alanı yazma ya da null bırak.',
-  'Çıktı biçimi: önce tek bir JSON nesnesi, ardından talimat blokları; başka hiçbir şey yazma.',
-  '{"satirlar":[{"key":"r1","model":"sonnet","effort":"medium","izin":"acceptEdits","herkesle":false,"rapor_verir":["r2"],"yetenek_ac":[],"yetenek_kapat":[],"neden":{"model":"…","effort":"…","izin":"…","baglanti":"…","talimat":"…","yetenek":"…"}}],'
-    + '"yeni_satirlar":[{"key":"yeni_1","rol":"test","model":"sonnet","effort":"medium","izin":"","herkesle":false,"rapor_verir":["r1"],"yetenek_kapat":[],"neden":"…"}],'
-    + '"cikar":[{"key":"r3","neden":"…"}],"oneriler":["…"],"akis_eki":["…"]}',
-  '=== TALIMAT r1 ===',
-  '(r1 satırının yeni tam talimatı, düz metin)',
-  '=== SON ===',
-].join('\n');
 
 function readHead(file, max) {
   try {
@@ -160,15 +118,18 @@ function assignAccounts(rows, accounts, quota) {
 }
 
 // projectDir: model bu klasörde yalnızca okuma araçlarıyla (Read, Grep, Glob) projeyi inceleyebilir.
-function ask(account, payload, model = 'sonnet', projectDir = null) {
+// Metin ve ayarlar prompts/tools/kurulum-danismani/ (prompt.md; tool.json: model, maxTurns, timeoutSec); her çağrıda okunur.
+// Tur sınırı proje incelemesinin uzamasını keser. model verilmezse tool.json'daki model.
+function ask(account, payload, model = null, projectDir = null) {
   return new Promise((resolve, reject) => {
+    const t = promptTool('kurulum-danismani');
     fs.mkdirSync(CWD, { recursive: true });
     const cwd = projectDir && fs.existsSync(projectDir) ? projectDir : CWD;
     const read = cwd !== CWD;
     llm.run({
-      kind: 'kurulum danışmanı', account, model, system: SYSTEM, excludeDynamic: true, input: JSON.stringify(payload), cwd,
-      tools: read ? READ_TOOLS : '', allowed: read ? READ_TOOLS : null, maxTurns: read ? MAX_TURNS : null,
-      timeoutMs: TIMEOUT, timeoutMsg: 'kurulum danışmanı zaman aşımına uğradı',
+      kind: 'kurulum danışmanı', account, model: model || t.config.model, system: t.text(), excludeDynamic: true, input: JSON.stringify(payload), cwd,
+      tools: read ? READ_TOOLS : '', allowed: read ? READ_TOOLS : null, maxTurns: read ? t.config.maxTurns : null,
+      timeoutMs: t.config.timeoutSec * 1000, timeoutMsg: 'kurulum danışmanı zaman aşımına uğradı',
     }).then(({ res, ok }) => {
       if (!ok) return reject(new Error(`model hatası: ${String(res.result || res.subtype).slice(0, 200)}`));
       // Talimatlar JSON dışında bloklar halinde gelir; uzun metni JSON'a kaçışlamak modelin en sık hatasıdır.

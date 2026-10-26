@@ -1,0 +1,14 @@
+{
+  "label": "Test / QA",
+  "short": "test",
+  "order": 12,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "test-driven-development"
+  ]
+}

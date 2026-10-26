@@ -69,7 +69,7 @@ test('caps: skill listesi öğrenilir, türler ayrılır, kapatma skillOverrides
   assert.deepStrictEqual(f.settings.skillOverrides, { 'anthropic-skills:docs': 'off', dataviz: 'off' });
 });
 
-test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır, salt okunurdur', () => {
+test('caps: depodaki skill\'ler rol klasöründeki rollerle gelir, rol değişikliği oraya yazılır, salt okunurdur', () => {
   const { Caps } = require('../server/setup/caps');
   const repo = tmp('builtin');
   const mk = (name, desc) => {
@@ -79,23 +79,26 @@ test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır
   };
   mk('plan-skill', 'Planlama');
   mk('review-skill', 'İnceleme');
-  fs.writeFileSync(path.join(repo, 'roles.json'), JSON.stringify({ 'plan-skill': ['sef'], 'review-skill': ['review'] }));
+  // Rol klasörlerinin yerine bellekte tutulan atama (prompts.skillRoles / setSkillRoles yerine).
+  const assigned = { 'plan-skill': ['sef'], 'review-skill': ['review'] };
+  const writes = [];
+  const roleSkills = { map: () => structuredClone(assigned), set: (name, roles) => { writes.push(name); assigned[name] = [...roles]; } };
   const dir = tmp('caps-b');
-  const c = new Caps(dir, repo);
+  const c = new Caps(dir, repo, roleSkills);
   const roles = (n) => c.load().skills.find((s) => s.name === n).roles;
   assert.deepStrictEqual(roles('plan-skill'), ['sef']);
   assert.ok(c.load().skills.every((s) => s.builtin));
-  // Rol değişikliği yalnızca fark olarak yazılır; depodaki dosyalar değişmez.
+  // Rol değişikliği rol klasörlerine yazılır; caps.json'a ve depodaki dosyalara girmez. Yalnızca değişen skill yazılır.
   c.setRole('pskill:plan-skill', 'coder', true);
   c.setRole('pskill:review-skill', 'review', false);
   assert.deepStrictEqual(roles('plan-skill'), ['sef', 'coder']);
   assert.deepStrictEqual(roles('review-skill'), []);
+  assert.deepStrictEqual(writes, ['plan-skill', 'review-skill']);
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'caps.json'), 'utf8'));
   assert.deepStrictEqual(saved.skills, []);
-  assert.deepStrictEqual(saved.builtinRoles, { 'plan-skill': { on: ['coder'] }, 'review-skill': { off: ['review'] } });
-  // Varsayılana dönen rol farkı silinir.
+  assert.strictEqual(saved.builtinRoles, undefined);
   c.setRole('pskill:review-skill', 'review', true);
-  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'caps.json'), 'utf8')).builtinRoles, { 'plan-skill': { on: ['coder'] } });
+  assert.deepStrictEqual(assigned, { 'plan-skill': ['sef', 'coder'], 'review-skill': ['review'] });
   // Oturuma referans dosyalarıyla birlikte kopyalanır.
   const f = c.forSession('sid', 'sef', null);
   assert.ok(fs.existsSync(path.join(f.addDir, '.claude', 'skills', 'plan-skill', 'references', 'ek.md')));
@@ -110,19 +113,28 @@ test('caps: depodaki skill\'ler varsayılan rollerle gelir, rol farkı saklanır
   assert.deepStrictEqual(c.load().skills.map((s) => [s.name, !!s.builtin]), [['plan-skill', true], ['review-skill', true], ['yerel-skill', false]]);
 });
 
-test('skills/: roles.json depodaki skill\'leri ve paneldeki rolleri gösterir', () => {
+test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan rollere atanmış', () => {
+  const prompts = require('../server/core/prompts');
   const { Caps } = require('../server/setup/caps');
-  const map = JSON.parse(fs.readFileSync(path.join(ROOT, 'skills', 'roles.json'), 'utf8'));
-  const names = new Caps(tmp('caps-r')).builtins().map((b) => b.name);
-  assert.deepStrictEqual(Object.keys(map).sort(), [...names].sort(), 'roles.json ile skill klasörleri uyuşmuyor');
-  // Varsayılan roller boş veri klasörüyle (canlı ayarlara dokunmadan) yüklenir.
-  const r = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/core/store').loadSettings().roles.map((x) => x.id)))`], {
-    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: tmp('store-r') }, encoding: 'utf8',
-  });
-  assert.strictEqual(r.status, 0, r.stderr);
-  const roleIds = JSON.parse(r.stdout);
-  for (const [n, rs] of Object.entries(map)) for (const r of rs) assert.ok(roleIds.includes(r), `${n}: bilinmeyen rol ${r}`);
-  for (const r of roleIds) assert.ok(Object.values(map).some((rs) => rs.includes(r)), `${r} rolüne skill yok`);
+  const roles = prompts.roles();
+  const ids = roles.map((r) => r.id);
+  assert.ok(ids.length >= 14, 'rol klasörleri okunamadı');
+  for (const r of roles) assert.ok(r.label && r.prompt.trim(), `${r.id}: ad ya da talimat boş`);
+  // Kullanıcı kararı (CLAUDE.md): şef opus, araştırma / doküman haiku, diğerleri sonnet; Fable yok.
+  const model = Object.fromEntries(roles.map((r) => [r.id, r.model]));
+  assert.strictEqual(model.sef, 'opus');
+  assert.strictEqual(model.arastirma, 'haiku');
+  assert.strictEqual(model.dokuman, 'haiku');
+  for (const id of ['coder', 'backend', 'frontend', 'android', 'review', 'debug', 'kalite', 'ops', 'avukat', 'test', 'guvenlik']) assert.strictEqual(model[id], 'sonnet', id);
+  const map = prompts.skillRoles();
+  const names = new Caps(tmp('caps-r'), undefined, { map: () => ({}), set: () => {} }).builtins().map((x) => x.name);
+  for (const n of Object.keys(map)) assert.ok(names.includes(n), `role.json'da bilinmeyen skill: ${n}`);
+  for (const n of names) assert.ok(map[n] && map[n].length, `${n} hiçbir role atanmamış`);
+  for (const id of ids) assert.ok(Object.values(map).some((rs) => rs.includes(id)), `${id} rolüne skill yok`);
+  // Yardımcı model araçlarının dosyaları tam.
+  for (const t of ['bekci', 'kurulum-danismani', 'not-duzenleyici', 'kapanis-ozeti']) assert.ok(prompts.tool(t).text().length > 100, t);
+  const { systemPrompt, curatorLevels } = require('../server/team/curator');
+  for (const lv of curatorLevels()) assert.ok(systemPrompt(lv).includes('Derinlik:'), lv);
 });
 
 test('optimizer: ekleme / çıkarma / effort doğrulanır', () => {
@@ -269,28 +281,52 @@ test('bekleyen değişiklik: uygulama anı ve istenen / gerçekleşen farkı', (
   assert.deepStrictEqual(driftOf(want, { fam: 'haiku', skills: { ts: 0, names: ['dataviz'] } }), []);
 });
 
-test('store: rol göçü yeni rolleri ekler, elle değiştirilmemiş talimatı günceller, değiştirileni korur', () => {
-  const dir = tmp('store');
-  // Canlı veriden bağımsız: boş klasörde varsayılan ayarlar üretilir, eski sürüm onların üstünde kurulur.
-  const fresh = tmp('store-defaults');
-  const d = spawnSync(process.execPath, ['-e', `process.stdout.write(JSON.stringify(require('./server/core/store').loadSettings()))`], {
-    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: fresh }, encoding: 'utf8',
-  });
-  assert.strictEqual(d.status, 0, d.stderr);
-  const src = JSON.parse(d.stdout);
-  // Eski sürüm: yeni roller yok, kalite talimatı elle değiştirilmiş.
-  src.roleDefaultsVersion = 4;
-  src.roles = src.roles.filter((r) => !['test', 'guvenlik', 'dokuman'].includes(r.id));
-  const kalite = src.roles.find((r) => r.id === 'kalite');
-  if (kalite) kalite.prompt = 'elle yazılmış talimat';
-  fs.writeFileSync(path.join(dir, 'settings.json'), JSON.stringify(src));
-  const r = spawnSync(process.execPath, ['-e', `const s=require('./server/core/store').loadSettings();process.stdout.write(JSON.stringify(s))`], {
-    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: dir }, encoding: 'utf8',
-  });
+test('prompts: şablon blokları, boş satırlar ve değer içeriği', () => {
+  const { render } = require('../server/core/prompts');
+  const t = '# Başlık\n{{#a}}- a: {{a}}{{/a}}\n{{^a}}- a yok{{/a}}\n\n{{#b}}\n## B\n{{b}}\n{{/b}}\n- {{bilinmeyen}}';
+  assert.strictEqual(render(t, { a: 'x', b: 'satır1\n\nsatır2 {{a}}' }), '# Başlık\n- a: x\n## B\nsatır1\n\nsatır2 {{a}}\n- {{bilinmeyen}}');
+  assert.strictEqual(render(t, { a: '', b: false }), '# Başlık\n- a yok\n- {{bilinmeyen}}');
+});
+
+test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle düzenleme yeniden okunur', () => {
+  const dir = tmp('prompts');
+  fs.cpSync(path.join(ROOT, 'prompts'), dir, { recursive: true });
+  const script = `
+    const p = require('./server/core/prompts');
+    const out = {};
+    const list = p.roles().map((r) => ({ ...r }));
+    out.n = list.length;
+    const coderSkills = p.skillRoles();
+    list[0].prompt = 'yeni talimat\\n\\nikinci';
+    list.push({ id: 'yeni-rol', label: 'Yeni', short: 'yeni', prompt: 'x', model: 'haiku' });
+    p.saveRoles(list.filter((r) => r.id !== 'dokuman'));
+    out.first = p.roles()[0].prompt;
+    out.last = p.roles().at(-1).id;
+    out.hasDoc = p.roles().some((r) => r.id === 'dokuman');
+    out.skillsKept = JSON.stringify(p.skillRoles()[Object.keys(coderSkills)[0]]) === JSON.stringify(coderSkills[Object.keys(coderSkills)[0]]);
+    p.setSkillRoles('deneme-skill', ['yeni-rol']);
+    out.skill = p.skillRoles()['deneme-skill'];
+    require('fs').writeFileSync(require('path').join(p.PROMPTS_DIR, 'roles', 'sef', 'prompt.md'), 'elle\\r\\n');
+    const t0 = Date.now(); while (Date.now() - t0 < 1100);
+    out.manual = p.role('sef').prompt;
+    process.stdout.write(JSON.stringify(out));`;
+  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_PROMPTS: dir, CLAUDE_PANEL_DATA: tmp('prompts-data') }, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
-  const s = JSON.parse(r.stdout);
-  const ids = s.roles.map((x) => x.id);
-  for (const id of ['test', 'guvenlik', 'dokuman']) assert.ok(ids.includes(id), id);
-  assert.strictEqual(s.roles.find((x) => x.id === 'guvenlik').readOnly, true);
-  if (kalite) assert.strictEqual(s.roles.find((x) => x.id === 'kalite').prompt, 'elle yazılmış talimat');
+  const o = JSON.parse(r.stdout);
+  assert.strictEqual(o.first, 'yeni talimat\n\nikinci');
+  assert.strictEqual(o.last, 'yeni-rol');
+  assert.strictEqual(o.hasDoc, false);
+  assert.ok(o.skillsKept);
+  assert.deepStrictEqual(o.skill, ['yeni-rol']);
+  assert.strictEqual(o.manual, 'elle');
+  assert.ok(fs.readdirSync(path.join(dir, 'roles')).some((d) => d.startsWith('_silinen-dokuman-')));
+  // Roller settings.json'a yazılmaz.
+  const data = tmp('store');
+  fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ port: 7788, roles: [{ id: 'eski' }], roleDefaultsVersion: 7 }));
+  const s2 = spawnSync(process.execPath, ['-e', "const st=require('./server/core/store');const s=st.loadSettings();st.saveSettings({ ...s, roles: [1] });process.stdout.write(JSON.stringify(s))"], {
+    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: data }, encoding: 'utf8',
+  });
+  assert.strictEqual(s2.status, 0, s2.stderr);
+  assert.strictEqual(JSON.parse(s2.stdout).roles, undefined);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(data, 'settings.json'), 'utf8')).roles, undefined);
 });

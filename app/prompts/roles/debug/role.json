@@ -1,0 +1,14 @@
+{
+  "label": "Debug",
+  "short": "debug",
+  "order": 7,
+  "model": "sonnet",
+  "effort": "high",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "debugging-and-error-recovery"
+  ]
+}

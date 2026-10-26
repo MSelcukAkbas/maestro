@@ -85,7 +85,7 @@ route('POST', '/api/setup/optimize', async (req) => {
       talimat: r.prompt, elle_yazildi: r.manualPrompt, yetenekler: r.caps,
     })),
   };
-  const res = await optimizer.ask(account, payload, 'sonnet', project.path).catch((err) => { throw new HttpError(502, `Kurulum danışmanı: ${err.message}`); });
+  const res = await optimizer.ask(account, payload, null, project.path).catch((err) => { throw new HttpError(502, `Kurulum danışmanı: ${err.message}`); });
   const out = optimizer.validate(rows, res.parsed, catalog.map((x) => x.key), settings.roles.map((r) => r.id));
   // Eklenen satır modeli belirtilmemişse rolün varsayılanını alır; hesap aşağıda kotaya göre seçilir.
   for (const a of out.adds) {

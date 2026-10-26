@@ -1,0 +1,15 @@
+{
+  "label": "Backend",
+  "short": "backend",
+  "order": 3,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "api-and-interface-design",
+    "observability-and-instrumentation"
+  ]
+}

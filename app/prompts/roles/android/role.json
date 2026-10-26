@@ -1,0 +1,14 @@
+{
+  "label": "Android",
+  "short": "android",
+  "order": 5,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "android-app-engineering"
+  ]
+}

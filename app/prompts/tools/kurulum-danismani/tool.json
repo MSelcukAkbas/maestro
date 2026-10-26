@@ -1,0 +1,5 @@
+{
+  "model": "sonnet",
+  "maxTurns": 30,
+  "timeoutSec": 360
+}

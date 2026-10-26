@@ -1,0 +1,14 @@
+{
+  "label": "Coder (genel)",
+  "short": "coder",
+  "order": 2,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "incremental-implementation"
+  ]
+}

@@ -186,8 +186,9 @@ function buildSession(r, project, usedNames, time) {
     roleId = role.id;
     roleLabel = role.label;
     roleShort = role.short || role.label;
-    // Kurulumda bu ekip için düzenlenen talimat rolün kayıtlı talimatının yerine geçer.
-    rolePrompt = typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt.trim() : role.prompt;
+    // Kurulumda bu ekip için düzenlenen talimat rolün talimatının yerine geçer. Boşsa istem yazılırken rolün
+    // klasöründeki güncel talimat kullanılır (panel/prompt.js rolePromptOf).
+    rolePrompt = typeof r.prompt === 'string' && r.prompt.trim() ? r.prompt.trim() : '';
     roleMode = role.permissionMode || '';
     roleModel = role.model || '';
     roleEffort = role.effort || '';

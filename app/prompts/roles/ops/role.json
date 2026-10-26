@@ -1,0 +1,14 @@
+{
+  "label": "Ops",
+  "short": "ops",
+  "order": 10,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "manual",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "ci-cd-and-automation"
+  ]
+}

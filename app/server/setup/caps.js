@@ -7,6 +7,7 @@ const os = require('os');
 const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { APP_ROOT } = require('../core/paths');
+const prompts = require('../core/prompts');
 
 const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
 const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
@@ -14,9 +15,10 @@ const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
 const RESERVED_MCP = 'panel';
 // claude.ai hesabından eşitlenen skill'lerin listedeki öneki; skillOverrides tam adla ("anthropic-skills:docs") kapatır.
 const SYNCED_PREFIX = 'anthropic-skills';
-// Panelle gelen skill'ler: depodaki skills/ klasörü (sürüm kontrolünde, panelden salt okunur). Varsayılan roller
-// skills/roles.json'da; kullanıcının rol değişikliği caps.json builtinRoles'a varsayılandan fark olarak yazılır.
+// Panelle gelen skill'ler: depodaki skills/ klasörü (sürüm kontrolünde, panelden salt okunur). Hangi rollere verildiği
+// rol klasöründe (prompts/roles/<id>/role.json "skills"); panelden yapılan rol değişikliği de oraya yazılır.
 const BUILTIN_DIR = path.join(APP_ROOT, 'skills');
+const ROLE_SKILLS = { map: () => prompts.skillRoles(), set: (name, roles) => prompts.setSkillRoles(name, roles) };
 const READ_ONLY = 'Panelle gelen skill salt okunur; değişiklik depodaki skills/ klasöründe yapılır.';
 
 class CapError extends Error {
@@ -66,19 +68,21 @@ function skillMeta(text) {
 }
 
 class Caps {
-  constructor(dataDir, builtinDir = BUILTIN_DIR) {
+  // roleSkills: { map() -> { skillAdı: [rolId] }, set(skillAdı, [rolId]) } — depodaki skill'lerin rolleri (testler verir).
+  constructor(dataDir, builtinDir = BUILTIN_DIR, roleSkills = ROLE_SKILLS) {
     this.file = path.join(dataDir, 'caps.json');
     this.skillDir = path.join(dataDir, 'skills');
     this.builtinDir = builtinDir;
+    this.roleSkills = roleSkills;
     this.sessionDir = path.join(dataDir, 'session-skills');
     // () -> proje klasörleri; proje skill'lerini yerleşiklerden ayırmak için (index.js verir).
     this.projectDirs = null;
     fs.mkdirSync(this.skillDir, { recursive: true });
   }
 
-  // Depodaki skill'ler: [{ name, description, defaults }]. defaults: roles.json'daki varsayılan roller.
+  // Depodaki skill'ler: [{ name, description, defaults }]. defaults: skill'in rol klasörlerinde açık olduğu roller.
   builtins() {
-    const defaults = readJsonFile(path.join(this.builtinDir, 'roles.json')) || {};
+    const defaults = this.roleSkills.map();
     let dirs = [];
     try { dirs = fs.readdirSync(this.builtinDir, { withFileTypes: true }).filter((e) => e.isDirectory()).map((e) => e.name).sort(); } catch {}
     const out = [];
@@ -100,17 +104,13 @@ class Caps {
   // { mcps: [{ id, name, type, command, args, env, url, headers, autoAllow, roles }],
   //   skills: [{ name, description, roles, builtin?, defaults? }], globalOff: { key: [roleId] },
   //   seen: { skillAdı: { chars, description, at } } — oturumların skill listesinde görülen her skill (kapatılan da kalır) }
-  // skills önce depodaki (builtin, roller = varsayılan + builtinRoles farkı), sonra kullanıcının eklediği skill'ler.
+  // skills önce depodaki (builtin, roller = rol klasörlerindeki atama), sonra kullanıcının eklediği skill'ler.
   // Aynı adda kullanıcı skill'i daha önceden varsa o kalır, depodaki gizlenir (kullanıcının skill'i kaybolmasın).
   load() {
     const c = readJsonFile(this.file) || {};
     const user = (c.skills || []).filter((s) => !s.builtin);
-    const over = c.builtinRoles || {};
-    const builtin = this.builtins().filter((b) => !user.some((u) => u.name === b.name)).map((b) => {
-      const o = over[b.name] || {};
-      const roles = [...new Set([...b.defaults, ...(o.on || [])])].filter((r) => !(o.off || []).includes(r));
-      return { name: b.name, description: b.description, roles, builtin: true, defaults: b.defaults };
-    });
+    const builtin = this.builtins().filter((b) => !user.some((u) => u.name === b.name))
+      .map((b) => ({ name: b.name, description: b.description, roles: [...b.defaults], builtin: true, defaults: b.defaults }));
     return { mcps: c.mcps || [], skills: [...builtin, ...user], globalOff: c.globalOff || {}, seen: c.seen || {} };
   }
 
@@ -168,18 +168,16 @@ class Caps {
     }
   }
 
-  // Depodaki skill'ler dosyaya yazılmaz; yalnızca rollerinin varsayılandan farkı builtinRoles'a girer.
+  // Depodaki skill'ler caps.json'a yazılmaz; rolleri değiştiyse rol klasörlerine yazılır.
   save(c) {
-    const builtinRoles = {};
     const skills = [];
     for (const s of c.skills || []) {
       if (!s.builtin) { skills.push(s); continue; }
-      const on = s.roles.filter((r) => !s.defaults.includes(r));
-      const off = s.defaults.filter((r) => !s.roles.includes(r));
-      if (on.length || off.length) builtinRoles[s.name] = { ...(on.length ? { on } : {}), ...(off.length ? { off } : {}) };
+      const same = s.roles.length === s.defaults.length && s.roles.every((r) => s.defaults.includes(r));
+      if (!same) this.roleSkills.set(s.name, s.roles);
     }
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ ...c, skills, builtinRoles }, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify({ ...c, skills }, null, 2), 'utf8');
     fs.renameSync(tmp, this.file);
   }
 

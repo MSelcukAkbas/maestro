@@ -1,0 +1,30 @@
+{
+  "defaults": {
+    "enabled": true,
+    "everyH": 3,
+    "model": "sonnet",
+    "level": "orta"
+  },
+  "minNotes": 2,
+  "memory": 3,
+  "levels": {
+    "dusuk": {
+      "label": "düşük",
+      "turns": 30,
+      "timeoutMin": 10,
+      "chain": false
+    },
+    "orta": {
+      "label": "orta",
+      "turns": 80,
+      "timeoutMin": 20,
+      "chain": true
+    },
+    "yuksek": {
+      "label": "yüksek",
+      "turns": 250,
+      "timeoutMin": 60,
+      "chain": true
+    }
+  }
+}

@@ -1,0 +1,14 @@
+{
+  "label": "Güvenlik",
+  "short": "güvenlik",
+  "order": 13,
+  "model": "sonnet",
+  "effort": "high",
+  "permissionMode": "",
+  "readOnly": true,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "security-and-hardening"
+  ]
+}

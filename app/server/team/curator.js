@@ -7,89 +7,24 @@ const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 const llm = require('../core/llm');
+const prompts = require('../core/prompts');
 const { CURATOR, plainBody, userBlocks } = require('./notes');
 const { TOKEN_ENV } = require('../session/hooks');
 
-const DEFAULTS = { enabled: true, everyH: 3, model: 'sonnet', level: 'orta' };
-const MIN_NOTES = 2;
-// Sonraki çalıştırmanın özetine eklenen önceki çalıştırma özetleri (düzenleyicinin hafızası).
-const MEMORY = 3;
-
+// Metinler ve ayarlar prompts/tools/not-duzenleyici/ (tool.json: varsayılanlar, minNotes, memory, derinlik seviyeleri;
+// prompt.md + seviye-<ad>.md + zincir.md + kapanis.md) ve prompts/tools/kapanis-ozeti/ altında; her çalıştırmada okunur.
 // Derinlik: modelin hangi notlara bakacağı ve ne kadar ileri gideceği. Zamanlı çalıştırma ayardaki seviyeyi,
 // "Şimdi düzenle" seçilen seviyeyi kullanır.
-const LEVELS = {
-  dusuk: {
-    label: 'düşük', turns: 30, timeoutMin: 10,
-    rules: [
-      'Derinlik: DÜŞÜK. Yalnızca YENİ ve DEĞİŞTİ işaretli notlara bak; diğer notları yalnızca bu notlarla tekrar ya da çelişki var mı diye kontrol etmek için oku.',
-      '- Notun içindeki tekrarları topla, biçimi düzelt; yeni not başka bir notun açıkça tekrarıysa birleştir.',
-      '- Projede araştırma yapma; çelişki görürsen sefe_sor ile sor.',
-    ],
-  },
-  orta: {
-    label: 'orta', turns: 80, timeoutMin: 20,
-    rules: [
-      'Derinlik: ORTA. YENİ ve DEĞİŞTİ işaretli notlardan başla; bunlarla aynı kartı, konuyu ya da notu anlatan eski notları da ele al.',
-      '- Aynı konudaki notları birleştir. Bu notlara bağlı review/düzeltme zinciri sonuçlandıysa (ONAY) zinciri ana nota kat (aşağıdaki zincir kuralı).',
-      '- Çelişkiyi önce projede araştır; kesin değilse sefe_sor ile sor.',
-    ],
-  },
-  yuksek: {
-    label: 'yüksek', turns: 250, timeoutMin: 60,
-    rules: [
-      'Derinlik: YÜKSEK. YENİ/DEĞİŞTİ işaretine bakmadan TÜM notları ele al. Notları kart numarasına ve konuya göre grupla, grup grup ilerle: her grupta yalnızca o grubun notlarını oku, işini bitir, sonra sonraki gruba geç.',
-      '- Sonuçlanmış her review/düzeltme zincirini ana nota kat (aşağıdaki zincir kuralı).',
-      '- Daha yeni bir kural ya da kararla geçersiz kalan notu bul: kullanıcı notu değilse başlığının başına "GEÇERSİZ (yerine #X): " ekle ve ilk satırına neyin yerine geçtiğini yaz; kullanıcı notuysa dokunma, özetinde belirt.',
-      '- Notlardaki dosya yollarını, komutları, ayar adlarını ve "şu şöyle çalışır" iddialarını projede doğrula; yanlışsa düzelt ve nedenini kısaca yaz, emin değilsen sefe_sor ile sor.',
-      '- Sırf ekleyenleri farklı diye ayrı bırakma; aynı işin notlarıysa birleştir.',
-    ],
-  },
-};
-
-const CHAIN = '- Zincir kuralı: bir işin raporu/araştırması, onun review notları ve "Düzeltme: not #X" notları tek zincirdir. Son review ONAY verdiyse '
-  + 'not_birlestir ile hedef ana not (rapor/araştırma) olsun; düzeltmeleri ana metne işle, review\'ları notun sonunda "## İnceleme geçmişi" bölümünde '
-  + 'tur tur kısa maddeler olarak (kim, hangi tur, sonuç, istenen düzeltmeler ve kalan düşük önemli notlar) özetle, başlığa "(ONAY)" ekle. '
-  + 'Bir review birden çok kartı kapsıyorsa her karta ait kısmı ilgili zincire taşı. Zincir sonuçlanmadıysa (düzeltme bekliyor) birleştirme.';
+const tool = () => prompts.tool('not-duzenleyici');
+const defaults = () => tool().config.defaults;
+const levels = () => tool().config.levels;
+const levelNames = () => Object.keys(levels());
 
 function systemPrompt(level) {
-  return [...SYSTEM, '', ...LEVELS[level].rules, ...(level === 'dusuk' ? [] : [CHAIN]),
-    '- Önceki çalıştırmaların özetinde "Ayrı bırakıldı" denen notlar o tarihten beri değişmediyse onları yeniden ele alma.',
-    'Sonunda yaptıklarını Türkçe kısa maddelerle özetle (ne birleştirildi, ne düzeltildi, ne geçersiz işaretlendi, ne soruldu). '
-      + 'Bilerek ayrı bıraktığın notları "Ayrı bırakıldı: #a, #b — neden" satırıyla yaz; bir sonraki çalıştırma bunu görür.',
-  ].join('\n');
+  const t = tool();
+  // Zincir kuralı (review/düzeltme zincirini ana nota katma) seviyenin "chain" ayarıyla eklenir.
+  return [t.text(), '', t.text(`seviye-${level}.md`), ...(levels()[level].chain ? [t.text('zincir.md')] : []), t.text('kapanis.md')].join('\n');
 }
-
-const SYSTEM = [
-  'Sen Claude Panel\'in not düzenleyicisisin. Bir yazılım ekibinin (birden çok Claude oturumu ve kullanıcı) ortak not defterini düzenli tutarsın.',
-  'Amaç: notlar az, düzenli, tekrarsız ve doğru olsun; ekip doğru bilgiyi hızlı bulsun.',
-  'Kesin kurallar:',
-  '- Bilgi kaybetme. Bir notu düzenlerken ya da birleştirirken içindeki her olgu, karar, komut, yol, sayı ve bağlantı yeni metinde bulunmalı. Emin değilsen dokunma.',
-  '- [kullanıcı] … [/kullanıcı] arasındaki satırları kullanıcı yazdı: olduğu gibi koru, kelimesine dokunma, işaret satırlarını da koru. "[kullanıcı notu]" olan notu düzenleyemezsin; başka bir notla birleştirirken onun metnini [kullanıcı] bloğu içinde aynen taşı.',
-  '- Yalnızca panel tool\'larıyla yaz (not_duzenle, not_birlestir, sefe_sor). Dosya yazamazsın; projeyi Read, Grep ve Glob ile yalnızca okuyabilirsin.',
-  '- Yazmadan önce notu not_oku ile oku ve verdiği surum değerini gönder.',
-  'Yapacakların:',
-  '- Aynı notta tekrarlanan bölümleri tek yerde topla.',
-  '- Aynı konuyu anlatan notları not_birlestir ile birleştir (en kapsamlı ya da en eski not hedef olsun).',
-  '- Çelişen bilgi varsa önce projeye (kod, yapılandırma, dokümanlar) bakarak hangisinin doğru olduğunu araştır. Kesin anlaşılıyorsa notu düzelt ve eski bilginin neden yanlış olduğunu kısaca yaz. Anlaşılmıyorsa tahmin etme: sefe_sor ile sor, notta o kısmı olduğu gibi bırak.',
-  '- Şefin cevapladığı sorular verildiyse ilgili notları o cevaba göre netleştir.',
-  '- Gereksiz yere yazma: notlar zaten düzgünse hiçbir şey değiştirme.',
-];
-
-const HANDOFF = [
-  'Sen Claude Panel\'in not düzenleyicisisin. Bir yazılım ekibinin (birden çok Claude oturumu ve kullanıcı) grubu kapanıyor; ekibin notları ve görev panosu proje klasörüne dışa aktarılacak.',
-  'Görevin: bu dışa aktarmanın giriş sayfası olacak "Proje durumu" belgesini yazmak. Bu projede sonra çalışacak bir ekip ya da kişi önce bunu okuyacak.',
-  'Notları not_listele / not_oku ile oku (hepsini; büyükse konu konu ilerle), gerekirse projeye Read/Grep/Glob ile bak. Hiçbir notu değiştirme; yazma tool\'ların yok.',
-  'Belge Türkçe Markdown olsun ve şu bölümleri içersin:',
-  '# Proje durumu — <grup adı>',
-  '## Özet: ekip ne üzerinde çalıştı, nerede kaldı (5-10 cümle).',
-  '## Geçerli kurallar ve kararlar: hâlâ geçerli olanlar; kimin, ne zaman aldığı ve kaynak not numarası (#12). Geçersiz kalanları ayrı alt başlıkta "yerine geçen" ile yaz.',
-  '## Yapılanlar: biten işler, kart ve not numaralarıyla.',
-  '## Açık işler: panodaki açık kartlar (yapılacak/yapılıyor/review) ve notlardaki bekleyen işler; her biri için durum ve sıradaki adım.',
-  '## Bilinen sorunlar ve riskler.',
-  '## Nerede ne var: önemli dosya/klasörler, komutlar, araçlar ve hangi notta anlatıldıkları.',
-  'Kurallar: bilgi uydurma; her önemli iddiada kaynak not ya da kart numarasını ver. Notlarda çelişki varsa ikisini de yaz ve çelişkiyi belirt. Kısaltma uğruna karar, sayı, yol ya da komut atma.',
-  'Cevabın yalnızca belgenin kendisi olsun; öncesinde ya da sonrasında açıklama yazma.',
-].join('\n');
 
 const fmt = (ts) => (ts ? new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '-');
 
@@ -104,7 +39,7 @@ class Curator {
   }
 
   cfg() {
-    return { ...DEFAULTS, ...((this.d.settings() || {}).curator || {}) };
+    return { ...defaults(), ...((this.d.settings() || {}).curator || {}) };
   }
 
   save() {
@@ -126,7 +61,7 @@ class Curator {
     const n = this.d.notes.load(gid);
     return {
       ...this.cfg(), running: this.running.has(gid), startedAt: (this.running.get(gid) || {}).at || null,
-      lastRunAt: s.lastRunAt || null, last: s.last || null, levels: Object.fromEntries(Object.entries(LEVELS).map(([k, v]) => [k, v.label])),
+      lastRunAt: s.lastRunAt || null, last: s.last || null, levels: Object.fromEntries(Object.entries(levels()).map(([k, v]) => [k, v.label])),
       open: n.questions.filter((q) => !q.answer).length, answered: n.questions.filter((q) => q.answer && !q.appliedAt).length,
       questions: n.questions.slice(-20),
     };
@@ -144,7 +79,7 @@ class Curator {
       const s = this.state[g.id] || {};
       if (!s.lastRunAt || now - s.lastRunAt < cfg.everyH * 3600 * 1000) continue;
       const n = this.d.notes.load(g.id);
-      if (n.notes.filter((x) => !x.archived).length < MIN_NOTES) continue;
+      if (n.notes.filter((x) => !x.archived).length < tool().config.minNotes) continue;
       if (s.hash && s.hash === this.hash(g.id)) continue;
       this.run(g).catch((err) => console.error('[panel] not düzenleyici:', err.message));
     }
@@ -175,10 +110,10 @@ class Curator {
       ...open.map((q) => `- S${q.id}: ${q.text}`),
       memory.length ? '' : null,
       memory.length ? 'Önceki çalıştırmaların özeti (hafızan; eskiden yeniye):' : null,
-      ...memory.map((m) => `--- ${fmt(m.at)} · ${(LEVELS[m.level] || LEVELS.orta).label} derinlik
+      ...memory.map((m) => `--- ${fmt(m.at)} · ${(levels()[m.level] || levels().orta || {}).label || m.level} derinlik
 ${m.text}`),
       '',
-      `Derinlik: ${LEVELS[level].label}. Notları not_oku ile oku, sonra düzenle.${level === 'yuksek' ? ' Tüm notları kart ve konu gruplarına ayırarak ele al.' : ' Önce YENİ ve DEĞİŞTİ işaretli notlara bak.'}`,
+      `Derinlik: ${levels()[level].label}. Notları not_oku ile oku, sonra düzenle.${level === 'yuksek' ? ' Tüm notları kart ve konu gruplarına ayırarak ele al.' : ' Önce YENİ ve DEĞİŞTİ işaretli notlara bak.'}`,
     ].filter((x) => x != null).join('\n');
   }
 
@@ -196,7 +131,9 @@ ${m.text}`),
   async run(g, manual = false, level = null) {
     if (this.running.has(g.id)) throw Object.assign(new Error('Not düzenleyici bu grupta zaten çalışıyor.'), { status: 409 });
     const cfg = this.cfg();
-    const lv = LEVELS[level] ? level : LEVELS[cfg.level] ? cfg.level : DEFAULTS.level;
+    const lvs = levels();
+    const lv = lvs[level] ? level : lvs[cfg.level] ? cfg.level : defaults().level;
+    const memSize = tool().config.memory;
     const account = this.d.account();
     if (!account) throw Object.assign(new Error('Kotası olan hesap yok.'), { status: 409 });
     const project = this.d.project(g);
@@ -204,13 +141,13 @@ ${m.text}`),
     const startedAt = Date.now();
     const appliedIds = this.d.notes.load(g.id).questions.filter((q) => q.answer && !q.appliedAt).map((q) => q.id);
     // Hafıza: eski kayıtlarda yalnızca son çalıştırma vardır.
-    const memory = (s.memory || (s.last && s.last.ok ? [{ at: s.last.at, level: 'orta', text: s.last.text }] : [])).slice(-MEMORY);
+    const memory = (s.memory || (s.last && s.last.ok ? [{ at: s.last.at, level: 'orta', text: s.last.text }] : [])).slice(-memSize);
     this.running.set(g.id, { at: startedAt, level: lv });
-    this.d.event(`Not düzenleyici başladı (${account.id} hesabı, ${cfg.model}, ${LEVELS[lv].label} derinlik${manual ? ', elle' : ''}).`, g.id);
+    this.d.event(`Not düzenleyici başladı (${account.id} hesabı, ${cfg.model}, ${lvs[lv].label} derinlik${manual ? ', elle' : ''}).`, g.id);
     let result;
     try {
       result = await this.spawn(g, account, cfg.model, project, this.brief(g, s.lastRunAt || null, lv, memory),
-        { turns: LEVELS[lv].turns, timeoutMin: LEVELS[lv].timeoutMin, system: systemPrompt(lv) });
+        { turns: lvs[lv].turns, timeoutMin: lvs[lv].timeoutMin, system: systemPrompt(lv) });
     } catch (err) {
       result = { ok: false, text: err.message, costUSD: 0 };
     } finally {
@@ -231,7 +168,7 @@ ${m.text}`),
     this.state[g.id] = {
       lastRunAt: Date.now(),
       hash: this.hash(g.id),
-      memory: result.ok ? [...memory, { at: Date.now(), level: lv, text }].slice(-MEMORY) : memory,
+      memory: result.ok ? [...memory, { at: Date.now(), level: lv, text }].slice(-memSize) : memory,
       last: { at: Date.now(), ok: result.ok, account: account.id, model: cfg.model, level: lv, costUSD: result.costUSD || 0, edited, merged, asked, sent, text, changes, ms: Date.now() - startedAt },
     };
     this.save();
@@ -263,8 +200,9 @@ ${m.text}`),
     this.running.set(g.id, { at: Date.now(), level: 'devir' });
     this.d.event(`Kapanış özeti yazılıyor (${account.id} hesabı, ${cfg.model}).`, g.id);
     try {
+      const t = prompts.tool('kapanis-ozeti');
       const r = await this.spawn(g, account, cfg.model, this.d.project(g), brief, {
-        turns: 150, timeoutMin: 40, system: HANDOFF, allowed: 'Read,Grep,Glob,mcp__panel__not_listele,mcp__panel__not_oku',
+        kind: 'kapanış özeti', turns: t.config.turns, timeoutMin: t.config.timeoutMin, system: t.text(), allowed: 'Read,Grep,Glob,mcp__panel__not_listele,mcp__panel__not_oku',
         deny: 'mcp__panel__not_duzenle,mcp__panel__not_birlestir,mcp__panel__sefe_sor',
       });
       if (!r.ok || !r.text.trim()) throw new Error(r.text || 'boş yanıt');
@@ -276,7 +214,7 @@ ${m.text}`),
 
   async spawn(g, account, model, project, brief, opts) {
     const r = await llm.run({
-      kind: opts.system === HANDOFF ? 'kapanış özeti' : 'not düzenleyici', gid: g.id, account, model, system: opts.system, input: brief,
+      kind: opts.kind || 'not düzenleyici', gid: g.id, account, model, system: opts.system, input: brief,
       cwd: project && fs.existsSync(project.path) ? project.path : this.d.dataDir,
       tools: 'Read,Grep,Glob', allowed: opts.allowed || 'Read,Grep,Glob,mcp__panel', deny: opts.deny || null,
       mcpConfig: this.writeMcp(g.id), maxTurns: opts.turns, env: { [TOKEN_ENV]: this.d.token },
@@ -286,4 +224,4 @@ ${m.text}`),
   }
 }
 
-module.exports = { Curator, CURATOR_DEFAULTS: DEFAULTS, CURATOR_LEVELS: Object.keys(LEVELS) };
+module.exports = { Curator, systemPrompt, curatorDefaults: defaults, curatorLevels: levelNames };

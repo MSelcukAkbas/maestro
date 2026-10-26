@@ -1,0 +1,14 @@
+{
+  "label": "Şeytanın avukatı",
+  "short": "avukat",
+  "order": 11,
+  "model": "sonnet",
+  "effort": "high",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "doubt-driven-development"
+  ]
+}

@@ -5,6 +5,7 @@ const fs = require('fs');
 const path = require('path');
 
 const store = require('../core/store');
+const prompts = require('../core/prompts');
 const discovery = require('../core/discovery');
 const { allQuota } = require('../watch/quota');
 const { sessionStats } = require('../core/usage');
@@ -28,6 +29,8 @@ const { APP_ROOT } = require('../core/paths');
 
 const ROOT = APP_ROOT;
 const settings = store.loadSettings();
+// Roller prompts/roles/ klasörlerinden okunur (dosya değişince yenilenir); settings.json'a yazılmaz.
+Object.defineProperty(settings, 'roles', { enumerable: true, get: () => prompts.roles() });
 let token = store.loadToken();
 // Dinlenen port açılışta sabitlenir; ayarlardaki port değişikliği yeniden başlatınca geçerli olur.
 const PORT = Number(process.env.CLAUDE_PANEL_PORT) || settings.port;
@@ -313,8 +316,9 @@ function warmStats() {
 
 // Ayarlar yerinde değiştirilir; settings nesnesini tutan parçalar güncel hali görür.
 function replaceSettings(next) {
-  for (const k of Object.keys(settings)) delete settings[k];
-  Object.assign(settings, next);
+  for (const k of Object.keys(settings)) if (k !== 'roles') delete settings[k];
+  const { roles, ...rest } = next;
+  Object.assign(settings, rest);
 }
 
 function currentToken() {

@@ -1,0 +1,14 @@
+{
+  "label": "Kod kalitesi",
+  "short": "kalite",
+  "order": 8,
+  "model": "sonnet",
+  "effort": "medium",
+  "permissionMode": "",
+  "readOnly": false,
+  "ctxWarn": null,
+  "ctxHigh": null,
+  "skills": [
+    "code-simplification"
+  ]
+}

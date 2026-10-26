@@ -8,9 +8,9 @@ arasındaki farka bakılır, uyarlamalar korunarak elle aktarılır.
 
 ## Rol eşleştirmesi
 
-Panelin okuduğu varsayılan eşleştirme `roles.json`'dadır; bu tablo onun okunur hâlidir, değişince ikisi birlikte
-güncellenir. Kullanıcının Ayarlar → Yetenekler'de yaptığı rol değişikliği `data/caps.json` (`builtinRoles`) içine
-varsayılandan fark olarak yazılır, bu dosyalara dokunmaz.
+Panelin okuduğu eşleştirme rol klasörlerindedir (`prompts/roles/<rol>/role.json` "skills" listesi); bu tablo onun
+okunur hâlidir, değişince ikisi birlikte güncellenir. Kullanıcının Ayarlar → Yetenekler'de yaptığı rol değişikliği de
+aynı `role.json` dosyalarına yazılır.
 
 | Rol (id) | Skill | Kaynak |
 |---|---|---|
