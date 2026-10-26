@@ -465,6 +465,26 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 .rchip:has(input:checked) { color: var(--text); border-color: #3b4456; background: var(--surface-2); }
 .rchip:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 1px; }
 .rchip:has(input:disabled) { opacity: .6; }
+/* Yetenekler sekmesi: tür sekmeleri + arama, tek satırlık açılır liste */
+.capx-bar { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; margin: 12.5px 0 9px; }
+.capx-bar input[type="search"] { flex: 1 1 260px; max-width: 420px; }
+.capx-tabs { flex-wrap: wrap; margin-bottom: 5.5px; }
+.capx-tabs .note { font-size: 10.5px; margin-left: 2.5px; }
+.capx { border-bottom: 1px solid var(--line); }
+.capx:last-child { border-bottom: 0; }
+.capx-head { display: flex; align-items: center; gap: 7px; width: 100%; min-height: 40px; padding: 7px 14.5px; border: 0; background: transparent; color: inherit; font: inherit; text-align: left; cursor: pointer; }
+.capx-head:hover { background: var(--surface-2); }
+.capx-head:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.capx-caret { color: var(--muted); font-size: 10px; transition: transform .15s; flex: none; }
+.capx.open .capx-caret { transform: rotate(90deg); }
+.capx-head .cap-name, .capx-head .badge { flex: none; }
+.capx-sum { flex: 1; min-width: 0; font-size: 11.5px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.capx.open .capx-sum { visibility: hidden; }
+.capx-on { flex: none; font-size: 11px; color: var(--text-2); padding: 2px 7px; border: 1px solid var(--line); border-radius: 999px; }
+.capx-on.off { color: var(--muted); border-style: dashed; }
+.capx-body { display: flex; flex-direction: column; gap: 9px; padding: 3.5px 14.5px 12.5px 32px; }
+.capx-group .capx-body { padding: 11px 14.5px; background: var(--surface-2); }
+@media (max-width: 640px) { .capx-sum { display: none; } .capx-body { padding-left: 14.5px; } }
 .dlg .seg { align-self: flex-start; }
 
 @media (max-width: 720px) {

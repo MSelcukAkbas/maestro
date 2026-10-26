@@ -254,6 +254,10 @@ const SettingsView = {
   onInput(e) {
     const el = e.target;
     if (el.dataset.cap && e.type === 'change') return this.toggleCap(el);
+    if (el.id === 'cap-q') {
+      this.capQuery = el.value;
+      return this.renderCapList();
+    }
     const f = el.dataset.f;
     if (!f) return;
     const [list, idx, key] = f.split('.');
@@ -261,6 +265,23 @@ const SettingsView = {
     if (key) this.model[list][Number(idx)][key] = val;
     else this.model[f] = val;
     this.setDirty();
+  },
+
+  renderCapList() {
+    const el = $('#cap-list');
+    if (el) el.innerHTML = this.capList();
+  },
+
+  // Bir yeteneği bütün rollerde açar / kapatır (rol başına bir istek; uç noktası rol başına çalışır).
+  async setCapAllRoles(key, on) {
+    let r = null;
+    for (const role of state.settings.roles) {
+      r = await act(() => api('PUT', '/api/caps/role', { key, roleId: role.id, on }));
+      if (!r) break;
+      this.caps = r;
+    }
+    if (r) toast(on ? 'Bütün rollerde açıldı.' : 'Bütün rollerde kapatıldı.');
+    this.renderCapList();
   },
 
   async toggleCap(el) {
@@ -272,6 +293,7 @@ const SettingsView = {
     if (r) {
       this.caps = r;
       if (grp) this.renderBody();
+      else if (this.tab === 'yetenekler') this.renderCapList();
     } else el.checked = !el.checked;
     el.disabled = false;
   },
@@ -395,6 +417,16 @@ const SettingsView = {
         token = r.token;
         store(TOKEN_KEY, token);
       }
+    } else if (a === 'cap-tab') {
+      this.capTab = b.dataset.tab;
+      this.renderCapList();
+    } else if (a === 'cap-toggle') {
+      const k = b.dataset.key;
+      if (this.capOpen.has(k)) this.capOpen.delete(k);
+      else this.capOpen.add(k);
+      this.renderCapList();
+    } else if (a === 'cap-all') {
+      this.setCapAllRoles(b.dataset.key, b.dataset.on === '1');
     } else if (a === 'cap-test') {
       this.testCap(b.dataset.key, b.dataset.id ? { id: b.dataset.id } : { key: b.dataset.key });
     } else if (a === 'mcp-new') {
@@ -1046,124 +1078,136 @@ ${this.roleArchiveSection(r)}`;
           <span class="rdot" style="background: ${roleColor({ roleId: r.id, roleLabel: r.label })}"></span>${esc(r.short || r.label)}</label>`).join('')}</div>`;
   },
 
+  // Yetenekler: tür sekmeleri + arama; her yetenek tek satır, tıklayınca açılır (açıklama, işlemler, rol işaretleri).
   tabCaps() {
     const c = this.caps;
     if (!c) return '<div class="note">Yetenekler yükleniyor…</div>';
     if (c.error) return `<div class="empty">Yetenekler alınamadı: ${esc(c.error)}</div>`;
+    const unsaved = this.dirty ? '<p class="note warn-note">Rollerde kaydedilmemiş değişiklik var; yeni ya da yeniden adlandırılan roller kaydedince burada görünür.</p>' : '';
+    return `
+        <p class="note">Panel yetenekleri yalnızca işaretli rollere verilir. Global olanlar hesaplarda kurulu; işareti kaldırdığın rolde o oturumlar için kapanır, hesap ayarların değişmez. Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur (devam ettirilen oturumda skill listesi bir sonraki compact'tan sonra).</p>
+        ${unsaved}
+        <div class="capx-bar">
+          <input type="search" id="cap-q" placeholder="Yetenek ara (ad ya da açıklama)" value="${esc(this.capQuery || '')}" aria-label="Yetenek ara">
+          <span class="grow"></span>
+          <button class="btn small" data-act="mcp-new">${ICON_PLUS} MCP ekle</button>
+          <button class="btn small" data-act="skill-new">${ICON_PLUS} Skill ekle</button>
+        </div>
+        <div id="cap-list">${this.capList()}</div>`;
+  },
+
+  // Bütün yetenekler tek biçimde: { key, tab, name, badges, desc, mono, tools (açılınca), isOn(rid), chars }.
+  capItems() {
+    const c = this.caps;
     const inv = c.inventory || [];
     const offOf = (key) => c.globalOff[key] || [];
-    const accs = (x) => `hesap: ${x.accounts.join(', ')}`;
-    const unsaved = this.dirty ? '<p class="note warn-note">Rollerde kaydedilmemiş değişiklik var; yeni ya da yeniden adlandırılan roller kaydedince burada görünür.</p>' : '';
-
-    const mcpRows = [
-      ...c.mcps.map((m) => `
-          <div class="cap-row">
-            <div class="cap-head">
-              <span class="cap-name mono">${esc(m.name)}</span><span class="badge acc-green">panel</span>
-              <span class="badge">${m.type === 'http' ? 'HTTP' : 'komut'}</span>
-              ${m.autoAllow ? '<span class="badge">izin sormaz</span>' : ''}
-              <span class="grow"></span>
-              <button class="btn small ghost" data-act="cap-test" data-key="pmcp:${esc(m.id)}" data-id="${esc(m.id)}">Dene</button>
-              <button class="btn small ghost" data-act="mcp-edit" data-id="${esc(m.id)}">Düzenle</button>
-              <button class="btn small ghost danger-text" data-act="mcp-del" data-id="${esc(m.id)}">Sil</button>
-            </div>
-            <div class="cap-desc mono">${esc(m.type === 'http' ? m.url : [m.command, ...(m.args || [])].join(' '))}${Object.keys(m.type === 'http' ? m.headers || {} : m.env || {}).length ? ` <span class="note">· ${esc(Object.keys(m.type === 'http' ? m.headers : m.env).map((k) => `${k}=•••`).join(' '))}</span>` : ''}</div>
-            ${this.testLine(`pmcp:${m.id}`)}
-            ${this.roleChecks(`pmcp:${m.id}`, (rid) => m.roles.includes(rid))}
-          </div>`),
-      ...inv.filter((x) => x.kind === 'mcp').map((x) => `
-          <div class="cap-row">
-            <div class="cap-head">
-              <span class="cap-name mono">${esc(x.name)}</span><span class="badge">global</span><span class="note">${esc(accs(x))}</span>
-              <span class="grow"></span>
-              <button class="btn small ghost" data-act="cap-test" data-key="${esc(x.key)}">Dene</button>
-            </div>
-            <div class="cap-desc mono">${esc(x.description)}</div>
-            ${this.testLine(x.key)}
-            ${this.roleChecks(x.key, (rid) => !offOf(x.key).includes(rid))}
-          </div>`),
-    ];
-
+    const globalOn = (key) => (rid) => !offOf(key).includes(rid);
+    const accs = (x) => `<span class="note">hesap: ${esc(x.accounts.join(', '))}</span>`;
     const globalSkillNames = new Set(inv.filter((x) => x.kind === 'skill').map((x) => x.name));
-    const skillRows = [
-      ...c.skills.map((s) => `
-          <div class="cap-row">
-            <div class="cap-head">
-              <span class="cap-name mono">${esc(s.name)}</span>
-              ${s.builtin
-              ? `<span class="badge acc-green" title="Panelle gelen skill (depodaki skills/ klasörü); panelden düzenlenmez. Varsayılan roller: ${esc((s.defaults || []).join(', ') || 'yok')}">panel</span>`
-              : '<span class="badge" title="Panelden eklediğin skill (data/skills)">yerel</span>'}
-              ${globalSkillNames.has(s.name) ? '<span class="badge warn" title="Global skill ile aynı ad; o rolde global olanı kapatırsan bu da gizlenir">ad çakışıyor</span>' : ''}
-              <span class="grow"></span>
-              ${s.builtin ? '' : `<button class="btn small ghost" data-act="skill-edit" data-name="${esc(s.name)}">Düzenle</button>
-              <button class="btn small ghost danger-text" data-act="skill-del" data-name="${esc(s.name)}">Sil</button>`}
-            </div>
-            <div class="cap-desc">${esc(s.description)}</div>
-            ${this.roleChecks(`pskill:${s.name}`, (rid) => s.roles.includes(rid))}
-          </div>`),
-      ...inv.filter((x) => x.kind === 'skill').map((x) => `
-          <div class="cap-row">
-            <div class="cap-head"><span class="cap-name mono">${esc(x.name)}</span><span class="badge">global</span><span class="note">${esc(accs(x))}</span></div>
-            <div class="cap-desc">${esc(x.description)}</div>
-            ${this.roleChecks(x.key, (rid) => !offOf(x.key).includes(rid))}
-          </div>`),
+    const ghost = (act, attrs, text, danger) => `<button class="btn small ghost${danger ? ' danger-text' : ''}" data-act="${act}" ${attrs}>${text}</button>`;
+    return [
+      ...c.mcps.map((m) => {
+        const secret = Object.keys(m.type === 'http' ? m.headers || {} : m.env || {});
+        return {
+          key: `pmcp:${m.id}`, tab: 'mcp', name: m.name, mono: true, isOn: (rid) => m.roles.includes(rid),
+          badges: `<span class="badge acc-green">panel</span><span class="badge">${m.type === 'http' ? 'HTTP' : 'komut'}</span>${m.autoAllow ? '<span class="badge">izin sormaz</span>' : ''}`,
+          desc: (m.type === 'http' ? m.url : [m.command, ...(m.args || [])].join(' ')) + (secret.length ? ` · ${secret.map((k) => `${k}=•••`).join(' ')}` : ''),
+          tools: ghost('cap-test', `data-key="pmcp:${esc(m.id)}" data-id="${esc(m.id)}"`, 'Dene') + ghost('mcp-edit', `data-id="${esc(m.id)}"`, 'Düzenle') + ghost('mcp-del', `data-id="${esc(m.id)}"`, 'Sil', true),
+        };
+      }),
+      ...inv.filter((x) => x.kind === 'mcp').map((x) => ({
+        key: x.key, tab: 'mcp', name: x.name, mono: true, isOn: globalOn(x.key), desc: x.description,
+        badges: '<span class="badge">global</span>', tools: ghost('cap-test', `data-key="${esc(x.key)}"`, 'Dene') + accs(x),
+      })),
+      ...c.skills.map((s) => ({
+        key: `pskill:${s.name}`, tab: 'skill', name: s.name, isOn: (rid) => s.roles.includes(rid), desc: s.description,
+        badges: (s.builtin
+          ? `<span class="badge acc-green" title="Panelle gelen skill (depodaki skills/ klasörü); panelden düzenlenmez. Varsayılan roller: ${esc((s.defaults || []).join(', ') || 'yok')}">panel</span>`
+          : '<span class="badge" title="Panelden eklediğin skill (data/skills)">yerel</span>')
+          + (globalSkillNames.has(s.name) ? '<span class="badge warn" title="Global skill ile aynı ad; o rolde global olanı kapatırsan bu da gizlenir">ad çakışıyor</span>' : ''),
+        tools: s.builtin ? '' : ghost('skill-edit', `data-name="${esc(s.name)}"`, 'Düzenle') + ghost('skill-del', `data-name="${esc(s.name)}"`, 'Sil', true),
+      })),
+      ...inv.filter((x) => x.kind === 'skill').map((x) => ({
+        key: x.key, tab: 'skill', name: x.name, isOn: globalOn(x.key), desc: x.description, badges: '<span class="badge">global</span>', tools: accs(x),
+      })),
+      ...inv.filter((x) => x.kind === 'plugin').map((x) => ({
+        key: x.key, tab: 'plugin', name: x.name, isOn: globalOn(x.key), desc: x.description, chars: x.chars,
+        badges: `<span class="badge">global</span>${x.hooks ? '<span class="badge warn" title="Kapatınca arka planda yaptığı iş de durur">kancalı</span>' : ''}`,
+        tools: `<span class="note mono">${esc(x.id)}</span>${accs(x)}${x.skills ? `<span class="note">skill'leri: ${esc(x.skills.join(', '))}</span>` : ''}`,
+      })),
+      ...['synced', 'project', 'bundled'].flatMap((kind) => inv.filter((x) => x.kind === kind).map((x) => ({
+        key: x.key, tab: kind, name: x.name, isOn: globalOn(x.key), desc: x.description, chars: x.chars, badges: '',
+        tools: x.projects ? `<span class="note">proje: ${esc(x.projects.join(', '))}</span>` : '',
+      }))),
     ];
+  },
 
-    // Oturumlarda görülen yerleşik ve claude.ai skill'leri: tür başına bir "bu rolde hepsi" satırı, ardından tek tek.
-    const tok = (x) => (x.chars ? `<span class="note">~${Math.round(x.chars / CHARS_PER_TOK)} tok</span>` : '');
-    const seenSection = (kind, title, note) => {
-      const list = inv.filter((x) => x.kind === kind);
-      if (!list.length) return '';
-      const total = Math.round(list.reduce((a, x) => a + (x.chars || 0), 0) / CHARS_PER_TOK);
-      const allOn = (rid) => list.some((x) => !offOf(x.key).includes(rid));
+  capList() {
+    const TABS = [
+      ['mcp', 'MCP', 'Panel MCP\'leri ve hesaplarda kurulu MCP sunucuları. Değişiklik yeni açılan ya da yeniden başlatılan oturumda geçerli olur.'],
+      ['skill', 'Skill', 'Panelle gelen, panelden eklenen ve hesaplarda kurulu skill\'ler.'],
+      ['plugin', 'Eklenti', 'Eklenti kapatılınca içindeki MCP\'ler ve skill\'ler birlikte kapanır.'],
+      ['synced', 'claude.ai', 'claude.ai hesabından eşitlenen skill\'ler. Açıklamaları her istekte bağlama girer; rolün kullanmayacaklarını kapat.'],
+      ['project', 'Proje', 'Proje klasörlerindeki .claude/skills; yalnızca o projede açılan oturumlarda görünür.'],
+      ['bundled', 'Yerleşik', 'Claude Code ile gelen skill\'ler. Liste oturum kayıtlarından öğrenilir; yeni sürümde gelen skill bir oturum açılınca burada görünür.'],
+    ];
+    const roles = state.settings.roles;
+    const q = (this.capQuery || '').trim().toLocaleLowerCase('tr');
+    const all = this.capItems();
+    const hits = q ? all.filter((x) => `${x.name} ${x.desc || ''}`.toLocaleLowerCase('tr').includes(q)) : all;
+    const count = (t) => hits.filter((x) => x.tab === t).length;
+    // Proje / claude.ai / yerleşik hiç yoksa sekmesi gösterilmez; aramada seçili sekme boşsa ilk dolu sekmeye geçilir.
+    const tabs = TABS.filter(([t]) => ['mcp', 'skill', 'plugin'].includes(t) || all.some((x) => x.tab === t));
+    let tab = this.capTab || 'mcp';
+    if (!tabs.some(([t]) => t === tab) || (q && !count(tab))) tab = (tabs.find(([t]) => count(t)) || tabs[0])[0];
+    const list = hits.filter((x) => x.tab === tab);
+    const open = this.capOpen || (this.capOpen = new Set());
+    const tok = (chars) => (chars ? `<span class="note">~${Math.round(chars / CHARS_PER_TOK)} tok</span>` : '');
+    const rows = list.map((x) => {
+      const on = roles.filter((r) => x.isOn(r.id)).length;
+      const isOpen = open.has(x.key);
       return `
-        <section class="section">
-          <div class="section-head"><h2>${title}</h2><span class="count">${list.length}</span><span class="note">hepsi açıkken her istekte ~${total} tok</span></div>
-          <p class="note">${note}</p>
-          <div class="card cap-list">
-            <div class="cap-row">
-              <div class="cap-head"><span class="cap-name">Bu türün hepsi</span><span class="note">işareti kaldırınca o rolde hepsi kapanır; en az biri açıksa işaretli görünür</span></div>
-              ${this.roleChecks(`group:${kind}`, allOn)}
+          <div class="capx${isOpen ? ' open' : ''}">
+            <button class="capx-head" data-act="cap-toggle" data-key="${esc(x.key)}" aria-expanded="${isOpen}">
+              <span class="capx-caret" aria-hidden="true">▸</span>
+              <span class="cap-name mono">${esc(x.name)}</span>${x.badges}
+              <span class="capx-sum">${esc(x.desc || '')}</span>
+              ${tok(x.chars)}
+              <span class="capx-on${on === 0 ? ' off' : ''}" title="Bu yetenek ${on} rolde açık">${on}/${roles.length} rol</span>
+            </button>
+            ${isOpen ? `
+            <div class="capx-body">
+              ${x.desc ? `<div class="cap-desc${x.mono ? ' mono' : ''}">${esc(x.desc)}</div>` : ''}
+              ${x.tools ? `<div class="cap-head">${x.tools}</div>` : ''}
+              ${this.testLine(x.key)}
+              ${this.roleChecks(x.key, x.isOn)}
+              <div class="cap-head">
+                <button class="btn small ghost" data-act="cap-all" data-key="${esc(x.key)}" data-on="1">Bütün rollerde aç</button>
+                <button class="btn small ghost" data-act="cap-all" data-key="${esc(x.key)}" data-on="0">Bütün rollerde kapat</button>
+              </div>
+            </div>` : ''}
+          </div>`;
+    });
+    const note = TABS.find(([t]) => t === tab)[2];
+    // claude.ai / proje / yerleşik skill'ler kalabalık: rol başına "bu türün hepsi" satırı listenin başında.
+    let group = '';
+    if (['synced', 'project', 'bundled'].includes(tab) && !q) {
+      const same = all.filter((x) => x.tab === tab);
+      const total = Math.round(same.reduce((a, x) => a + (x.chars || 0), 0) / CHARS_PER_TOK);
+      group = `
+          <div class="capx capx-group">
+            <div class="capx-body">
+              <div class="cap-head"><span class="cap-name">Bu türün hepsi</span><span class="note">hepsi açıkken her istekte ~${total} tok · işareti kaldırınca o rolde hepsi kapanır; en az biri açıksa işaretli görünür</span></div>
+              ${this.roleChecks(`group:${tab}`, (rid) => same.some((x) => x.isOn(rid)))}
             </div>
-            ${list.map((x) => `
-            <div class="cap-row">
-              <div class="cap-head"><span class="cap-name mono">${esc(x.name)}</span>${tok(x)}</div>
-              <div class="cap-desc">${esc(x.description)}</div>
-              ${this.roleChecks(x.key, (rid) => !offOf(x.key).includes(rid))}
-            </div>`).join('')}
-          </div>
-        </section>`;
-    };
-
-    const pluginRows = inv.filter((x) => x.kind === 'plugin').map((x) => `
-        <div class="cap-row">
-          <div class="cap-head"><span class="cap-name mono">${esc(x.name)}</span><span class="badge">global</span>${x.hooks ? '<span class="badge warn" title="Kapatınca arka planda yaptığı iş de durur">kancalı</span>' : ''}${tok(x)}<span class="note">${esc(x.id)} · ${esc(accs(x))}</span></div>
-          ${x.description ? `<div class="cap-desc">${esc(x.description)}</div>` : ''}
-          ${this.roleChecks(x.key, (rid) => !offOf(x.key).includes(rid))}
-        </div>`);
-
-    const empty = (t) => `<div class="note" style="padding: 12.5px 14.5px">${t}</div>`;
+          </div>`;
+    }
     return `
-        <p class="note">Panel yetenekleri yalnızca işaretli rollere verilir. Global olanlar hesaplarda kurulu; işareti kaldırdığın rolde o oturumlar için kapanır, hesap ayarların değişmez. MCP ve eklenti değişiklikleri yeni açılan ya da yeniden başlatılan oturumlarda geçerli olur. Skill listesi oturumun geçmişinde durduğu için skill değişikliği yeni açılan ya da yenilenen oturumda, devam ettirilen oturumda ise bir sonraki compact'tan sonra geçerli olur.</p>
-        ${unsaved}
-        <section class="section">
-          <div class="section-head"><h2>MCP sunucuları</h2><span class="count">${mcpRows.length}</span><span class="grow"></span>
-            <button class="btn small" data-act="mcp-new">${ICON_PLUS} MCP ekle</button></div>
-          <div class="card cap-list">${mcpRows.join('') || empty('MCP yok.')}</div>
-        </section>
-        <section class="section">
-          <div class="section-head"><h2>Skill'ler</h2><span class="count">${skillRows.length}</span><span class="grow"></span>
-            <button class="btn small" data-act="skill-new">${ICON_PLUS} Skill ekle</button></div>
-          <div class="card cap-list">${skillRows.join('') || empty('Skill yok.')}</div>
-        </section>
-        <section class="section">
-          <div class="section-head"><h2>Eklentiler</h2><span class="count">${pluginRows.length}</span></div>
-          <p class="note">Eklenti kapatılınca içindeki MCP'ler ve skill'ler birlikte kapanır.</p>
-          <div class="card cap-list">${pluginRows.join('') || empty('Açık eklenti yok.')}</div>
-        </section>
-        ${seenSection('synced', 'claude.ai skill\'leri', 'claude.ai hesabından eşitlenen skill\'ler. Açıklamaları her istekte bağlama girer; rolün kullanmayacaklarını kapat.')}
-        ${seenSection('project', 'Proje skill\'leri', 'Proje klasörlerindeki .claude/skills; yalnızca o projede açılan oturumlarda görünür.')}
-        ${seenSection('bundled', 'Claude Code yerleşik skill\'leri', 'Claude Code ile gelen skill\'ler. Liste oturum kayıtlarından öğrenilir; yeni sürümde gelen skill bir oturum açılınca burada görünür.')}`;
+        <div class="seg capx-tabs" role="group" aria-label="Yetenek türü">
+          ${tabs.map(([t, label]) => `<button data-act="cap-tab" data-tab="${t}" aria-pressed="${t === tab}">${label} <span class="note">${count(t)}</span></button>`).join('')}
+        </div>
+        <p class="note">${note}</p>
+        <div class="card cap-list">${group}${rows.join('') || `<div class="note" style="padding: 12.5px 14.5px">${q ? 'Aramaya uyan yetenek yok.' : 'Bu türde yetenek yok.'}</div>`}</div>`;
   },
 
   tabGeneral() {
