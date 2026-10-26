@@ -21,21 +21,21 @@ node test/e2e.js [senaryo ...] # gerçek Claude oturumları açar, KOTA HARCAR (
 node --check server/<klasör>/<dosya>.js # hızlı sözdizimi kontrolü
 ```
 
-- **Canlı panel (7788) ile test paneli (7799) ayrıdır.** `test/lib.js` paneli `CLAUDE_PANEL_DATA=<geçici klasör>` ve `CLAUDE_PANEL_PORT=7799` ile açar, canlı `data/settings.json`, `projects.json`, `caps.json`'u kopyalar; gruplar boş başlar. Canlı veriye ve oturumlara dokunma.
+- **Canlı panel (7788) ile test paneli (7799) ayrıdır.** `test/lib.js` paneli `CLAUDE_PANEL_DATA=<geçici klasör>` ve `CLAUDE_PANEL_PORT=7799` ile açar, canlı `data/settings.json`, `projects.json`, `caps.json`'u kopyalar (varsa); canlı veride yoksa deponun kökünü "claude-panel" projesi olarak ekler; gruplar boş başlar. Canlı veriye ve oturumlara dokunma.
 - Canlı panel kullanıcının açık ekip oturumlarını barındırır; yeniden başlatmak hepsini kapatır. Yeni kod canlıda ancak yeniden başlatınca geçer (`Claude-Panel.bat` ya da arka planda `Claude-Panel-Arkaplan.vbs`; kapatma Ayarlar → "Sunucuyu kapat"). Yeniden başlatmayı kullanıcıya sormadan yapma; yapılmadıysa "canlıda doğrulanmadı" diye raporla.
 - Değişiklikten sonra beklenen doğrulama: `node --test test/unit.test.js` + ilgili `node test/e2e.js <senaryo>`; API eklendiyse `test/smoke.js`'e de ekle.
-- e2e oturumları bu klasörde açar; klasör git deposu olduğundan Claude Code güveni deponun kökünden sorar (üst klasör `Desktop`'ın güveni artık yetmez). Hesapta klasör güvenilir değilse oturumlar güven ekranında bekler ve e2e "skill listesi yok" / "ilk görev bitmedi" diye düşer.
+- e2e oturumları deponun kökünde (`app/`'in bir üstü, `test/lib.js` `REPO`) açar; klasör git deposu olduğundan Claude Code güveni deponun kökünden sorar (üst klasör `Desktop`'ın güveni artık yetmez). Hesapta klasör güvenilir değilse oturumlar güven ekranında bekler ve e2e "skill listesi yok" / "ilk görev bitmedi" diye düşer.
 - İlk görev (`firstTask`) gruptaki yalnızca şefe ya da ilk üyeye gider; diğer üyelerin oturum kaydı ilk mesaja kadar oluşmaz.
 - Ortam değişkenleri: `CLAUDE_PANEL_DATA`, `CLAUDE_PANEL_PORT`, `CLAUDE_PANEL_ROTATE_MS`, `CLAUDE_PANEL_HOOK_DEBUG`, `TEST_PANEL_PORT`, `E2E_ACCOUNT`, `SMOKE_PC`.
 - `attach.js <oturum-id> [port] [veri]`: harici terminali paneldeki bir oturumun PTY'sine bağlar.
 
 ## Mimari
 
-### Oturum yaşam döngüsü (index.js → sessions.js → hooks.js)
+### Oturum yaşam döngüsü (panel/launch.js → session/sessions.js → session/hooks.js)
 - `server/index.js` yalnızca parçaları bağlar ve tüm zamanlayıcıları kurar. Yapıştırıcı `server/panel/`: `context.js` (ayarlar, anahtar, modül örnekleri, ortak yardımcılar; `settings` nesnesinin kimliği sabit, `replaceSettings` yerinde günceller; anahtar `currentToken()`, kota önbelleği `lastQuota()` ile okunur), `prompt.js` (`writePromptFile`; sunucu bağlamına bağlı değil, tek başına yüklenir), `launch.js` (kurma, açılış, yenileme, hesap/ayar değişikliği), `delivery.js` (üyelere iletim), `members.js` (`memberSnapshot`, şef isteklerinin uygulanması), `ticks.js` (zamanlı işler), `state.js` (`buildState`), `http.js` (router `route(method, regex, handler)`, hook/MCP uçları, WebSocket `/ws`, `start()`). API uçları `server/routes/*.js` (require edilince kaydolur). Alt modüller birbirini çağırmaz; panel/ katmanından fonksiyon/callback alır (ör. `new Ops({ member, state, paste, ... })`).
 - Kimlik: tarayıcı/API `x-panel-token` (data/token.txt); oturumların hook ve MCP çağrıları ayrı, her açılışta yenilenen `x-panel-hook-token` (ortam değişkeni `PANEL_HOOK_TOKEN`, dosyaya yazılmaz).
-- `launchSession` her üye için oturuma özel dosyalar üretir ve `SessionManager.launch` ile pwsh içinde `claude` başlatır:
-  - `data/prompts/<sid>.md` → `--append-system-prompt-file` (`writePromptFile`: kimlik, rol talimatı, ekip, iletişim/pano/not kuralları; şefe ek orkestrasyon ve ekip yönetimi bölümleri). Rol talimatı değişikliği yalnızca yeni/yenilenen oturumda geçer (resume sistem istemini korur).
+- `launchSession` (`panel/launch.js`) her üye için oturuma özel dosyalar üretir ve `SessionManager.launch` ile pwsh içinde `claude` başlatır:
+  - `data/prompts/<sid>.md` → `--append-system-prompt-file` (`panel/prompt.js` `writePromptFile(group, session, project, accounts)`: kimlik, rol talimatı, ekip, iletişim/pano/not kuralları; şefe ek orkestrasyon ve ekip yönetimi bölümleri). Rol talimatı değişikliği yalnızca yeni/yenilenen oturumda geçer (resume sistem istemini korur).
   - `data/session-settings/<sid>.json` → `--settings`: tüm olaylar için `type:"http"` hook'lar (`/api/hook`), `mcp__panel` izni, rolün `deny` / `enabledPlugins` / `skillOverrides`'ı. Salt okunur rol (`readOnly`) → `Edit/Write/NotebookEdit` deny.
   - `data/mcp/<sid>.json` → `--mcp-config`: panelin MCP sunucusu `/api/mcp/<sid>` (adres üyenin kimliğini taşır) + rolün panel MCP'leri.
   - `--session-id` / `--resume`, `--model`, `--effort`, `--permission-mode`, `--add-dir` (panel skill'leri), ilk görev `taskFile`.
