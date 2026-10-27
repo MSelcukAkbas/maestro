@@ -58,6 +58,11 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     await hit('PUT', `/api/groups/${g.id}/watch`, { act: false });
     await hit('POST', `/api/groups/${g.id}/ask-summary`);
     await hit('GET', `/api/groups/${g.id}/close`);
+    // Mesaj geliştirici: boş mesaj ve bilinmeyen oturum model çağırmadan reddedilir.
+    await hit('POST', `/api/sessions/${sid}/improve-prompt`, { text: ' ' }, (s) => s === 400);
+    await hit('POST', '/api/sessions/yok-boyle/improve-prompt', { text: 'x' }, (s) => s === 404);
+    await hit('POST', `/api/sessions/${sid}/send`, { text: '' }, (s) => s === 400);
+    await hit('POST', `/api/groups/${g.id}/board-improve`, { title: ' ', text: '' }, (s) => s === 400);
     await hit('POST', `/api/sessions/${sid}/settings`, { effort: 'medium' });
     await hit('DELETE', `/api/sessions/${sid}/settings`);
     await hit('POST', `/api/sessions/${sid}/account`, { accountId: st.settings.accounts[0].id });

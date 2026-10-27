@@ -127,6 +127,7 @@ metin bulunur. Sistem istemi bunların bu sırayla, kendi başlıklarının alt�
 | `not-duzenleyici` | Grup notlarını toparlar | `defaults` (Ayarlar'daki değerlerin varsayılanı), `minNotes`, `memory`, `levels` |
 | `kapanis-ozeti` | Grup kapanırken "Proje durumu" belgesi | `turns`, `timeoutMin` |
 | `rol-danismani` | Rol sayfasındaki "Rolü optimize et": rolü ve geçmiş kullanımını (yetenek başına çağrı sayısı dahil) inceler, soru sorar, cevaplara göre küçük değişiklik önerir | `model`, `effort`, `timeoutSec`, `maxQuestions`, `maxChanges`, `maxTextChange`, `historySessions` |
+| `prompt-gelistirici` | Terminalin sağ altındaki ✨: kullanıcının üyeye yazacağı ham mesajı düzeltir, kısa gerekçelerle gösterir (soru sormaz; çıktı `metin`, `degisti`, `gerekceler`). Görev kartı penceresindeki "✨ Geliştir" de bunu kullanır (`kart.md` görevlere eklenir, çıktıya `baslik` girer) | `model`, `effort`, `timeoutSec`, `maxInput`, `maxReasons` |
 
 Not düzenleyicide görevlerin sonuna iki parça daha eklenir (Sınırlar'dan önce):
 

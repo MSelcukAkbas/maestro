@@ -477,3 +477,21 @@ test('rol danışmanı: öneriler küçük değişiklik kuralıyla doğrulanır,
   assert.strictEqual(u.oturumlar[0].bekci_hamleleri, 1);
   assert.strictEqual(u.model_basina['sonnet-5-5'].oturum, 1);
 });
+
+test('mesaj geliştirici: yanıt doğrulanır, boş metin reddedilir, aynı metin değişmedi sayılır', () => {
+  const { validate } = require('../server/setup/promptdev');
+  const ok = validate({ metin: ' Yeni mesaj\r\nikinci satır ', degisti: true, gerekceler: ['a', '', 'b', 3] }, 'ham');
+  assert.deepStrictEqual(ok, { text: 'Yeni mesaj\nikinci satır', changed: true, reasons: ['a', 'b'] });
+  assert.strictEqual(validate({ metin: 'ham', degisti: true, gerekceler: [] }, ' ham ').changed, false);
+  assert.strictEqual(validate({ metin: 'x', degisti: false }, 'ham').changed, false);
+  assert.throws(() => validate({ metin: '  ' }, 'ham'), /boş/);
+  assert.throws(() => validate(null, 'ham'));
+  assert.ok(require('../server/core/prompts').tool('prompt-gelistirici').system().includes('## Çıktı'));
+});
+
+test('mesaj geliştirici: kart modunda başlık zorunlu, kart istemi göreve eklenir', () => {
+  const { validate } = require('../server/setup/promptdev');
+  assert.deepStrictEqual(validate({ baslik: ' Başlık ', metin: 'Açıklama', gerekceler: [] }, 'ham', true), { title: 'Başlık', text: 'Açıklama', changed: true, reasons: [] });
+  assert.throws(() => validate({ metin: 'Açıklama' }, 'ham', true), /başlığı/);
+  assert.ok(require('../server/core/prompts').tool('prompt-gelistirici').text('kart.md').includes('baslik'));
+});

@@ -1,0 +1,6 @@
+- Ham mesajı hedef üyenin rolü, grup ve proje bağlamıyla birlikte oku.
+- Mesajı yeniden yaz: amaç, kapsam, varsa dokunulacak yerler ve bitiş ölçütü açık olsun. Dağınık maddeleri sıraya koy.
+- Bilgi eksikse metne eksiklik notu yazma ve uydurma ayrıntı ekleme. Yalnızca kullanıcının söylediklerini netleştir; yaptığın varsayımı `gerekceler`'de söyle.
+- Mesaj zaten net ve yeterliyse olduğu gibi döndür, `degisti` değerini false yaz ve tek gerekçe olarak nedenini söyle.
+- Her önemli değişikliğin nedenini kısa bir gerekçe olarak yaz.
+- Mesajı kullanıcının dilinde yaz.

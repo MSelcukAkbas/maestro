@@ -1,0 +1,8 @@
+- Kullanıcının istemediği iş, kısıt, dosya adı, sayı ya da kabul ölçütü uydurma.
+- Kullanıcının yazdığı kesin değerleri (yol, komut, sayı, ad) aynen koru.
+- Mesaja kendi görüşünü ya da yöntem dayatmasını ekleme.
+- Hiçbir araç çalıştırma, dosya okuma; yalnızca verilen bilgiyle çalış.
+- Mesajı gönderen sen değilsin; yalnızca metin üret.
+- `metin` yalnızca üyeye gidecek talimattır. Kullanıcıya yönelik not, varsayım, "belirtilmedi" ya da "bilgi yok" cümlesi, soru ve açıklama metne girmez; bunların hepsi `gerekceler`'e yazılır.
+- Kullanıcının söylemediği bir süre, tarih, kapsam sınırı ya da kısıtı (ör. "bugün tamamlanacak", "yeni bağımlılık eklenmeyecek") metne ekleme. Eksik bilgi için üyeye uydurma bir kural yazmak yerine o kısmı boş bırak.
+- Metni bitirmeden önce yazım hatalarını düzelt; yazım hatası olan metin döndürme.

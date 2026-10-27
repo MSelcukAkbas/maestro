@@ -2136,6 +2136,7 @@ const WorkView = {
     const card = id != null && this.lastBoard ? this.lastBoard.cards.find((c) => c.id === id) : null;
     if (id != null && !card) return;
     this.cardEdit = card ? { id: card.id, version: card.version } : { id: null };
+    this.cardUndo = null;
     const members = g.sessions.filter((s) => !s.removed);
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
     const cur = card || { title: '', desc: '', status: status || 'todo', assignee: null, notes: [] };
@@ -2152,7 +2153,9 @@ const WorkView = {
         </div>
         <div class="dlg-body">
           <div class="field"><label for="cd-title">Başlık</label><input id="cd-title" maxlength="200" value="${esc(cur.title)}" placeholder="Tek cümlelik görev özeti"></div>
-          <div class="field"><label for="cd-desc">Açıklama</label><textarea id="cd-desc" rows="5" placeholder="Ne yapılacak, kabul kriteri, dokunulacak dosyalar">${esc(cur.desc)}</textarea></div>
+          <div class="field"><label for="cd-desc">Açıklama</label><textarea id="cd-desc" rows="5" placeholder="Ne yapılacak, kabul kriteri, dokunulacak dosyalar">${esc(cur.desc)}</textarea>
+            <div class="cd-imp"><button type="button" class="btn ghost" data-cact="improve">✨ Geliştir</button><button type="button" class="btn ghost" data-cact="undo-improve" hidden>Geri al</button><span class="note" id="cd-imp-msg"></span></div>
+            <ul class="imp-why" id="cd-why" hidden></ul></div>
           <div class="row-fields">
             <div class="field"><label for="cd-status">Durum</label><select id="cd-status">${BOARD_COLS.map(([k, l]) => opt(k, l, cur.status)).join('')}</select></div>
             <div class="field"><label for="cd-who">Atanan</label><select id="cd-who">${opt('', 'Atanmadı', cur.assignee || '')}${members.map((m) => opt(m.id, `${m.roleLabel} · ${m.accountId}`, cur.assignee || '')).join('')}</select></div>
@@ -2177,6 +2180,8 @@ const WorkView = {
     const dlg = $('#card-dlg');
     const ed = this.cardEdit;
     if (b.dataset.cact === 'cancel') return dlg.close();
+    if (b.dataset.cact === 'improve') return this.improveCard(b);
+    if (b.dataset.cact === 'undo-improve') return this.undoImprove(b);
     if (b.dataset.cact === 'delete') {
       if (!confirm(`Kart #${ed.id} silinsin mi? Atanan üye bitmemiş bir kartsa silindiği kendisine bildirilir.`)) return;
       const r = await act(() => api('DELETE', `/api/groups/${this.gid}/board/${ed.id}`));
@@ -2208,6 +2213,42 @@ const WorkView = {
       dlg.close();
       this.refreshBoard(this.group());
     }
+  },
+
+  // Kart geliştirici: başlık + açıklama forma yazılır (kaydedilmez); önceki hâli "Geri al" ile döner.
+  async improveCard(btn) {
+    const title = $('#cd-title');
+    const desc = $('#cd-desc');
+    if (!title.value.trim() && !desc.value.trim()) return toast('Önce başlık ya da açıklama yaz.', true);
+    const msg = $('#cd-imp-msg');
+    const before = { title: title.value, desc: desc.value };
+    btn.disabled = true;
+    msg.textContent = 'Geliştiriliyor…';
+    try {
+      const r = await api('POST', `/api/groups/${this.gid}/board-improve`, { title: before.title, text: before.desc, assignee: $('#cd-who').value });
+      this.cardUndo = before;
+      title.value = r.title;
+      desc.value = r.text;
+      const why = $('#cd-why');
+      why.innerHTML = (r.reasons.length ? r.reasons : ['Kart zaten net; değişiklik gerekmedi.']).map((x) => `<li>${esc(x)}</li>`).join('');
+      why.hidden = false;
+      $('#card-dlg [data-cact="undo-improve"]').hidden = false;
+      msg.textContent = '';
+    } catch (err) {
+      msg.textContent = '';
+      toast(err.message || 'Kart geliştirilemedi.', true);
+    } finally {
+      btn.disabled = false;
+    }
+  },
+
+  undoImprove(btn) {
+    if (!this.cardUndo) return;
+    $('#cd-title').value = this.cardUndo.title;
+    $('#cd-desc').value = this.cardUndo.desc;
+    this.cardUndo = null;
+    $('#cd-why').hidden = true;
+    btn.hidden = true;
   },
 
   // Kart bu arada bir üye tarafından değiştirildiyse sunucu 409 döner; güncel hâli gösterilir.
@@ -2411,7 +2452,7 @@ const WorkView = {
         const el = document.createElement('section');
         el.className = s.roleId === 'sef' ? 'pane lead' : 'pane';
         el.dataset.sid = s.id;
-        el.innerHTML = `<div class="pane-head"><span class="dot"></span><span class="nm"></span><span class="st"></span><button class="tab-more pane-more" data-menu="${esc(s.id)}" aria-haspopup="dialog" aria-label="${esc(s.roleLabel)} · ayrıntılar ve işlemler" title="Ayrıntılar ve işlemler">⋯</button></div><div class="pane-body"></div>`;
+        el.innerHTML = `<div class="pane-head"><span class="dot"></span><span class="nm"></span><span class="st"></span><button class="tab-more pane-more" data-menu="${esc(s.id)}" aria-haspopup="dialog" aria-label="${esc(s.roleLabel)} · ayrıntılar ve işlemler" title="Ayrıntılar ve işlemler">⋯</button></div><div class="pane-body"></div><button type="button" class="pane-imp" aria-label="Mesajı geliştir" title="Mesajı geliştir" hidden>✨</button>`;
         terms.appendChild(el);
         pane = { el, term: null };
         this.panes.set(s.id, pane);
@@ -2423,6 +2464,7 @@ const WorkView = {
       pane.el.classList.toggle('selected', s.id === this.selected);
       pane.el.classList.toggle('waiting', s.running && s.status === 'waiting');
       pane.el.hidden = this.layout === 'tek' && s.id !== this.selected;
+      pane.el.querySelector('.pane-imp').hidden = !s.running;
       const visible = !pane.el.hidden && this.view === 'terms';
       // Gizliyken çıkan çıktı sonrası gösterilen terminal yeniden çizilir.
       if (visible && !pane.visible) pane.refresh = true;

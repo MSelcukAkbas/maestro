@@ -2,9 +2,11 @@
 // şefin isteklerine onay / ret ve bekçi işleminin iptali.
 const store = require('../core/store');
 const prompts = require('../core/prompts');
+const helper = require('../watch/helper');
+const promptdev = require('../setup/promptdev');
 const { KIND_TEXT, describe: describeRequest } = require('../team/team');
 const {
-  settings, manager, requests, watch, ops, HttpError, cleanText, findSession, pushEvent, runningLead, pasteTo, whenStopped,
+  settings, manager, requests, watch, ops, HttpError, cleanText, findSession, pushEvent, runningLead, pasteTo, whenStopped, cachedQuota, lastQuota,
 } = require('../panel/context');
 const {
   switchAccount, changeSettings, cancelSettings, launchSession, renewSession, openInWindowsTerminal,
@@ -121,5 +123,43 @@ route('POST', '/api/watch/ops/([\\w-]+)/cancel', async (req, m) => {
   const r = ops.cancel(m[1]);
   if (!r.ok) throw new HttpError(409, r.error);
   watch.note({ gid: found ? found.group.id : null, key: `op:${m[1]}`, level: 'normal', text: `iptal: ${found ? found.session.name : m[1]}: kullanıcı işlemi iptal etti; bu üyeye 1 saat hamle önerilmez.` });
+  return { ok: true };
+});
+
+// Mesaj geliştirici: kullanıcının üyeye yazacağı ham mesajı düzeltir; hiçbir şey göndermez.
+route('POST', '/api/sessions/([\\w-]+)/improve-prompt', async (req, m) => {
+  const body = await readBody(req);
+  const found = findSession(store.loadGroups(), m[1]);
+  if (!found) throw new HttpError(404, 'Oturum bulunamadı.');
+  const cfg = prompts.tool('prompt-gelistirici').config;
+  const text = typeof body.text === 'string' ? body.text.replace(/\r\n/g, '\n').trim().slice(0, cfg.maxInput) : '';
+  if (!text) throw new HttpError(400, 'Mesaj boş.');
+  const { group, session } = found;
+  const role = settings.roles.find((r) => r.id === session.roleId);
+  const project = store.loadProjects().find((p) => p.id === group.projectId);
+  const quota = await cachedQuota().catch(() => lastQuota());
+  const account = helper.pickAccount(settings.accounts, quota);
+  if (!account) throw new HttpError(409, 'Kotası olan hesap yok.');
+  const payload = {
+    tur: 'mesaj',
+    hedef: { ad: session.name, rol: session.roleLabel, gorev: role ? String(role.gorevler || '').slice(0, 1200) : '' },
+    grup: group.name, proje: project ? project.name : '', mesaj: text,
+  };
+  const yonerge = cleanText(body.hint, 400);
+  if (yonerge) payload.yonerge = yonerge;
+  const res = await promptdev.ask(account, payload).catch((err) => { throw new HttpError(502, `Mesaj geliştirici: ${err.message}`); });
+  let out;
+  try { out = promptdev.validate(res.parsed, text); } catch (err) { throw new HttpError(502, `Mesaj geliştirici: ${err.message}`); }
+  return { ...out, account: res.account, costUSD: res.costUSD };
+});
+
+// Üyenin giriş kutusuna mesajı yazar ve gönderir (geliştirilmiş mesajı "Gönder").
+route('POST', '/api/sessions/([\\w-]+)/send', async (req, m) => {
+  const body = await readBody(req);
+  const found = findSession(store.loadGroups(), m[1]);
+  if (!found) throw new HttpError(404, 'Oturum bulunamadı.');
+  const text = typeof body.text === 'string' ? body.text.trim().slice(0, 20000) : '';
+  if (!text) throw new HttpError(400, 'Mesaj boş.');
+  if (!pasteTo(found.session, text)) throw new HttpError(409, 'Oturum çalışmıyor.');
   return { ok: true };
 });

@@ -4,7 +4,9 @@ const prompts = require('../core/prompts');
 const { resolveMember } = require('../team/board');
 const { curatorLevels } = require('../team/curator');
 const { cleanRef, listDocs, readDoc, searchDocs } = require('../team/docs');
-const { boards, notes, curator, HttpError, cleanText, boardGroup } = require('../panel/context');
+const helper = require('../watch/helper');
+const promptdev = require('../setup/promptdev');
+const { settings, boards, notes, curator, HttpError, cleanText, boardGroup, cachedQuota, lastQuota } = require('../panel/context');
 const { route, readBody } = require('../panel/http');
 
 function boardAssignee(g, v) {
@@ -24,6 +26,28 @@ route('POST', '/api/groups/([\\w-]+)/board', async (req, m) => {
   const g = boardGroup(m[1]);
   const body = await readBody(req);
   return boards.create(g, { title: body.title, desc: body.desc, status: body.status, assignee: boardAssignee(g, body.assignee) || null }, 'user');
+});
+
+// Kart geliştirici: başlık ve açıklamayı düzeltir; kaydetmez, forma uygulamak kullanıcıya kalır.
+route('POST', '/api/groups/([\\w-]+)/board-improve', async (req, m) => {
+  const g = boardGroup(m[1]);
+  const body = await readBody(req);
+  const cfg = prompts.tool('prompt-gelistirici').config;
+  const title = cleanText(body.title, 200);
+  const text = typeof body.text === 'string' ? body.text.replace(/\r\n/g, '\n').trim().slice(0, cfg.maxInput) : '';
+  if (!title && !text) throw new HttpError(400, 'Başlık ya da açıklama yaz.');
+  const member = g.sessions.find((s) => s.id === body.assignee && !s.removed);
+  const role = member && settings.roles.find((r) => r.id === member.roleId);
+  const project = store.loadProjects().find((p) => p.id === g.projectId);
+  const quota = await cachedQuota().catch(() => lastQuota());
+  const account = helper.pickAccount(settings.accounts, quota);
+  if (!account) throw new HttpError(409, 'Kotası olan hesap yok.');
+  const payload = { tur: 'kart', grup: g.name, proje: project ? project.name : '', baslik: title, mesaj: text };
+  if (member) payload.hedef = { ad: member.name, rol: member.roleLabel, gorev: role ? String(role.gorevler || '').slice(0, 1200) : '' };
+  const res = await promptdev.ask(account, payload).catch((err) => { throw new HttpError(502, `Kart geliştirici: ${err.message}`); });
+  let out;
+  try { out = promptdev.validate(res.parsed, text, true); } catch (err) { throw new HttpError(502, `Kart geliştirici: ${err.message}`); }
+  return { ...out, account: res.account, costUSD: res.costUSD };
 });
 
 route('PUT', '/api/groups/([\\w-]+)/board/(\\d+)', async (req, m) => {

@@ -1,0 +1,7 @@
+{
+  "model": "haiku",
+  "effort": "low",
+  "timeoutSec": 90,
+  "maxInput": 8000,
+  "maxReasons": 6
+}

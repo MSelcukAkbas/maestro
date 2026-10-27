@@ -29,6 +29,7 @@ const STATIC = {
   '/js/projects.js': ['web/js/projects.js', 'text/javascript; charset=utf-8'],
   '/js/setup.js': ['web/js/setup.js', 'text/javascript; charset=utf-8'],
   '/js/work.js': ['web/js/work.js', 'text/javascript; charset=utf-8'],
+  '/js/improve.js': ['web/js/improve.js', 'text/javascript; charset=utf-8'],
   '/js/settings.js': ['web/js/settings.js', 'text/javascript; charset=utf-8'],
   '/js/bekci.js': ['web/js/bekci.js', 'text/javascript; charset=utf-8'],
   '/js/topbar.js': ['web/js/topbar.js', 'text/javascript; charset=utf-8'],
