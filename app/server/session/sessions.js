@@ -149,6 +149,11 @@ class PtySession {
     }, 400);
   }
 
+  // Çalışan turu Esc ile keser (kullanıcının "araya gir" mesajı için).
+  interrupt() {
+    try { this.pty.write('\x1b'); } catch {}
+  }
+
   // Windows'ta ConPTY, açılışını bitirmeden kapatılırsa node-pty yerel kodu panel sürecini düşürüyor (0xC0000374,
   // yığın bozulması): açılıştan hemen sonra durdurulan oturum bütün paneli ve diğer oturumları kapatıyordu. Kapatma,
   // terminal ilk çıktısını verene (en çok KILL_WAIT) kadar ertelenir.

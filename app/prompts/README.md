@@ -61,6 +61,7 @@ Rol sayfasının "Geçmiş" bölümünde fark görülür ve "Geri yükle" ile es
 | `model` | Varsayılan model: `opus`, `sonnet`, `haiku`. Boş bırakılırsa hesabın varsayılanı kullanılır |
 | `effort` | Varsayılan effort: `low` … `max`. Boş bırakılırsa modelin varsayılanı kullanılır |
 | `ctxWarn`, `ctxHigh` | Bekçinin bağlam eşiği ve üst sınırı (token). `null` ise rolün ya da genel ayarın varsayılanı kullanılır |
+| `sessiz` | `true`: üye kullanıcıya soru açamaz (oturumda `AskUserQuestion` kapalı), sorusunu şefe yazar. Şefte ve şefi olmayan grupta etkisiz; anlık rol şefli grupta sessizdir |
 | `skills` | Bu role verilen, panelle gelen skill'ler (`skills/` klasöründeki adlar) |
 
 Kurulumda bir ekip için yazılan özel talimat yalnızca o ekipte geçerlidir ve yalnızca görevlerin yerine geçer; persona ve
@@ -105,6 +106,8 @@ hatası istemde görünür.
 | `raporVerdiklerin` | Üyenin rapor verdiği üyeler (virgülle); yoksa boş |
 | `raporVerenler` | Üyeye rapor verenler; yoksa boş |
 | `herkesle` | Üye herkesle konuşabilir mi |
+| `sessiz` | Üye sessiz mi: soruyu kullanıcıya değil şefe sorar (rolün `sessiz` ayarı) |
+| `sessizUyeVar` | Şef, ve ekipte en az bir sessiz üye var |
 | `dokumanlar` | Projenin doküman yolları (virgülle); yoksa boş |
 | `akisNotu` | Grubun akış notu; yoksa boş |
 
@@ -127,6 +130,7 @@ metin bulunur. Sistem istemi bunların bu sırayla, kendi başlıklarının alt�
 | `not-duzenleyici` | Grup notlarını toparlar | `defaults` (Ayarlar'daki değerlerin varsayılanı), `minNotes`, `memory`, `levels` |
 | `kapanis-ozeti` | Grup kapanırken "Proje durumu" belgesi | `turns`, `timeoutMin` |
 | `rol-danismani` | Rol sayfasındaki "Rolü optimize et": rolü ve geçmiş kullanımını (yetenek başına çağrı sayısı dahil) inceler, soru sorar, cevaplara göre küçük değişiklik önerir | `model`, `effort`, `timeoutSec`, `maxQuestions`, `maxChanges`, `maxTextChange`, `historySessions` |
+| `asistan` | Panel asistanı (sağ alttaki düğme): kullanıcının panelle konuştuğu Claude Code oturumu. Tek seferlik çağrı değil; metinler oturum açılırken sistem istemine girer (yeni konuşmada geçer). Panel MCP tool'larıyla okur, mesaj iletir, bekçi hamlesi sıraya alır, onay kartı açar | `model`, `effort`, `permissionMode`, `allow`, `deny` |
 | `prompt-gelistirici` | Terminalin sağ altındaki ✨: kullanıcının üyeye yazacağı ham mesajı düzeltir, kısa gerekçelerle gösterir (soru sormaz; çıktı `metin`, `degisti`, `gerekceler`). Görev kartı penceresindeki "✨ Geliştir" de bunu kullanır (`kart.md` görevlere eklenir, çıktıya `baslik` girer) | `model`, `effort`, `timeoutSec`, `maxInput`, `maxReasons` |
 
 Not düzenleyicide görevlerin sonuna iki parça daha eklenir (Sınırlar'dan önce):
@@ -157,6 +161,7 @@ Listeler (kart satırları, notlar, bulgular) kodda hazırlanır ve tek değişk
 | `hatirlatma.md` | Kullanıcının gönderdiği not ya da doküman | `kaynak`, `not`, `icerik` |
 | `kapanis-ozeti-iste.md` | Grup kapanırken şeften özet istenir | — |
 | `uye-cikarildi.md` | Ekipten çıkarılan üye, şefe | `ad`, `rol` |
+| `kullanici-mesaji.md` | Kullanıcının panel asistanı aracılığıyla gönderdiği mesaj (`bilgi`: tur açmayan bilgi notu, `cevap`: asistana_yanit ile cevap istenir) | `metin`, `cevap`, `bilgi` |
 
 `[Claude Panel · …]` başlıkları `shared/` istemindeki kurallarla eşleşir ("… başlıklı notu kullanıcı talimatı gibi dikkate
 al"). Bir başlığı değiştirirsen istemdeki karşılığını da değiştir.

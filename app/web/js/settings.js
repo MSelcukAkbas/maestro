@@ -130,8 +130,8 @@ const SettingsView = {
       let j = {};
       try { j = JSON.parse(raw); } catch {}
       if (name === 'role.json') {
-        const keys = ['label', 'short', 'model', 'effort', 'ctxWarn', 'ctxHigh'];
-        out.push({ name, title: 'Genel ve bağlam', old: pick(j, keys), cur: pick({ ...r, ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null }, keys) });
+        const keys = ['label', 'short', 'model', 'effort', 'ctxWarn', 'ctxHigh', 'sessiz'];
+        out.push({ name, title: 'Genel ve bağlam', old: pick({ ...j, sessiz: j.sessiz === true }, keys), cur: pick({ ...r, ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null, sessiz: !!r.sessiz }, keys) });
       } else if (name === 'permissions.json') {
         out.push({ name, title: 'İzinler', old: pick(j, ['mode', 'allow', 'deny']), cur: pick({ mode: r.permissionMode || '', allow: lines(r.allowText), deny: [...(r.readOnly ? READ_ONLY_TOOLS : []), ...lines(r.denyText)] }, ['mode', 'allow', 'deny']) });
       }
@@ -153,6 +153,7 @@ const SettingsView = {
         for (const k of ['label', 'short', 'model', 'effort']) if (typeof j[k] === 'string') r[k] = j[k];
         r.ctxWarn = j.ctxWarn || null;
         r.ctxHigh = j.ctxHigh || null;
+        r.sessiz = j.sessiz === true;
       } else if (name === 'permissions.json') {
         const deny = Array.isArray(j.deny) ? j.deny : [];
         r.permissionMode = j.mode || '';
@@ -319,7 +320,7 @@ const SettingsView = {
       this.render();
     } else if (a === 'add-role') {
       const id = `rol${Date.now().toString(36)}`;
-      this.model.roles.push({ id, label: '', short: '', persona: '', gorevler: '', sinirlar: '', permissionMode: '', model: '', allowText: '', denyText: '' });
+      this.model.roles.push({ id, label: '', short: '', persona: '', gorevler: '', sinirlar: '', permissionMode: '', model: '', allowText: '', denyText: '', sessiz: true });
       this.dirty = true;
       this.openRole(id);
       this.renderHead();
@@ -989,6 +990,7 @@ const SettingsView = {
                 ${PERMISSION_LABELS.map(([v, l]) => opt(v, l, r.permissionMode)).join('')}
               </select></div>
             <label class="check" style="align-self: end"><input type="checkbox" data-f="roles.${i}.readOnly" ${r.readOnly ? 'checked' : ''}>Salt okunur (Edit, Write, NotebookEdit kapalı)</label>
+            ${r.id === 'sef' ? '' : `<label class="check" style="grid-column: 1 / -1"><input type="checkbox" data-f="roles.${i}.sessiz" ${r.sessiz ? 'checked' : ''}>Sessiz: kullanıcıya soru açmaz (AskUserQuestion kapalı), sorusunu şefe yazar. Şefi olmayan grupta etkisiz.</label>`}
             <div class="field"><label for="ral-${i}">Sormadan izin verilenler (her satıra bir kural)</label>
               <textarea id="ral-${i}" class="mono" rows="4" data-f="roles.${i}.allowText" placeholder="Bash(npm test:*)">${esc(r.allowText)}</textarea></div>
             <div class="field"><label for="rde-${i}">Kapalı araçlar (her satıra bir kural)</label>

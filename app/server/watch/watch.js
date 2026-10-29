@@ -117,6 +117,8 @@ class Watch {
     return {
       move: rewrite(ctx, r.moveShare.v),
       compact,
+      // Soğuk önbellekte bağlam önbellekten okunmaz, baştan yazılır.
+      compactCold: compact + ctx * p * (1.25 - 0.1),
       moveAfterCompact: rewrite(after, r.moveShare.v),
       after,
       perTurn: (ctx - after) * p * 0.1,

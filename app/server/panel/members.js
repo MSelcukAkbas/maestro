@@ -89,6 +89,20 @@ function execRequest(req) {
     const s = addSessionToGroup(group.id, { row, firstTask: a.task || '', introduce: true });
     return `${s.name} açıldı (hesap ${accountId}); sana kendini tanıtacak${a.task ? ' ve ilk görevine başlayacak' : ''}.`;
   }
+  if (req.kind === 'settings') {
+    // targets: asistanın tek kartta birden çok üyeye istediği ayar.
+    const ids = Array.isArray(a.targets) ? a.targets : [a.target];
+    const out = [];
+    for (const id of ids) {
+      const t = memberOf(id);
+      if (!t) continue;
+      const change = { ...(a.model ? { model: a.model } : {}), ...(a.effort ? { effort: a.effort } : {}), ...(a.permissionMode ? { permissionMode: a.permissionMode } : {}) };
+      const r = changeSettings(t.id, change, req.by === 'asistan' ? 'asistan' : 'sef');
+      out.push(`${t.name} ayarı değişti${r.pending ? '; boşta kalınca kaldığı yerden yeni ayarla açılacak' : r.running ? '' : '; sonraki açılışta geçerli'}.`);
+    }
+    if (!out.length) throw new HttpError(409, 'Üye artık ekipte değil.');
+    return out.join(' ');
+  }
   const target = memberOf(a.target);
   if (!target) throw new HttpError(409, 'Üye artık ekipte değil.');
   if (req.kind === 'stop') {
@@ -111,10 +125,6 @@ function execRequest(req) {
     if (!manager.has(target.id)) return `${target.name} yetenekleri değişti; sonraki açılışta geçerli.`;
     pending.add(target.id, group.id, { caps: 'yetenekler' }, 'sef');
     return `${target.name} yetenekleri değişti; boşta kalınca kaldığı yerden açılacak, skill listesi bir sonraki compact ya da yenilemede güncellenir.`;
-  }
-  if (req.kind === 'settings') {
-    const r = changeSettings(target.id, { ...(a.model ? { model: a.model } : {}), ...(a.effort ? { effort: a.effort } : {}) }, 'sef');
-    return `${target.name} ayarı değişti${r.pending ? '; boşta kalınca kaldığı yerden yeni ayarla açılacak' : r.running ? '' : '; sonraki açılışta geçerli'}.`;
   }
   throw new HttpError(400, 'Bilinmeyen istek türü.');
 }

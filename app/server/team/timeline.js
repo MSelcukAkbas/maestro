@@ -9,6 +9,22 @@ class Timeline {
     this.dir = path.join(dataDir, 'timeline');
     fs.mkdirSync(this.dir, { recursive: true });
     this.cache = new Map();
+    // Panelin en son ayakta olduğu an. Panel düzgün kapanmazsa (çökme, işlem sonlandırma, uyku) "kapalı" kaydı
+    // yazılamaz; açılışta açık kalan izler bu ana kapatılır, yoksa son durum aradaki bütün süreye yayılır.
+    this.aliveFile = path.join(this.dir, '_alive.json');
+    this.lastAlive = null;
+    try { this.lastAlive = JSON.parse(fs.readFileSync(this.aliveFile, 'utf8')).t || null; } catch {}
+    this.beatAt = 0;
+  }
+
+  beat(ts = Date.now()) {
+    if (ts - this.beatAt < 30000) return;
+    this.beatAt = ts;
+    const tmp = `${this.aliveFile}.${process.pid}.tmp`;
+    try {
+      fs.writeFileSync(tmp, JSON.stringify({ t: ts }), 'utf8');
+      fs.renameSync(tmp, this.aliveFile);
+    } catch {}
   }
 
   file(gid) {

@@ -3,9 +3,10 @@
   "short": "şef",
   "order": 1,
   "model": "opus",
-  "effort": "high",
+  "effort": "low",
   "ctxWarn": null,
   "ctxHigh": null,
+  "sessiz": false,
   "skills": [
     "planning-and-task-breakdown",
     "spec-driven-development"

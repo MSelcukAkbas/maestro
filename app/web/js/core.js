@@ -185,6 +185,50 @@ function splitAway(away, t0, t1) {
   return out;
 }
 
+// Aralıkların birleşiminin süresi: üst üste binen kısımlar bir kez sayılır.
+function unionMs(list) {
+  const iv = list.filter(([t0, t1]) => t1 > t0).sort((x, y) => x[0] - y[0]);
+  let total = 0, cur = null;
+  for (const [t0, t1] of iv) {
+    if (!cur || t0 > cur[1]) { if (cur) total += cur[1] - cur[0]; cur = [t0, t1]; } else cur[1] = Math.max(cur[1], t1);
+  }
+  return cur ? total + cur[1] - cur[0] : total;
+}
+
+// Zaman çizelgesinden grubun süreleri. Üç ölçü birbirine karıştırılmaz:
+// span: grubun açılışından şimdiye (kapanmış grupta son kayda) duvar saati;
+// active: en az bir üyenin çalıştığı ya da onay beklediği süre, aynı anda çalışan üyeler bir kez sayılır;
+// agentBusy: üyelerin çalışma sürelerinin toplamı, iki üye aynı saatte çalışınca iki saat olur.
+// Üye başına: busy, waiting / idle (sen yokken geçeni away'e ayrılır), open (açık kaldığı süre).
+function timeStats(members, a, start, closed) {
+  const tl = a.timeline || {};
+  let end = a.now;
+  if (closed) {
+    end = start;
+    for (const s of members) for (const e of tl[s.id] || []) end = Math.max(end, e.t);
+  }
+  const away = awayIntervals(a.user || [], end);
+  const per = {}, act = [], open = [];
+  for (const s of members) {
+    const list = tl[s.id] || [];
+    const t = { busy: 0, waiting: 0, idle: 0, away: 0, open: 0 };
+    list.forEach((e, i) => {
+      const to = Math.min(end, i + 1 < list.length ? list[i + 1].t : end);
+      if (e.s === 'off' || to <= e.t) return;
+      t.open += to - e.t;
+      open.push([e.t, to]);
+      if (e.s === 'busy' || e.s === 'waiting') act.push([e.t, to]);
+      if (e.s === 'idle' || e.s === 'waiting') {
+        for (const [t0, t1, out] of splitAway(away, e.t, to)) t[out ? 'away' : e.s] += t1 - t0;
+      } else if (e.s === 'busy') t.busy += to - e.t;
+    });
+    per[s.id] = t;
+  }
+  const sum = (k) => members.reduce((n, s) => n + per[s.id][k], 0);
+  const active = unionMs(act);
+  return { start, end, span: Math.max(0, end - start), active, idle: Math.max(0, unionMs(open) - active), agentBusy: sum('busy'), waiting: sum('waiting'), per, recorded: open.length > 0 };
+}
+
 function fmtDate(iso) {
   if (!iso) return '-';
   return new Date(iso).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
@@ -202,7 +246,9 @@ const fmtUsd = (n) => `≈$${(n || 0) >= 1 ? n.toFixed(2) : (n || 0).toFixed(3)}
 
 function fmtDur(ms) {
   const m = Math.max(0, Math.round(ms / 60000));
-  return m < 60 ? `${m} dk` : `${Math.floor(m / 60)} sa ${m % 60} dk`;
+  if (m < 60) return `${m} dk`;
+  const h = Math.floor(m / 60);
+  return h < 24 ? `${h} sa ${m % 60} dk` : `${Math.floor(h / 24)} gün ${h % 24} sa`;
 }
 
 const FAMILIES = ['opus', 'sonnet', 'haiku'];
@@ -340,6 +386,11 @@ function openStateChannel() {
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
+    // Panel asistanının ekrani_ac tool'u: arayüzü verilen adrese götürür.
+    if (m.t === 'nav' && typeof m.hash === 'string' && m.hash.startsWith('#/')) {
+      location.hash = m.hash;
+      return;
+    }
     if (m.t !== 'state' || !m.d) return;
     state = m.d;
     setServer(true);
@@ -392,7 +443,7 @@ function statusBadge(s) {
 
 // Bekleyen model / effort değişikliğinin kısa metni.
 function pendingText(p) {
-  return [p.model ? `model ${p.model}` : '', p.effort ? `effort ${p.effort}` : '', p.caps ? 'yetenekler' : ''].filter(Boolean).join(', ') || 'yeniden başlatma';
+  return [p.model ? `model ${p.model}` : '', p.effort ? `effort ${p.effort}` : '', p.perm ? `izin: ${permLabel(p.perm)}` : '', p.caps ? 'yetenekler' : ''].filter(Boolean).join(', ') || 'yeniden başlatma';
 }
 
 // Hook'tan gelen "şu an ne yapıyor" satırı.

@@ -128,7 +128,10 @@ function describe(group, req, roles, accounts) {
     const nm = (k) => k.split(':').slice(1).join(':').split('@')[0];
     return `${member(a.target)} → ${[(a.on || []).length ? `aç: ${a.on.map(nm).join(', ')}` : '', (a.off || []).length ? `kapat: ${a.off.map(nm).join(', ')}` : ''].filter(Boolean).join(' · ')}`;
   }
-  if (req.kind === 'settings') return `${member(a.target)} → ${[a.model ? `model ${a.model}` : '', a.effort ? `effort ${a.effort}` : ''].filter(Boolean).join(', ')}`;
+  if (req.kind === 'settings') {
+    const who = Array.isArray(a.targets) ? a.targets.map(member).join(', ') : member(a.target);
+    return `${who} → ${[a.model ? `model ${a.model}` : '', a.effort ? `effort ${a.effort}` : '', a.permissionMode ? `izin modu ${a.permissionMode}` : ''].filter(Boolean).join(', ')}`;
+  }
   return member(a.target);
 }
 

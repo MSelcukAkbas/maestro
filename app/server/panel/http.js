@@ -21,6 +21,7 @@ const {
 const { boardDelivery } = require('./delivery');
 const { memberRows, roleCaps, capCatalogFor } = require('./members');
 const { buildState } = require('./state');
+const assistant = require('./assistant');
 
 const STATIC = {
   '/': ['web/index.html', 'text/html; charset=utf-8'],
@@ -30,6 +31,7 @@ const STATIC = {
   '/js/setup.js': ['web/js/setup.js', 'text/javascript; charset=utf-8'],
   '/js/work.js': ['web/js/work.js', 'text/javascript; charset=utf-8'],
   '/js/improve.js': ['web/js/improve.js', 'text/javascript; charset=utf-8'],
+  '/js/assistant.js': ['web/js/assistant.js', 'text/javascript; charset=utf-8'],
   '/js/settings.js': ['web/js/settings.js', 'text/javascript; charset=utf-8'],
   '/js/bekci.js': ['web/js/bekci.js', 'text/javascript; charset=utf-8'],
   '/js/topbar.js': ['web/js/topbar.js', 'text/javascript; charset=utf-8'],
@@ -151,6 +153,15 @@ const server = http.createServer(async (req, res) => {
         }
         return sendJson(res, 200, reply);
       }
+      // Panel asistanının adresi: kendi oturum kimliği; yalnızca asistan tool'ları.
+      if (assistant.isAssistant(mcp[1])) {
+        const reply = await assistant.handle(msg);
+        if (!reply) {
+          res.writeHead(202);
+          return res.end();
+        }
+        return sendJson(res, 200, reply);
+      }
       const found = findSession(store.loadGroups(), mcp[1]);
       if (!found) return sendJson(res, 404, { jsonrpc: '2.0', id: msg.id ?? null, error: { code: -32001, message: 'Oturum bir panel grubunda değil.' } });
       const isLead = found.session.roleId === 'sef';
@@ -160,9 +171,10 @@ const server = http.createServer(async (req, res) => {
         capCatalog: () => capCatalogFor(found.group),
       };
       const reply = await handleMcp(boards, found.group, mcp[1], msg, {
-        tools: [...NOTE_TOOLS, DOC_TOOL, TOOL_STATUS, DEVIR_TOOL, ...(isLead ? [...LEAD_TOOLS, ...NOTE_LEAD_TOOLS] : [])],
+        tools: [...NOTE_TOOLS, DOC_TOOL, TOOL_STATUS, DEVIR_TOOL, assistant.REPLY_TOOL, ...(isLead ? [...LEAD_TOOLS, ...NOTE_LEAD_TOOLS] : [])],
         call: async (name, args) => {
           if (name === DEVIR_TOOL.name) return ops.handoff(mcp[1], args);
+          if (name === assistant.REPLY_TOOL.name) return assistant.reply(mcp[1], args);
           if (name === DOC_TOOL.name) return callDocTool(store.loadProjects().find((p) => p.id === found.group.projectId), args);
           const r = callNoteTool(notes, found.group, mcp[1], name, args, resolveMember);
           return r !== undefined ? r : callTeamTool(ctx, name, args);
@@ -221,6 +233,17 @@ function pushState() {
   stateSent = json;
   for (const ws of stateClients) if (ws.readyState === 1) ws.send(json);
 }
+// Asistanın ekrani_ac tool'u: bağlı arayüzleri verilen adrese yönlendirir.
+assistant.setNav((hash) => {
+  let sent = false;
+  for (const ws of stateClients) {
+    if (ws.readyState !== 1) continue;
+    ws.send(JSON.stringify({ t: 'nav', hash }));
+    sent = true;
+  }
+  return sent;
+});
+
 wss.on('connection', (ws, req) => {
   const url = new URL(req.url, `http://${req.headers.host}`);
   if (url.searchParams.get('ch') === 'state') {

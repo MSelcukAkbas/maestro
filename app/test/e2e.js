@@ -298,6 +298,44 @@ const SCENARIOS = {
   },
 
   // Rol danışmanı (Sonnet): sorular → her sorunun ilk seçeneğiyle cevap → doğrulanmış öneriler. Hiçbir şey yazılmaz.
+  // Panel asistanı: kullanıcının isteğiyle üyeye cevap isteyen mesaj gönderir, üyenin asistana_yanit cevabı gelir.
+  async asistan({ api, token, acc, pid, dataDir }) {
+    // Test kotası için asistan Haiku ile açılır (test verisindeki istem kopyası).
+    const cfgFile = path.join(dataDir, 'panel-prompts', 'tools', 'asistan', 'tool.json');
+    fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), model: 'haiku', effort: 'low' }));
+    const g = await api('POST', '/api/groups', {
+      projectId: pid, name: 'e2e-asistan', permissionMode: 'manual', firstTask: 'Yalnızca "ok" yaz.',
+      rows: [{ key: 'a', roleId: 'arastirma', accountId: acc, model: 'haiku', effort: 'low' }],
+    });
+    const sid = g.sessions[0].id;
+    let as = null;
+    try {
+      assert.ok(await idle(api, g.id, sid), 'üyenin ilk görevi bitmedi');
+      as = await api('POST', '/api/assistant/open', { fresh: true, accountId: acc });
+      // Asistanın çalışma klasörü hesapta ilk kez açılıyorsa güven sorusu gelir; Enter varsayılanı (güven) seçer.
+      let ready = await until(async () => ((await api('GET', '/api/assistant')).status === 'idle' ? true : null), 30000);
+      if (!ready) {
+        await typeInto(token, as.id, '');
+        ready = await until(async () => ((await api('GET', '/api/assistant')).status === 'idle' ? true : null), 60000);
+      }
+      assert.ok(ready, 'asistan açılmadı');
+      await typeInto(token, as.id, `Araştırma üyesine [${sid.slice(0, 8)}] mesaj_gonder ile cevap_iste true olarak şunu gönder: "Yalnızca asistana_yanit tool'uyla tamam cevabını ver." Başka bir şey yapma.`);
+      const got = await until(async () => ((await api('GET', '/api/assistant')).unread > 0 ? true : null), 240000);
+      assert.ok(got, 'üyenin cevabı asistana gelmedi');
+      const used = transcript(as.id).some((l) => l.type === 'assistant' && Array.isArray(l.message.content)
+        && l.message.content.some((c) => c && c.type === 'tool_use' && c.name === 'mcp__panel__mesaj_gonder'));
+      assert.ok(used, 'asistan mesaj_gonder çağırmadı');
+      const wrote = transcript(as.id).some((l) => l.type === 'assistant' && Array.isArray(l.message.content)
+        && l.message.content.some((c) => c && c.type === 'tool_use' && ['Write', 'Edit', 'Bash'].includes(c.name)));
+      assert.ok(!wrote, 'asistan yazma / komut aracı çağırdı');
+      const ev = (await api('GET', '/api/state')).events.filter((e) => e.source === 'asistan');
+      assert.ok(ev.length, 'asistan olayı yok');
+    } finally {
+      await api('POST', '/api/assistant/stop').catch(() => {});
+      await api('POST', `/api/groups/${g.id}/stop`).catch(() => {});
+    }
+  },
+
   async roleopt({ api, dataDir }) {
     const before = fs.readFileSync(path.join(dataDir, 'panel-prompts', 'roles', 'review', 'gorevler.md'), 'utf8');
     const q = await api('POST', '/api/roles/review/optimize', { step: 'sorular' });

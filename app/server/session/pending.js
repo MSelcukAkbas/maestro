@@ -10,7 +10,7 @@ class Pending {
     this.file = path.join(dataDir, 'pending.json');
     let d = {};
     try { d = JSON.parse(fs.readFileSync(this.file, 'utf8')); } catch {}
-    // sid -> { gid, at, model, effort, now, by }
+    // sid -> { gid, at, model, effort, perm, caps, now, by }
     this.map = new Map(Object.entries(d && typeof d === 'object' ? d : {}));
   }
 
@@ -24,7 +24,7 @@ class Pending {
     }
   }
 
-  // change: { model?, effort? } — yalnızca değişen alanlar; aynı üyenin önceki bekleyen değişikliğiyle birleşir.
+  // change: { model?, effort?, perm?, caps? } — yalnızca değişen alanlar; aynı üyenin önceki bekleyen değişikliğiyle birleşir.
   add(sid, gid, change, by = 'user', now = false) {
     const cur = this.map.get(sid) || { gid, at: Date.now() };
     const next = { ...cur, ...change, by, now: !!(now || cur.now) };

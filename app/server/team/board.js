@@ -370,7 +370,7 @@ async function handleMcp(boards, group, sid, msg, extra = { tools: [], call: () 
         protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18',
         capabilities: { tools: {} },
         serverInfo: { name: 'claude-panel', version: '0.1.0' },
-        instructions: 'Claude Panel görev panosu ve grup notları. Görevler kartlarda tutulur; kart durumunu işin aşamasına göre pano_guncelle ile güncelle. '
+        instructions: extra.instructions || 'Claude Panel görev panosu ve grup notları. Görevler kartlarda tutulur; kart durumunu işin aşamasına göre pano_guncelle ile güncelle. '
           + 'Ekibin bilmesi gereken kararları ve ortak bilgileri not_ekle ile grup notlarına yaz.',
       });
     case 'ping':

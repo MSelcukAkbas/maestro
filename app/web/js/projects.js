@@ -324,18 +324,13 @@ const ProjectView = {
       return '<span class="note">Retro hazırlanıyor…</span>';
     }
     if (a === 'loading') return '<span class="note">Retro hazırlanıyor…</span>';
+    // Süreler zaman çizelgesiyle aynı hesaptan. Kullanıcı yokken geçen onay beklemesi sayılmaz: izin modunu
+    // suçlamak için kullanıcının başında olması gerekir.
+    const ts = timeStats(g.sessions, a, g.createdAt, g.state !== 'active');
     const rows = g.sessions.map((s) => {
       const sent = a.messages.filter((m) => m.from === s.id).length;
       const recv = a.messages.filter((m) => m.to === s.id).length;
-      const tl = (a.timeline || {})[s.id] || [];
-      let waiting = 0, busy = 0;
-      // Kullanıcı yokken geçen onay beklemesi sayılmaz: izin modunu suçlamak için kullanıcının başında olması gerekir.
-      const away = awayIntervals(a.user || [], a.now);
-      tl.forEach((e, i) => {
-        const end = i + 1 < tl.length ? tl[i + 1].t : a.now;
-        if (e.s === 'waiting') waiting += splitAway(away, e.t, end).filter((x) => !x[2]).reduce((n, x) => n + x[1] - x[0], 0);
-        if (e.s === 'busy') busy += end - e.t;
-      });
+      const { waiting, busy } = ts.per[s.id];
       const cost = s.stats ? s.stats.costUSD : 0;
       return { s, sent, recv, waiting, busy, cost, share: tot.cost > 0 ? cost / tot.cost : 0 };
     });
@@ -359,7 +354,7 @@ const ProjectView = {
     const lead = rows.find((r) => r.s.roleId === 'sef');
     if (lead && !lead.sent && g.sessions.length > 1) tips.push('Şef hiç görev dağıtmadı; ilk görevi şefe vermeyi ya da akış notunu netleştirmeyi dene.');
     if (!a.messages.length && g.sessions.length > 1) tips.push('Üyeler hiç mesajlaşmadı; bağlantıları ve akış notunu gözden geçir.');
-    const hasTimeline = rows.some((r) => r.waiting || r.busy);
+    const hasTimeline = ts.recorded;
     return `
         <div class="retro">
           <strong style="font-size: 12.5px">Ekip retrosu</strong>
@@ -375,6 +370,19 @@ const ProjectView = {
         </div>`;
   },
 
+  // Süre üç ayrı ölçüyle: grup süresi (duvar saati), ekip aktif (üst üste binenler bir kez), üyelerin toplamı.
+  // Zaman çizelgesi kaydı olmayan eski gruplarda yalnızca konuşmalardaki ilk ve son mesaj arası gösterilir.
+  durationHtml(g, tot) {
+    const a = retroCache.get(g.id);
+    const ts = a && a !== 'loading' ? timeStats(g.sessions, a, g.createdAt, g.state !== 'active') : null;
+    if (ts && ts.recorded) {
+      return `<span title="Grubun açılışından kapanışına duvar saati">Grup süresi <b>${fmtDur(ts.span)}</b></span>
+            <span title="En az bir üyenin çalıştığı ya da onay beklediği süre; aynı anda çalışan üyeler bir kez sayılır">Ekip aktif <b>${fmtDur(ts.active)}</b></span>
+            <span title="Her üyenin çalışma süresi toplanır; iki üye aynı saatte çalışınca iki saat sayılır">Üyelerin çalışma toplamı <b>${fmtDur(ts.agentBusy)}</b></span>`;
+    }
+    return `<span title="Konuşmalardaki ilk ve son mesaj arası (duvar saati)">İlk–son mesaj <b>${tot.first && tot.last ? fmtDur(tot.last - tot.first) : '-'}</b></span>`;
+  },
+
   summaryHtml(g, tot) {
     const withText = g.sessions.filter((s) => s.stats && s.stats.lastText);
     return `
@@ -387,7 +395,7 @@ const ProjectView = {
           ${this.retroHtml(g, tot)}
           <strong style="font-size: 12.5px">Sayısal özet</strong>
           <div class="totals">
-            <span>Süre <b>${tot.first && tot.last ? fmtDur(tot.last - tot.first) : '-'}</b></span>
+            ${this.durationHtml(g, tot)}
             <span>Harcama <b>${fmtUsd(tot.cost)}</b> <span class="note">(API karşılığı)</span></span>
             <span>Satır <b>+${tot.added} / −${tot.removed}</b></span>
             <span>Çıktı <b>${fmtTok(tot.output)} token</b></span>

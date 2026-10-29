@@ -63,6 +63,19 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     await hit('POST', '/api/sessions/yok-boyle/improve-prompt', { text: 'x' }, (s) => s === 404);
     await hit('POST', `/api/sessions/${sid}/send`, { text: '' }, (s) => s === 400);
     await hit('POST', `/api/groups/${g.id}/board-improve`, { title: ' ', text: '' }, (s) => s === 400);
+    // Panel asistanı: istemsiz açılır (model çağrılmaz), durumu okunur, kapatılır.
+    if (!('assistant' in st)) fails.push('GET /api/state → assistant alanı yok');
+    await hit('GET', '/api/assistant');
+    await hit('POST', '/api/assistant/open', {}, (s) => s === 200);
+    await wait(1500);
+    const as = await hit('GET', '/api/assistant');
+    if (!as.running) fails.push('asistan açılmadı');
+    await hit('POST', '/api/assistant/stop');
+    // Zamanlayıcı: liste; olmayanı iptal 409. Üye menüsünden izin modu (kapalı üye: yalnızca kayıt).
+    await hit('GET', '/api/schedules');
+    await hit('DELETE', '/api/schedules/999999', undefined, (s) => s === 409);
+    await hit('POST', `/api/sessions/${sid}/settings`, { permissionMode: 'acceptEdits' });
+    await hit('POST', `/api/sessions/${sid}/settings`, { permissionMode: 'yolo' }, (s) => s === 400);
     await hit('POST', `/api/sessions/${sid}/settings`, { effort: 'medium' });
     await hit('DELETE', `/api/sessions/${sid}/settings`);
     await hit('POST', `/api/sessions/${sid}/account`, { accountId: st.settings.accounts[0].id });

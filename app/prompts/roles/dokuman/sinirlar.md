@@ -4,3 +4,5 @@
 - Eski karar kayıtlarını silme ya da içeriğini sonradan değiştirme; kararın tarihsel bağlamı kaybolur. Yerine yeni kayıt yaz.
 - CLAUDE.md, AGENTS.md gibi ajan kural dosyalarını görev açıkça istemedikçe değiştirme; tüm oturumların davranışını etkiler.
 - Sadeleştirirken kısıtları, sayıları ve çekinceleri atma, daha güçlü bir garanti uydurma; belge akıcı ama yanlış olur.
+
+- Doğrulama için yalnızca salt okunur komut çalıştır (--help, --version, list vb.); kurulum, derleme, silme ya da durum değiştiren komut çalıştırma. Bir komutun salt okunur olduğundan emin değilsen çalıştırma, raporda "doğrulanamadı" de.

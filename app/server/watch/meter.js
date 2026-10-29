@@ -14,6 +14,10 @@ const MULT = { in: 1, out: 5, cw: 1.25, cr: 0.1 };
 const MAX_TURNS = 40;
 const CTX_KEEP = 2 * 3600 * 1000;
 const STRETCH_KEEP = 14 * 24 * 3600 * 1000;
+const HOUR = 3600 * 1000;
+const HISTORY_KEEP = 7 * 24 * HOUR;
+// Saatlik geçmiş diske en sık bu aralıkla yazılır (her dakikalık ölçümde yazmaya gerek yok).
+const HISTORY_SAVE_GAP = 5 * 60 * 1000;
 const MIN_STRETCH_USED = 3;
 // Aynı pencere: sıfırlanma zamanı her sorguda saniyenin altında oynar.
 const SAME_WINDOW = 120 * 1000;
@@ -202,6 +206,11 @@ class Meter {
     this.stretches = Array.isArray(d.stretches) ? d.stretches : [];
     this.records = Array.isArray(d.records) ? d.records : [];
     this.ttl = Array.isArray(d.ttl) ? d.ttl : [];
+    // Saatlik tüketim geçmişi: usage = üye başına saatlik token ({ h, sid, name, acc, tok }), series = hesap başına saatin son kota ölçümü.
+    this.usage = Array.isArray(d.usage) ? d.usage : [];
+    this.series = Array.isArray(d.series) ? d.series : [];
+    this.usageIndex = new Map(this.usage.map((x) => [`${x.h}:${x.sid}`, x]));
+    this.lastSave = 0;
     this.startedAt = Date.now();
     this.readers = new Map();
     // Dosyanın hesaba yazılmış son token toplamı; ilk görüşte taban olur, önceki harcama sayılmaz.
@@ -216,8 +225,69 @@ class Meter {
 
   save() {
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ stretches: this.stretches, records: this.records, ttl: this.ttl }), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify({ stretches: this.stretches, records: this.records, ttl: this.ttl, usage: this.usage, series: this.series }), 'utf8');
     fs.renameSync(tmp, this.file);
+    this.lastSave = Date.now();
+  }
+
+  // Üyenin bu saatteki harcamasına ekler (alt ajanlar üyeye yazılır); 7 günden eski saatler atılır.
+  addUsage(s, tok, now) {
+    if (!(units(tok) > 0)) return;
+    const h = Math.floor(now / HOUR) * HOUR;
+    const key = `${h}:${s.id}`;
+    let b = this.usageIndex.get(key);
+    if (!b) {
+      b = { h, sid: s.id, name: s.name, acc: s.accountId, tok: {} };
+      this.usage.push(b);
+      this.usageIndex.set(key, b);
+    }
+    // Aynı saat içinde hesap değiştiyse son hesap yazılır; saatlik toplam hesaba bölünmez.
+    b.acc = s.accountId;
+    b.name = s.name;
+    mergeTok(b.tok, tok);
+    this.usageDirty = true;
+  }
+
+  // Kota ölçümü her dakika gelir; saatin son ölçümü tutulur.
+  addSeries(row, now) {
+    if (!row.five && !row.week) return;
+    const h = Math.floor(now / HOUR) * HOUR;
+    const point = { h, t: now, acc: row.accountId, five: row.five ? row.five.used : null, week: row.week ? row.week.used : null };
+    const i = this.series.findIndex((x) => x.h === h && x.acc === row.accountId);
+    if (i >= 0) this.series[i] = point;
+    else this.series.push(point);
+    this.usageDirty = true;
+  }
+
+  pruneHistory(now) {
+    const cut = now - HISTORY_KEEP;
+    this.usage = this.usage.filter((x) => x.h >= cut);
+    this.series = this.series.filter((x) => x.h >= cut);
+    this.usageIndex = new Map(this.usage.map((x) => [`${x.h}:${x.sid}`, x]));
+  }
+
+  // Son `hours` saatin üye başına harcaması (birime göre azalan) ve hesap başına kota serisi. Pencerenin başına denk gelen
+  // kısmi saat, harcamanın o saate eşit yayıldığı varsayımıyla oransal sayılır.
+  history(hours, now = Date.now()) {
+    const from = now - hours * HOUR;
+    const bySid = new Map();
+    for (const x of this.usage.filter((u) => u.h + HOUR > from)) {
+      const e = bySid.get(x.sid) || { sid: x.sid, name: x.name, acc: x.acc, tok: {} };
+      e.name = x.name;
+      e.acc = x.acc;
+      const w = Math.min(1, (x.h + HOUR - from) / HOUR);
+      const part = {};
+      for (const [f, t] of Object.entries(x.tok)) part[f] = { in: t.in * w, out: t.out * w, cw: t.cw * w, cr: t.cr * w };
+      mergeTok(e.tok, part);
+      bySid.set(x.sid, e);
+    }
+    const members = [...bySid.values()].map((e) => {
+      const u = units(e.tok);
+      const t = Object.values(e.tok).reduce((n, v) => n + v.in + v.out + v.cw + v.cr, 0);
+      return { sid: e.sid, name: e.name, acc: e.acc, units: u, tokens: t, est: this.estimate(e.acc, u) };
+    }).sort((a, b) => b.units - a.units);
+    const series = this.series.filter((x) => x.h + HOUR > from).sort((a, b) => a.h - b.h);
+    return { members, series };
   }
 
   // Baştan okunan dosya (panel oturumu) özetle ortak okuyucudan gelir; her satır bir kez ayrıştırılır. Sonundan okunan
@@ -263,7 +333,9 @@ class Meter {
       this.acc.set(s.accountId, accTok);
       this.firstSight(s.file);
       const r = this.reader(s.file, false);
-      mergeTok(accTok, this.delta(s.file, r));
+      const own = this.delta(s.file, r);
+      mergeTok(accTok, own);
+      this.addUsage(s, own, now);
       const subDir = path.join(s.file.replace(/\.jsonl$/, ''), 'subagents');
       let subs = [];
       try { subs = fs.readdirSync(subDir).filter((f) => f.endsWith('.jsonl')); } catch {}
@@ -273,12 +345,15 @@ class Meter {
         const p = path.join(subDir, f);
         this.firstSight(p);
         const sr = this.reader(p, false);
-        mergeTok(accTok, this.delta(p, sr));
+        const sub = this.delta(p, sr);
+        mergeTok(accTok, sub);
+        this.addUsage(s, sub, now);
         subLastAt = Math.max(subLastAt, sr.lastTurnAt || 0);
       }
       this.watchSession(s, r, now);
       this.sess.get(s.id).subLastAt = subLastAt;
     }
+    this.persistHistory(now);
   }
 
   watchSession(s, r, now) {
@@ -386,6 +461,7 @@ class Meter {
     let changed = false;
     for (const row of q.rows) {
       if (row.status !== 'canlı') continue;
+      this.addSeries(row, now);
       for (const kind of ['five', 'week']) {
         const key = `${row.accountId}:${kind}`;
         const b = row[kind];
@@ -414,6 +490,15 @@ class Meter {
       }
     }
     if (changed) this.save();
+    else this.persistHistory(now);
+  }
+
+  // Saatlik geçmişi en sık HISTORY_SAVE_GAP'te bir yazar; kota canlı olmasa da tick'ten çağrılır. force: kapanışta kalanı yazar.
+  persistHistory(now = Date.now(), force = false) {
+    if (!this.usageDirty || (!force && now - this.lastSave < HISTORY_SAVE_GAP)) return;
+    this.pruneHistory(now);
+    this.usageDirty = false;
+    this.save();
   }
 
   closeStretch(accountId, kind) {

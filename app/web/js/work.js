@@ -436,7 +436,7 @@ const WorkView = {
     if (key === this.reqKey) return;
     this.reqKey = key;
     bar.innerHTML = list.map((r) => {
-      const by = nameOf(r.by);
+      const by = r.by === 'asistan' ? { roleLabel: 'Asistan' } : nameOf(r.by);
       const t = r.args && r.args.target ? nameOf(r.args.target) : null;
       const busy = t && t.running && (t.status === 'busy' || t.status === 'waiting');
       const warn = t && r.kind !== 'add' && t.running
@@ -444,7 +444,7 @@ const WorkView = {
       return `
           <div class="rq">
             <div class="rq-main">
-              <div class="rq-top"><span class="rq-tag">Şef isteği #${r.id}</span><b>${esc(r.kindText)}</b><span class="note">${esc(by ? by.roleLabel : '?')} · ${esc(timeAgo(r.createdAt))}</span></div>
+              <div class="rq-top"><span class="rq-tag">${r.by === 'asistan' ? 'Asistan' : 'Şef'} isteği #${r.id}</span><b>${esc(r.kindText)}</b><span class="note">${esc(by ? by.roleLabel : '?')} · ${esc(timeAgo(r.createdAt))}</span></div>
               <div class="rq-what">${esc(r.text)}</div>
               ${r.reason ? `<div class="rq-why"><span class="note">Gerekçe:</span> ${esc(r.reason)}</div>` : ''}
               ${r.kind === 'add' && r.args.task ? `<details class="rq-task"><summary>İlk görev</summary><div>${esc(r.args.task)}</div></details>` : ''}
@@ -532,6 +532,7 @@ const WorkView = {
     const names = (ids) => (ids || []).map((id) => (g.sessions.find((x) => x.id === id) || {}).roleLabel).filter(Boolean).join(', ');
     const members = g.sessions.filter((x) => !x.removed);
     const row = (k, v) => (v ? `<div class="sm-k">${k}</div><div class="sm-v">${v}</div>` : '');
+    const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
     menu.innerHTML = `
         <div class="sm-head">
           <span class="dot ${statusKey(s)}"></span>
@@ -551,7 +552,8 @@ const WorkView = {
             ${s.pending ? `<div class="note warn-note">Değişiklik bekliyor (${esc(pendingText(s.pending))}): ${s.pending.now ? 'hemen uygulanıyor' : s.pending.model ? 'üye boşta ve önbellek soğuyunca' : 'üye boşta kalınca'} kaldığı yerden yeniden açılacak.
               <button class="btn small" data-act="apply-now">Şimdi uygula</button> <button class="btn small ghost" data-act="cancel-pending">İptal</button></div>` : ''}
           </div>
-          ${row('İzin modu', esc(permLabel(s.permissionMode || g.permissionMode || 'manual')))}
+          <div class="sm-k">İzin modu</div><div class="sm-v">
+            <select class="small-select" data-set="permissionMode" aria-label="Oturumun izin modu">${opt('', `Grup: ${permLabel(g.permissionMode || 'manual')}`, s.permissionMode || '')}${PERMISSION_LABELS.map(([v, l]) => opt(v, l, s.permissionMode || '')).join('')}</select></div>
           ${st ? row('Bağlam', esc(statsLine(st))) : ''}
           ${st && st.prompts ? row('Kullanım', esc(`${st.prompts} istem · ${fmtTok(st.tokens && st.tokens.output)} çıktı token`)) : ''}
           ${st && st.firstAt ? row('Zaman', esc(`${fmtDate(st.firstAt)} → ${fmtDate(st.lastAt)}`)) : ''}
@@ -698,7 +700,7 @@ const WorkView = {
     if (!r.running) toast('Ayar kaydedildi; üye bir sonraki açılışta bu ayarla başlar.');
     else if (r.pending) toast(r.pending.model
       ? 'Model değişikliği sıraya alındı: üye boşta ve önbelleği soğuyunca kaldığı yerden yeniden açılacak (model değişimi önbelleği zaten sıfırlar). Beklemek istemezsen "Şimdi uygula".'
-      : 'Effort değişikliği sıraya alındı: üye boşta kalınca kaldığı yerden yeniden açılacak.');
+      : 'Değişiklik sıraya alındı: üye boşta kalınca kaldığı yerden yeniden açılacak (önbellek korunur).');
   },
 
   async onAccountChange(e) {
@@ -1144,24 +1146,18 @@ const WorkView = {
     for (let t = Math.ceil(start / step) * step; t <= end; t += step) ticks.push(t);
     const hhmmOf = (t) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    const sums = {};
+    // Süreler çizimden ayrı, ortak hesaptan (core.js timeStats); kapanış özeti de aynısını kullanır.
+    const ts = timeStats(members, a, start, false);
     const rows = members.map((s) => {
       const list = tl[s.id] || [];
-      const totals = { busy: 0, waiting: 0, idle: 0, away: 0 };
+      const totals = ts.per[s.id];
       const segs = list.map((e, i) => {
         const to = i + 1 < list.length ? list[i + 1].t : end;
         if (e.s === 'off') return '';
-        if (e.s !== 'idle' && e.s !== 'waiting') {
-          if (e.s in totals) totals[e.s] += to - e.t;
-          return bar(COLORS[e.s] || 'busy', LABEL[e.s] || e.s, e.t, to);
-        }
-        // Sen yokken geçen bekleme ayrı sayılır: oturum sana değil, senin dönmene bekliyordu.
-        return split(e.t, to).map(([t0, t1, out]) => {
-          totals[out ? 'away' : e.s] += t1 - t0;
-          return out ? bar('away', e.s === 'waiting' ? 'onay bekliyor · sen yoktun' : LABEL.away, t0, t1) : bar(COLORS[e.s], LABEL[e.s], t0, t1);
-        }).join('');
+        if (e.s !== 'idle' && e.s !== 'waiting') return bar(COLORS[e.s] || 'busy', LABEL[e.s] || e.s, e.t, to);
+        // Sen yokken geçen bekleme ayrı gösterilir: oturum sana değil, senin dönmene bekliyordu.
+        return split(e.t, to).map(([t0, t1, out]) => (out ? bar('away', e.s === 'waiting' ? 'onay bekliyor · sen yoktun' : LABEL.away, t0, t1) : bar(COLORS[e.s], LABEL[e.s], t0, t1))).join('');
       }).join('');
-      sums[s.id] = totals;
       const marks = a.messages.filter((m) => m.from === s.id).map((m) => {
         const to = members.find((x) => x.id === m.to);
         return `<span class="msg-mark" style="left: ${pct(m.ts)}%" title="${hhmmOf(m.ts)} → ${esc(to ? to.roleLabel : m.toName)}: ${esc(m.text)}"></span>`;
@@ -1185,26 +1181,28 @@ const WorkView = {
             <div class="tl-sum note">${Math.round((a.awayMs || 600000) / 60000)} dk temas olmazsa uzakta sayılırsın</div>
           </div>` : '';
 
-    // İstatistik: toplamlar ve üye bazında dağılım; satırlardaki sayılarla aynı kaynaktan hesaplanır.
-    const sumOf = (k) => members.reduce((t, s) => t + sums[s.id][k], 0);
+    // İstatistik: grup süresi (duvar saati), ekibin aktif olduğu süre (üst üste binenler bir kez) ve
+    // üyelerin çalışma toplamı ayrı ayrı; satırlardaki sayılarla aynı kaynaktan.
     const sentBy = (id) => a.messages.filter((m) => m.from === id).length;
     const awayTotal = away.reduce((t, [a0, a1]) => t + (a1 - a0), 0);
     const tiles = [
-      ['Çalışma', fmtDur(sumOf('busy'))],
-      ['Onay bekleme', fmtDur(sumOf('waiting'))],
-      ['Sıra sende', fmtDur(sumOf('idle'))],
-      ['Sen uzaktaydın', fmtDur(awayTotal)],
-      ['Mesaj', String(a.messages.length)],
+      ['Grup süresi', fmtDur(ts.span), 'Grubun açılışından bu yana geçen süre (duvar saati)'],
+      ['Ekip aktif', fmtDur(ts.active), 'En az bir üyenin çalıştığı ya da onay beklediği süre; aynı anda çalışan üyeler bir kez sayılır'],
+      ['Ekip boşta', fmtDur(ts.idle), 'Üyeler açıkken hiçbirinin çalışmadığı süre'],
+      ['Üyelerin çalışma toplamı', fmtDur(ts.agentBusy), 'Her üyenin çalışma süresi toplanır; iki üye aynı saatte çalışınca iki saat sayılır'],
+      ['Onay bekleme', fmtDur(ts.waiting), 'Sen başındayken üyelerin onay beklediği sürelerin toplamı'],
+      ['Sen uzaktaydın', fmtDur(awayTotal), ''],
+      ['Mesaj', String(a.messages.length), ''],
     ];
     const statsHtml = `
         <div class="card tl-stats">
-          <div class="tl-tiles">${tiles.map(([l, v]) => `<div class="tl-tile"><span>${l}</span><strong>${v}</strong></div>`).join('')}</div>
+          <div class="tl-tiles">${tiles.map(([l, v, tip]) => `<div class="tl-tile"${tip ? ` title="${esc(tip)}"` : ''}><span>${l}</span><strong>${v}</strong></div>`).join('')}</div>
           <div class="tl-tbl-wrap">
             <table class="tl-stats-tbl">
-              <thead><tr><th>Üye</th><th>Çalıştı</th><th>Çalışma oranı</th><th>Onay</th><th>Sıra sende</th><th>Gönderdiği mesaj</th></tr></thead>
+              <thead><tr><th>Üye</th><th>Çalıştı</th><th title="Çalıştığı süre ÷ açık kaldığı süre">Çalışma oranı</th><th>Onay</th><th>Sıra sende</th><th>Gönderdiği mesaj</th></tr></thead>
               <tbody>${members.map((s) => {
-              const t = sums[s.id];
-              return `<tr><td><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)}</td><td>${fmtDur(t.busy)}</td><td>${Math.round((t.busy / span) * 100)}%</td><td>${fmtDur(t.waiting)}</td><td>${fmtDur(t.idle)}</td><td>${sentBy(s.id)}</td></tr>`;
+              const t = ts.per[s.id];
+              return `<tr><td><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)}</td><td>${fmtDur(t.busy)}</td><td>${t.open ? Math.round((t.busy / t.open) * 100) : 0}%</td><td>${fmtDur(t.waiting)}</td><td>${fmtDur(t.idle)}</td><td>${sentBy(s.id)}</td></tr>`;
             }).join('')}</tbody>
             </table>
           </div>

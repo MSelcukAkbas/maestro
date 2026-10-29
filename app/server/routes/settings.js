@@ -99,6 +99,8 @@ route('PUT', '/api/settings', async (req) => {
       permissionMode: PERMISSION_MODES.includes(r.permissionMode) ? r.permissionMode : '',
       model: MODELS.includes(r.model) ? r.model : '',
       readOnly: !!r.readOnly,
+      // Sessiz üye kullanıcıya soru açmaz, şefe sorar; gelmezse role.json'daki korunur.
+      ...(typeof r.sessiz === 'boolean' ? { sessiz: r.sessiz } : {}),
       // Claude Code izin kuralları (ör. "Bash(npm test:*)"); gelmezse permissions.json'daki korunur.
       ...(Array.isArray(r.allow) ? { allow: permRules(r.allow) } : {}),
       ...(Array.isArray(r.deny) ? { deny: permRules(r.deny) } : {}),

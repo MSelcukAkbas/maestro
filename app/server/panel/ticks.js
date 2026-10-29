@@ -29,7 +29,7 @@ function pendingTick() {
       && Date.now() - ((pty && pty.lastInputAt) || 0) > 30000;
     if (!pending.ready(p, meter.sessionInfo(sid), idle)) continue;
     pending.remove(sid);
-    const what = [p.model ? `model ${p.model}` : '', p.effort ? `effort ${p.effort}` : '', p.caps ? 'yetenekler' : ''].filter(Boolean).join(', ') || 'ayar';
+    const what = [p.model ? `model ${p.model}` : '', p.effort ? `effort ${p.effort}` : '', p.perm ? `izin ${p.perm}` : '', p.caps ? 'yetenekler' : ''].filter(Boolean).join(', ') || 'ayar';
     pushEvent(`${session.name}: ${what} için kaldığı yerden yeniden açılıyor.`, 'panel', group.id);
     manager.stop(sid);
     whenStopped(sid, (err) => {
@@ -83,7 +83,24 @@ async function autoRotateTick() {
 }
 
 
+// Önceki çalışma düzgün kapanmadıysa açık kalan izler panelin son ayakta olduğu ana "kapalı" olarak kapatılır.
+// Düzgün kapanışta izler zaten "kapalı"dır; record aynı durumu yeniden yazmaz.
+let gapClosed = false;
+function closeGap() {
+  gapClosed = true;
+  const t = timeline.lastAlive;
+  if (!t) return;
+  for (const g of store.loadGroups()) {
+    let changed = false;
+    for (const s of g.sessions) if (timeline.record(g.id, s.id, 'off', t)) changed = true;
+    if (changed) timeline.save(g.id);
+  }
+  if (timeline.record(USER_TL, 'user', 'off', t)) timeline.save(USER_TL);
+}
+
 function sampleTimeline() {
+  if (!gapClosed) closeGap();
+  timeline.beat();
   let live;
   try { live = discovery.liveSessions(sharedConfigDir()); } catch { return; }
   for (const g of store.viewGroups()) {

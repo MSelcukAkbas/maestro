@@ -7,6 +7,7 @@ const { manager, ops, curator, cachedQuota, meterTick } = require('./panel/conte
 const { boardIdleTick } = require('./panel/delivery');
 const { ROTATE_EVERY, pendingTick, autoRotateTick, sampleTimeline, watchTick } = require('./panel/ticks');
 const http = require('./panel/http');
+const { scheduler } = require('./panel/schedule');
 
 require('./routes/groups');
 require('./routes/board');
@@ -14,6 +15,7 @@ require('./routes/sessions');
 require('./routes/setup');
 require('./routes/settings');
 require('./routes/caps');
+require('./routes/assistant');
 
 setInterval(pendingTick, 10000);
 setInterval(autoRotateTick, ROTATE_EVERY);
@@ -30,5 +32,8 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 setInterval(boardIdleTick, 2000);
+// Zamanlayıcı: panel kapalıyken yarıda kalan / zamanı geçenler açılışta işaretlenir.
+scheduler.recover();
+setInterval(() => { try { scheduler.tick(); } catch (err) { console.error('[panel] zamanlayıcı:', err.message); } }, 5000);
 
 http.start();

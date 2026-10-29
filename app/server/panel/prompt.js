@@ -34,6 +34,14 @@ function isLead(group, s) {
   return lead ? lead.id === s.id : false;
 }
 
+// Sessiz üye kullanıcıya soru açamaz (AskUserQuestion kapalı), sorusunu şefe yazar. Şefin kendisi ve şefi olmayan
+// gruptaki üyeler sessiz olmaz; anlık rol (custom) şefli grupta sessizdir.
+function quietOf(group, s) {
+  if (isLead(group, s) || !group.sessions.some((x) => x.roleId === 'sef' && !x.removed)) return false;
+  const role = s.roleId === 'custom' ? null : prompts.role(s.roleId);
+  return role ? role.sessiz : true;
+}
+
 // Rolün persona / görevler / sınırlar metni rolün klasöründen okunur, böylece md düzenlemesi yeni / yenilenen oturuma
 // geçer. Oturum kaydındaki talimat (kurulumda bu ekip için yazılan ya da anlık rolün talimatı) görevlerin yerine geçer.
 function roleTextOf(s) {
@@ -83,6 +91,8 @@ function promptVars(fullGroup, session, project, accounts) {
     raporVerdiklerin: namesOf(group, session.reportsTo).join(', '),
     raporVerenler: group.sessions.filter((s) => s.reportsTo.includes(session.id)).map((s) => s.name).join(', '),
     herkesle: !!session.talkAll,
+    sessiz: quietOf(group, session),
+    sessizUyeVar: lead && others.some((m) => quietOf(group, m)),
     dokumanlar: project && (project.docRefs || []).length ? project.docRefs.map((r) => path.join(project.path, r)).join(', ') : '',
     akisNotu: group.flowNote || '',
   };
@@ -101,4 +111,4 @@ function writePromptFile(group, session, project, accounts) {
   return file;
 }
 
-module.exports = { PERMISSION_TEXT, permissionOf, roleTextOf, buildPrompt, writePromptFile };
+module.exports = { PERMISSION_TEXT, permissionOf, quietOf, roleTextOf, buildPrompt, writePromptFile };

@@ -6,6 +6,7 @@
   "effort": "low",
   "ctxWarn": null,
   "ctxHigh": null,
+  "sessiz": true,
   "skills": [
     "source-driven-development"
   ]

@@ -21,10 +21,18 @@ function emptyState() {
     // sayfası hangi yeteneğin gerçekten kullanıldığını buradan görür.
     skillCalls: {},
     mcpCalls: {},
+    // Son mesajlar (gelen istem ve üyenin metni); yalnızca panel asistanı okur (sessionRecent), durum yanıtına girmez.
+    recent: [],
   };
 }
 
 const MAX_SENT = 300;
+const MAX_RECENT = 12;
+
+function pushRecent(st, ts, from, text) {
+  st.recent.push({ ts: ts || Date.now(), from, text: text.length > 1500 ? text.slice(0, 1500) + '…' : text });
+  if (st.recent.length > MAX_RECENT) st.recent.shift();
+}
 
 function firstLine(s) {
   return String(s || '').split('\n').map((x) => x.trim()).find(Boolean) || '';
@@ -53,6 +61,7 @@ function applyObj(st, j) {
     if (!isToolResult && textOf(c).trim()) st.prompts++;
     const cmd = !isToolResult && textOf(c).match(/<command-name>\/?([^<\s]+)<\/command-name>/);
     if (cmd) st.skillCalls[cmd[1]] = (st.skillCalls[cmd[1]] || 0) + 1;
+    if (!isToolResult && !j.isMeta && textOf(c).trim()) pushRecent(st, ts, 'gelen', textOf(c).trim());
     if (ts && !st.firstAt) st.firstAt = ts;
     return;
   }
@@ -90,7 +99,10 @@ function applyObj(st, j) {
     }
   }
   const text = textOf(m.content).trim();
-  if (text) st.lastText = text;
+  if (text) {
+    st.lastText = text;
+    pushRecent(st, ts, 'üye', text);
+  }
   // Şeften istenen kapanış özeti sonradan başka mesajlarla geçilse de kapanış kaydı için saklanır.
   if (text && /KAPANIŞ ÖZETİ/i.test(text)) st.lastSummary = text;
   const u = m.usage;
@@ -145,4 +157,9 @@ function sessionStats(file) {
   };
 }
 
-module.exports = { sessionStats, sessionMessages, emptyState, applyObj };
+function sessionRecent(file) {
+  const st = stateOf(file);
+  return st ? st.recent.slice() : [];
+}
+
+module.exports = { sessionStats, sessionMessages, sessionRecent, emptyState, applyObj };

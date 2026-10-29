@@ -17,3 +17,11 @@ Projenin belge dosyalarını güncel tutarsın: README, kurulum ve kullanım not
 **El değiştirme**
 - Kod içi yorum ya da docstring gerekiyorsa kendin yazma; yerini ve önerdiğin metni görevi verene bildir, kod yazan rol ekler.
 - Kod ile belge çeliştiğinde hangisinin doğru olduğunu tahmin etme; görevi verene sor.
+
+
+**Belge türüne göre**
+- GOREV_*.md gibi görev listelerini belgelerken madde kimliklerini, durumlarını ve sayıları olduğu gibi koru; kendi yorumunu katma.
+- Değişiklik notunu (changelog) yazarken mevcut dosyadaki başlık ve sürüm düzenini sürdür.
+
+**Dil**
+- Raporu, üzerinde çalıştığın belgenin diliyle aynı dilde yaz.

@@ -21,6 +21,7 @@ const { Caps } = require('../setup/caps');
 const { Notes, actorLabel } = require('../team/notes');
 const { Curator } = require('../team/curator');
 const { Requests } = require('../team/team');
+const { Inbox } = require('../team/inbox');
 const { Presence } = require('../session/presence');
 const { Ledger } = require('../core/ledger');
 const { Pending } = require('../session/pending');
@@ -41,6 +42,7 @@ const boards = new Boards(store.DATA_DIR);
 const caps = new Caps(store.DATA_DIR);
 const notes = new Notes(store.DATA_DIR);
 const requests = new Requests(store.DATA_DIR);
+const inbox = new Inbox(store.DATA_DIR);
 const timeline = new Timeline(store.DATA_DIR);
 const meter = new Meter(store.DATA_DIR, path.join(sharedConfigDir(), 'projects'));
 const watch = new Watch(store.DATA_DIR);
@@ -71,7 +73,7 @@ const ops = new Ops({
   lastText: (sid) => lastText(sid),
   delivering: (sid) => {
     const found = findSession(store.viewGroups(), sid);
-    return !!found && (boards.hasPending(found.group.id, sid) || notes.hasPending(found.group.id, sid) || requests.hasInbox(sid));
+    return !!found && (boards.hasPending(found.group.id, sid) || notes.hasPending(found.group.id, sid) || requests.hasInbox(sid) || inbox.hasPending(sid));
   },
   paste: (sid, text, activity) => {
     const found = findSession(store.loadGroups(), sid);
@@ -238,11 +240,17 @@ function quotaLeft(row) {
 const USER_TL = '_user';
 
 
-// Ölçüm: çalışan ve son 10 dakikada kapanmış üyelerin harcaması bulundukları hesaba yazılır.
+// Ölçüm: çalışan ve son 10 dakikada kapanmış üyelerin harcaması bulundukları hesaba yazılır. Grup dışı oturumlar
+// (panel asistanı) setMeterExtra ile eklenir: [{ id, name, accountId }].
 const meterSeen = new Map();
+let meterExtra = () => [];
+function setMeterExtra(fn) {
+  meterExtra = fn;
+}
 function meterTick() {
   const now = Date.now();
   const list = [];
+  for (const s of meterExtra()) list.push({ ...s, file: discovery.transcriptPath(sharedConfigDir(), s.id) });
   for (const g of store.viewGroups()) {
     for (const s of g.sessions) {
       if (manager.has(s.id)) meterSeen.set(s.id, now);
@@ -295,6 +303,7 @@ function shutdown() {
     }
     if (timeline.record(USER_TL, 'user', 'off')) timeline.save(USER_TL);
     store.writeJson('events.json', events);
+    meter.persistHistory(Date.now(), true);
   } catch {}
   manager.stopAll();
   setTimeout(() => process.exit(0), 300);
@@ -336,8 +345,8 @@ function lastQuota() {
 
 module.exports = {
   ROOT, PORT, settings, replaceSettings, currentToken, rotateToken,
-  hookState, manager, boards, caps, notes, requests, timeline, meter, watch, presence, ledger, launched, pending, ops, curator,
+  hookState, manager, boards, caps, notes, requests, inbox, timeline, meter, watch, presence, ledger, launched, pending, ops, curator,
   HttpError, isAllowedDir, sharedConfigDir, hhmm, cleanText, findSession, sessionStatus,
   events, pushEvent, runningLead, pasteTo, cachedQuota, lastQuota, trustsDir, quotaLeft,
-  USER_TL, meterTick, groupWatchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
+  USER_TL, meterTick, setMeterExtra, groupWatchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
 };

@@ -112,7 +112,7 @@ function renderNotif(seenBefore) {
       const bk = e.source === 'bekci';
       const gn = e.gid && gName(e.gid);
       const href = e.gid && gn ? (bk ? bekciHref(e.gid) : e.source === 'notlar' ? `#/g/${encodeURIComponent(e.gid)}?view=notes` : `#/g/${encodeURIComponent(e.gid)}`) : null;
-      const label = `${bk ? 'Bekçi' : e.source === 'notlar' ? 'Notlar' : 'Panel'}${gn ? ` · ${gn}` : ''}`;
+      const label = `${bk ? 'Bekçi' : { notlar: 'Notlar', asistan: 'Asistan', zamanlayici: 'Zamanlayıcı' }[e.source] || 'Panel'}${gn ? ` · ${gn}` : ''}`;
       const inner = `<div class="bk-line"><span class="badge ${bk ? 'idle' : ''}">${esc(label)}</span><span class="note">${esc(when(e.ts))}</span></div><div>${esc(e.text)}</div>`;
       const cls = `notif-item${e.ts > seenBefore ? ' new' : ''}`;
       return href ? `<a class="${cls}" href="${href}">${inner}</a>` : `<div class="${cls}">${inner}</div>`;

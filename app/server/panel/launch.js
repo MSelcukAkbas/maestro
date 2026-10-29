@@ -10,11 +10,11 @@ const discovery = require('../core/discovery');
 const { writeSettingsFile, writeMcpConfig } = require('../session/hooks');
 const { driftOf } = require('../session/pending');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
-const { permissionOf, writePromptFile } = require('./prompt');
+const { permissionOf, quietOf, writePromptFile } = require('./prompt');
 const ctx = require('./context');
 
 const {
-  ROOT, PORT, settings, hookState, manager, boards, caps, notes, requests, meter, launched, pending,
+  ROOT, PORT, settings, hookState, manager, boards, caps, notes, requests, inbox, meter, launched, pending,
   HttpError, isAllowedDir, sharedConfigDir, hhmm, cleanText, findSession, meterTick, whenStopped,
 } = ctx;
 
@@ -44,7 +44,7 @@ function switchAccount(sessionId, accountId) {
   return { ok: true, restarted: wasRunning };
 }
 
-// Üyenin model / effort ayarını değiştirir. Kayıt hemen güncellenir (sonraki açılış yeni ayarla olur); çalışan üye
+// Üyenin model / effort / izin modu ayarını değiştirir (permissionMode '' = grubun varsayılanı). Kayıt hemen güncellenir (sonraki açılış yeni ayarla olur); çalışan üye
 // bekleyen değişiklik olarak en ucuz anda kaldığı yerden yeniden açılır (server/pending.js). now: beklemeden uygula.
 function changeSettings(sessionId, body, by = 'user') {
   const groups = store.loadGroups();
@@ -62,6 +62,13 @@ function changeSettings(sessionId, body, by = 'user') {
     if ((session.effort || '') !== body.effort) change.effort = body.effort || 'varsayılan';
     session.effort = body.effort;
   }
+  if (body.permissionMode !== undefined) {
+    if (body.permissionMode !== '' && !PERMISSION_MODES.includes(body.permissionMode)) throw new HttpError(400, `Geçersiz izin modu: ${body.permissionMode}`);
+    // Karşılaştırma gerçekleşen modla: grubun varsayılanına eşit bir seçim yeniden başlatma gerektirmez.
+    const before = permissionOf(group, session);
+    session.permissionMode = body.permissionMode;
+    if (permissionOf(group, session) !== before) change.perm = permissionOf(group, session);
+  }
   store.saveGroups(groups);
   if (!manager.has(session.id)) return { ok: true, running: false };
   if (!Object.keys(change).length && !body.now) return { ok: true, running: true, unchanged: true };
@@ -77,6 +84,7 @@ function cancelSettings(sessionId) {
   if (found && run) {
     found.session.model = run.model || '';
     found.session.effort = run.effort || '';
+    if (run.permissionMode !== undefined) found.session.permissionMode = run.permissionMode;
     store.saveGroups(groups);
   }
   pending.remove(sessionId);
@@ -108,11 +116,13 @@ function launchSession(group, session, { resume }) {
     cap.settings.deny.push(...role.deny);
     cap.settings.allow.push(...role.allow);
   }
+  // Sessiz üye kullanıcıya soru açıp terminalde beklemesin; sorusu şefe gider.
+  if (quietOf(group, session)) cap.settings.deny.push('AskUserQuestion');
   // Açılış kayıttaki güncel ayarı kullanır; bu üyenin bekleyen değişikliği böylece uygulanmış olur.
   pending.remove(session.id);
   // İstenen ayar: oturum kaydından gerçekleşenle karşılaştırılır (launchDrift).
   launched.set(session.id, {
-    at: Date.now(), model: session.model || null, effort: session.effort || null,
+    at: Date.now(), model: session.model || null, effort: session.effort || null, permissionMode: session.permissionMode || '',
     skillsOff: Object.entries(cap.settings.skillOverrides).filter(([, v]) => v === 'off').map(([k]) => k),
   });
 
@@ -354,6 +364,7 @@ function renewSession(oldSid, note, accountId) {
   boards.reassign(group.id, old.id, s.id);
   notes.reassign(group.id, old.id, s.id);
   requests.reassign(old.id, s.id);
+  inbox.reassign(old.id, s.id);
   manager.stop(old.id);
   whenStopped(old.id, (err) => {
     if (err) console.error(`[panel] ${old.name}: eski oturum kapanmadı, yenisi yine de açılıyor.`);

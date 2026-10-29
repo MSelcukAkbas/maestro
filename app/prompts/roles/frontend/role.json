@@ -6,6 +6,7 @@
   "effort": "medium",
   "ctxWarn": null,
   "ctxHigh": null,
+  "sessiz": true,
   "skills": [
     "frontend-ui-engineering"
   ]

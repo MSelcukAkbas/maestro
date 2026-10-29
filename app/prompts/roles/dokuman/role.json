@@ -3,9 +3,10 @@
   "short": "doküman",
   "order": 14,
   "model": "haiku",
-  "effort": "low",
+  "effort": "medium",
   "ctxWarn": null,
   "ctxHigh": null,
+  "sessiz": true,
   "skills": [
     "documentation-and-adrs"
   ]

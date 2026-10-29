@@ -6,6 +6,7 @@
   "effort": "high",
   "ctxWarn": null,
   "ctxHigh": null,
+  "sessiz": true,
   "skills": [
     "doubt-driven-development"
   ]

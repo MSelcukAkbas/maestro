@@ -92,6 +92,7 @@ function readRole(id) {
       effort: cfg.effort || '',
       ctxWarn: cfg.ctxWarn || null,
       ctxHigh: cfg.ctxHigh || null,
+      sessiz: cfg.sessiz === true,
     },
     order: Number(cfg.order) || 0,
     skills: Array.isArray(cfg.skills) ? cfg.skills : [],
@@ -113,7 +114,7 @@ function loadRoles() {
   return roleCache;
 }
 
-// [{ id, label, short, persona, gorevler, sinirlar, permissionMode, allow, deny, readOnly, model, effort, ctxWarn, ctxHigh }],
+// [{ id, label, short, persona, gorevler, sinirlar, permissionMode, allow, deny, readOnly, model, effort, ctxWarn, ctxHigh, sessiz }],
 // role.json "order" sırasıyla.
 // Dönen diziyi değiştirme.
 function roles() {
@@ -190,6 +191,8 @@ function saveRoles(list, notes = {}) {
     const cfg = {
       label: r.label, short: r.short || r.label, order: i + 1,
       model: r.model || '', effort: r.effort || '', ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null,
+      // Sessiz: gelmediyse dosyadaki korunur.
+      sessiz: typeof r.sessiz === 'boolean' ? r.sessiz : old.sessiz === true,
       skills: Array.isArray(old.skills) ? old.skills : [],
     };
     // İzinler: allow / deny listesi gelmediyse dosyadaki korunur. Salt okunur araçlarını yalnızca "readOnly" belirler.

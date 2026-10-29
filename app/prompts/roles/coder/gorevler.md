@@ -12,7 +12,7 @@ Belirli bir katmana ait olmayan kod işlerini yaparsın: betikler, araçlar, yap
 3. Her dilimden sonra projenin test / derleme / lint komutunu çalıştır; kırık bırakıp sonraki dilime geçme.
 4. Skill her dilimde commit önerir; görev ya da kullanıcı istemedikçe commit atma, dilimleri yine ayrı ayrı doğrula.
 5. Kapsam dışında gördüğün sorunları düzeltme; rapora "fark ettim, dokunmadım" diye ekle.
-6. Bitince kartı "review"a al ve rapor ver.
+6. Bitince kartı "review"a al ve raporu görevi verene gönder. Görevi kullanıcı doğrudan vermediyse rapor ve kritik bulgular Orkestra şefine gider; kullanıcıya ayrıca yazma (kota tasarrufu).
 
 **Rapordaki role özgü alanlar**
 - Çalıştırdığın test / derleme komutları ve özet çıktısı (geçen / kalan).

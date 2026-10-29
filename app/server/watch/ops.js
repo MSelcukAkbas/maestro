@@ -75,7 +75,8 @@ class Ops {
   }
 
   // op: { sid, gid, kind: 'compact' | 'move' | 'renew', accountId, then: { accountId } (compact sonrası taşıma), why, by,
-  // force (kullanıcının isteği: bekleme süresi, sessizlik ve sıcak önbellek koşulları aranmaz) }
+  // force (kullanıcının isteği: bekleme süresi ve cevap bekleme koşulu aranmaz), cold (zamanlayıcı: compact soğuk önbellekte de
+  // yapılır; bağlam önbelleksiz okunur, kullanıcı kararı) }
   add(op, now = Date.now()) {
     if (op.force) {
       const cur = this.ops.get(op.sid);
@@ -175,7 +176,7 @@ class Ops {
       return this.d.log({ gid: op.gid, key: `op:${op.sid}`, level: 'normal', text: `${name}: hamle 1 saat içinde uygun an bulamadı, bırakıldı.` });
     }
     if (op.kind === 'compact') {
-      if (op.state === 'queued' && this.ready(op.sid, { warm: true }, now)) {
+      if (op.state === 'queued' && this.ready(op.sid, { warm: !op.cold }, now)) {
         const info = this.d.info(op.sid) || {};
         op.before = info.compacts || 0;
         op.ctxBefore = info.context || 0;
