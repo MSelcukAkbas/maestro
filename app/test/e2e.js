@@ -10,7 +10,7 @@ let spent = 0;
 
 function projectId(api, state) {
   const p = state.projects.find((x) => path.resolve(x.path) === path.resolve(PROJECT_PATH));
-  if (!p) throw new Error('claude-panel projesi test verisinde yok');
+  if (!p) throw new Error('maestro projesi test verisinde yok');
   return p.id;
 }
 

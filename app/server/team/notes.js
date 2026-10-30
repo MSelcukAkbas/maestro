@@ -450,7 +450,7 @@ const OWN_TEXT = `${USER_OPEN} … ${USER_CLOSE} arasındaki satırlar kullanıc
 const NOTE_TOOLS = [
   {
     name: 'not_listele',
-    description: 'Ekibin ortak not defterindeki notları listeler (Claude Panel grup notları): numara, başlık, ekleyen, kısa önizleme.',
+    description: 'Ekibin ortak not defterindeki notları listeler (Maestro grup notları): numara, başlık, ekleyen, kısa önizleme.',
     inputSchema: { type: 'object', properties: { ara: { type: 'string', description: 'başlıkta ya da içerikte geçen kelime (isteğe bağlı)' } } },
   },
   {
@@ -487,7 +487,7 @@ const NOTE_TOOLS = [
 const NOTE_LEAD_TOOLS = [
   {
     name: 'not_sorusu_cevapla',
-    description: 'Not düzenleyicinin "[Claude Panel · Not düzenleyici]" mesajıyla sorduğu çelişki sorusunu cevaplar; düzenleyici notları sonraki düzenlemede buna göre netleştirir.',
+    description: 'Not düzenleyicinin "[Maestro · Not düzenleyici]" mesajıyla sorduğu çelişki sorusunu cevaplar; düzenleyici notları sonraki düzenlemede buna göre netleştirir.',
     inputSchema: {
       type: 'object',
       properties: { soru: { type: 'number', description: 'soru numarası (S3 için 3)' }, cevap: { type: 'string', description: 'hangisinin doğru olduğu ya da doğru bilgi' } },

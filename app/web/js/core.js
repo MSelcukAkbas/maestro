@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Temel yardımcılar (seçici, kaçış, API, bildirim balonu, biçimlendirme) ve panel durumu (durum kanalı, ortak görünümler).
+// Maestro arayüzü · Temel yardımcılar (seçici, kaçış, API, bildirim balonu, biçimlendirme) ve panel durumu (durum kanalı, ortak görünümler).
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -9,13 +9,13 @@ const app = $('#app');
 const ESC_MAP = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' };
 const esc = (s) => String(s == null ? '' : s).replace(/[&<>"']/g, (c) => ESC_MAP[c]);
 
-const TOKEN_KEY = 'claude-panel-token';
-const LAYOUT_KEY = 'claude-panel-layout';
-const VIEW_KEY = 'claude-panel-view';
-const SPLIT_KEY = 'claude-panel-split';
-const MAPWIN_KEY = 'claude-panel-mapwin';
-const NOTETAB_KEY = 'claude-panel-notetab';
-const DOCOPEN_KEY = 'claude-panel-docopen';
+const TOKEN_KEY = 'maestro-token';
+const LAYOUT_KEY = 'maestro-layout';
+const VIEW_KEY = 'maestro-view';
+const SPLIT_KEY = 'maestro-split';
+const MAPWIN_KEY = 'maestro-mapwin';
+const NOTETAB_KEY = 'maestro-notetab';
+const DOCOPEN_KEY = 'maestro-docopen';
 
 function store(key, value) {
   try {

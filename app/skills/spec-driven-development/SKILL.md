@@ -185,7 +185,7 @@ With the validated spec, generate a technical implementation plan:
 
 > Follow `planning-and-task-breakdown` for the dependency-graph mapping and vertical-slicing mechanics behind these steps; it is the canonical source. The bullets above are a lightweight summary; if they ever diverge, `planning-and-task-breakdown` takes precedence.
 >
-> **Output convention:** Record the plan and the task list where `planning-and-task-breakdown` says: in a Claude Panel team, the plan as a group note and the tasks as task board cards; outside the panel, `tasks/plan.md` and `tasks/todo.md` (or the project's designated tracker).
+> **Output convention:** Record the plan and the task list where `planning-and-task-breakdown` says: in a Maestro team, the plan as a group note and the tasks as task board cards; outside the panel, `tasks/plan.md` and `tasks/todo.md` (or the project's designated tracker).
 
 The plan should be reviewable: the human should be able to read it and say "yes, that's the right approach" or "no, change X."
 
@@ -211,7 +211,7 @@ Break the plan into discrete, implementable tasks:
 
 ### Phase 4: Implement
 
-Execute tasks one at a time in thin, verifiable slices, test-first where it applies (`test-driven-development`). Give each implementer only the spec sections and source files its task needs rather than the entire spec. In a Claude Panel team the lead does not implement: assign the tasks on the task board and track them there.
+Execute tasks one at a time in thin, verifiable slices, test-first where it applies (`test-driven-development`). Give each implementer only the spec sections and source files its task needs rather than the entire spec. In a Maestro team the lead does not implement: assign the tasks on the task board and track them there.
 
 ## Keeping the Spec Alive
 

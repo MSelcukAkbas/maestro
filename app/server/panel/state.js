@@ -41,8 +41,8 @@ function buildState() {
   };
 }
 
-const STARTUP_LINK = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Claude Panel.lnk');
-const HIDDEN_LAUNCHER = path.join(ROOT, 'Claude-Panel-Arkaplan.vbs');
+const STARTUP_LINK = path.join(process.env.APPDATA || '', 'Microsoft', 'Windows', 'Start Menu', 'Programs', 'Startup', 'Maestro.lnk');
+const HIDDEN_LAUNCHER = path.join(ROOT, 'Maestro-Arkaplan.vbs');
 
 function setAutostart(enabled) {
   if (!enabled) {
@@ -55,7 +55,7 @@ function setAutostart(enabled) {
     `$s.TargetPath = ${q(path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'wscript.exe'))}`,
     `$s.Arguments = ${q(`"${HIDDEN_LAUNCHER}"`)}`,
     `$s.WorkingDirectory = ${q(ROOT)}`,
-    '$s.Description = "Claude Panel (arka planda)"',
+    '$s.Description = "Maestro (arka planda)"',
     '$s.Save()',
   ].join('; ');
   const r = require('child_process').spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script], { encoding: 'utf8' });

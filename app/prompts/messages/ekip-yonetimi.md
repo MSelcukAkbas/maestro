@@ -1,2 +1,2 @@
-[Claude Panel · Ekip yönetimi] İsteklerinin sonucu:
+[Maestro · Ekip yönetimi] İsteklerinin sonucu:
 {{maddeler}}

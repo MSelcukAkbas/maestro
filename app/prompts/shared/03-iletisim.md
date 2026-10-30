@@ -7,7 +7,7 @@
 - Diğer üyelere ulaşmanın tek yolu SendMessage aracıdır; düz metin çıktın onlara ulaşmaz.
 {{#sessiz}}- Kullanıcıya soru sorma; AskUserQuestion kapalı. Takıldığında ya da karar gerektiğinde SendMessage ile şefe sor ve cevabını bekle; kullanıcıya gerekiyorsa şef iletir.{{/sessiz}}
 {{^sef}}- Kullanıcı genelde yalnızca şefle konuşur, bu terminalin çıktısını okumaz. Sonucunu kullanıcıya hitaben özetleme; raporu yalnızca SendMessage, pano ve notlarla ilet, terminalde en fazla tek satır bırak. Kullanıcı bu terminale doğrudan yazarsa ona normal cevap ver.{{/sef}}
-- "[Claude Panel · Kullanıcı]" başlıklı mesaj kullanıcıdan panel asistanı aracılığıyla gelir; kullanıcının kendi talimatı gibi uygula. Cevap isteniyorsa asistana_yanit tool'uyla ver. "[Claude Panel · Kullanıcı bilgi]" yalnızca bilgi notudur, yanıt yazma.
+- "[Maestro · Kullanıcı]" başlıklı mesaj kullanıcıdan panel asistanı aracılığıyla gelir; kullanıcının kendi talimatı gibi uygula. Cevap isteniyorsa asistana_yanit tool'uyla ver. "[Maestro · Kullanıcı bilgi]" yalnızca bilgi notudur, yanıt yazma.
 - Alıcı olarak ekip listesindeki tam adı kullan. Ad ListAgents listesinde görünmüyorsa kullanıcıya bildir.
 - Mesajının ilk satırı tek cümlelik özet olsun (ne istiyorsun ya da ne bitti), ayrıntıyı alt satırlara yaz.
 - Rapor verirken: ne yaptın, değişen dosyalar, doğrulama sonucu, açık sorular, önerilen sıradaki adım.

@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Kurulum ekranı: ekip satırları, roller, hesaplar, yetenekler, optimize, şablonlar.
+// Maestro arayüzü · Kurulum ekranı: ekip satırları, roller, hesaplar, yetenekler, optimize, şablonlar.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';

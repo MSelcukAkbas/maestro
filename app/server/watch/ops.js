@@ -42,7 +42,7 @@ function asksUser(text) {
 
 const DEVIR_TOOL = {
   name: 'devir_tamam',
-  description: 'Yalnızca panel "[Claude Panel · Devir]" mesajıyla devir notu istediğinde çağır. not: yeni oturumun kaldığın yerden '
+  description: 'Yalnızca panel "[Maestro · Devir]" mesajıyla devir notu istediğinde çağır. not: yeni oturumun kaldığın yerden '
     + `devam etmesi için gereken her şey (en fazla ${MAX_NOTE} karakter). Şu an devredilemeyecek kritik bir işin ortasındaysan not yerine ertele alanına nedenini yaz.`,
   inputSchema: {
     type: 'object',
@@ -281,7 +281,7 @@ class Ops {
   // devir_tamam tool'u.
   handoff(sid, args, now = Date.now()) {
     const op = this.ops.get(sid);
-    if (!op || op.kind !== 'renew' || op.state !== 'asked') throw Object.assign(new Error('Senden devir notu istenmedi; bu tool\'u yalnızca "[Claude Panel · Devir]" mesajından sonra kullan.'), { status: 400 });
+    if (!op || op.kind !== 'renew' || op.state !== 'asked') throw Object.assign(new Error('Senden devir notu istenmedi; bu tool\'u yalnızca "[Maestro · Devir]" mesajından sonra kullan.'), { status: 400 });
     const name = this.name(sid);
     const later = String((args && args.ertele) || '').trim().slice(0, 300);
     if (later) {

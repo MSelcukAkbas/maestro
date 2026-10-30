@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Yönlendirme, masaüstü bildirimleri ve açılış. En son yüklenir.
+// Maestro arayüzü · Yönlendirme, masaüstü bildirimleri ve açılış. En son yüklenir.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -49,7 +49,7 @@ window.addEventListener('hashchange', navigate);
 
 // ---------- bildirimler ----------
 
-const NOTIFY_KEY = 'claude-panel-notify';
+const NOTIFY_KEY = 'maestro-notify';
 const prevStatus = new Map();
 
 // Bir oturum "onay bekliyor" durumuna geçince tarayıcı bildirimi; sekme başlığında bekleyen sayısı.
@@ -75,7 +75,7 @@ function watchState() {
       }
     }
   }
-  document.title = waiting.length ? `(${waiting.length}) Claude Panel` : 'Claude Panel';
+  document.title = waiting.length ? `(${waiting.length}) Maestro` : 'Maestro';
   // Panelin kendiliğinden yaptığı işler (ör. hesap rotasyonu, bekçinin hamleleri) bildirim kutusuna düşer.
   const evs = state.events || [];
   const top = evs.length ? evs[evs.length - 1].id : 0;

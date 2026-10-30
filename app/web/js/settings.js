@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Ayarlar: hesaplar, roller, yetenekler, genel, şablonlar, sistem.
+// Maestro arayüzü · Ayarlar: hesaplar, roller, yetenekler, genel, şablonlar, sistem.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -1309,7 +1309,7 @@ ${this.roleArchiveSection(r)}`;
           <div class="section-head"><h2>Sunucu</h2></div>
           <div class="card set-card">
             <label class="check" style="align-self: flex-start"><input type="checkbox" data-act="autostart" ${state.autostart ? 'checked' : ''}>Windows açılışında paneli arka planda başlat</label>
-            <p class="note">Arka planda çalışan panelin penceresi olmaz; yanlışlıkla pencere kapatıp oturumları kaybetme riski kalkar. Elle arka planda başlatmak için klasördeki Claude-Panel-Arkaplan.vbs dosyasını çalıştır.</p>
+            <p class="note">Arka planda çalışan panelin penceresi olmaz; yanlışlıkla pencere kapatıp oturumları kaybetme riski kalkar. Elle arka planda başlatmak için klasördeki Maestro-Arkaplan.vbs dosyasını çalıştır.</p>
             <div><button class="btn danger" data-act="shutdown">Sunucuyu kapat</button></div>
           </div>
         </section>`;

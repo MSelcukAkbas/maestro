@@ -39,7 +39,7 @@ function pendingTick() {
   }
 }
 
-const ROTATE_EVERY = Number(process.env.CLAUDE_PANEL_ROTATE_MS) || 5 * 60 * 1000;
+const ROTATE_EVERY = Number(process.env.MAESTRO_ROTATE_MS) || 5 * 60 * 1000;
 const noAlternativeWarned = new Set();
 let rotating = false;
 

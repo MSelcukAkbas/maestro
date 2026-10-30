@@ -1,4 +1,4 @@
-// Claude Panel sunucusu: yalnızca 127.0.0.1'de çalışır, her API ve WebSocket çağrısı erişim anahtarı ister.
+// Maestro sunucusu: yalnızca 127.0.0.1'de çalışır, her API ve WebSocket çağrısı erişim anahtarı ister.
 // Bu dosya parçaları bağlar ve zamanlayıcıları kurar. Ortak bağlam panel/context.js; oturum açma panel/launch.js;
 // sistem istemi panel/prompt.js; üyelere iletim panel/delivery.js; zamanlı işler panel/ticks.js; HTTP / WebSocket
 // panel/http.js; API uçları routes/*.js.

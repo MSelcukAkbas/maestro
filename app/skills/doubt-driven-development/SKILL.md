@@ -41,7 +41,7 @@ If you doubt every keystroke, you ship nothing. The skill applies only to non-tr
 
 ## Loading Constraints
 
-This skill is designed for a **main session** that can spawn a fresh-context reviewer in Step 3 (DOUBT, detailed below). In a Claude Panel team, the member that holds this skill (for example the devil's advocate role) runs as its own main session, so it can spawn the reviewer as a subagent.
+This skill is designed for a **main session** that can spawn a fresh-context reviewer in Step 3 (DOUBT, detailed below). In a Maestro team, the member that holds this skill (for example the devil's advocate role) runs as its own main session, so it can spawn the reviewer as a subagent.
 
 - **If you find yourself applying this skill from inside a subagent context** (where Claude Code prevents nested subagent spawn): the preferred path is to surface to the user that doubt-driven cannot run nested and let the main session handle it. As a last resort only, a degraded self-questioning fallback exists — rewrite ARTIFACT + CONTRACT as a fresh self-prompt with a hard mental separator from your prior reasoning, and walk Steps 1–5. This is **not fresh-context review** (you carry your own context with you), so flag the result as degraded and prefer escalation whenever the user is reachable.
 
@@ -110,7 +110,7 @@ Spawn the reviewer as a generic subagent with the adversarial prompt pasted verb
 
 A reviewer on the same model shares blind spots with the author. When the decision is high-stakes, run the reviewer subagent on a different model than your own (the Agent tool's model option: opus, sonnet, haiku), and say in the output which model reviewed it.
 
-Do not invoke external model CLIs (Codex, Gemini or others). In a Claude Panel team the user usually reads only the lead's terminal, so do not stop to ask the user in this terminal; report findings through the panel's report channels (SendMessage to the member you report to, task board, group notes).
+Do not invoke external model CLIs (Codex, Gemini or others). In a Maestro team the user usually reads only the lead's terminal, so do not stop to ask the user in this terminal; report findings through the panel's report channels (SendMessage to the member you report to, task board, group notes).
 
 ### Step 4: RECONCILE — Fold findings back
 

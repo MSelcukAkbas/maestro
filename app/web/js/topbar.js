@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Üst çubuk: kota açılır penceresi ve bildirim kutusu.
+// Maestro arayüzü · Üst çubuk: kota açılır penceresi ve bildirim kutusu.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -80,7 +80,7 @@ document.addEventListener('keydown', (e) => {
 // ---------- bildirim kutusu ----------
 
 // Panelin ve yardımcı modellerin bildirimleri. Okunmamış sayısı bu tarayıcıda son açılış zamanına göre tutulur.
-const NOTIF_SEEN_KEY = 'claude-panel-notif-seen';
+const NOTIF_SEEN_KEY = 'maestro-notif-seen';
 const notifBtn = $('#notif-btn');
 const notifPop = $('#notif-pop');
 let notifShownTop = 0;

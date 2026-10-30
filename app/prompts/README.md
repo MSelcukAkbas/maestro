@@ -163,7 +163,7 @@ Listeler (kart satırları, notlar, bulgular) kodda hazırlanır ve tek değişk
 | `uye-cikarildi.md` | Ekipten çıkarılan üye, şefe | `ad`, `rol` |
 | `kullanici-mesaji.md` | Kullanıcının panel asistanı aracılığıyla gönderdiği mesaj (`bilgi`: tur açmayan bilgi notu, `cevap`: asistana_yanit ile cevap istenir) | `metin`, `cevap`, `bilgi` |
 
-`[Claude Panel · …]` başlıkları `shared/` istemindeki kurallarla eşleşir ("… başlıklı notu kullanıcı talimatı gibi dikkate
+`[Maestro · …]` başlıkları `shared/` istemindeki kurallarla eşleşir ("… başlıklı notu kullanıcı talimatı gibi dikkate
 al"). Bir başlığı değiştirirsen istemdeki karşılığını da değiştir.
 
 ## Yanıt biçimi

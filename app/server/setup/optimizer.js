@@ -12,7 +12,7 @@ const { tool: promptTool } = require('../core/prompts');
 
 const READ_TOOLS = 'Read,Grep,Glob';
 const MAX_ROWS = 12;
-const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
+const CWD = path.join(os.tmpdir(), 'maestro-helper');
 const options = require('../core/options');
 
 const MODELS = ['', ...options.MODELS];

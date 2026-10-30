@@ -114,7 +114,7 @@ const server = http.createServer(async (req, res) => {
     try {
       // PostToolUse büyük tool çıktısını da taşır; reddedilirse oturumun terminalinde hook hatası görünür.
       const body = await readBody(req, 64_000_000);
-      if (process.env.CLAUDE_PANEL_HOOK_DEBUG) console.log('[hook]', Date.now(), JSON.stringify({ ...body, tool_response: undefined, last_assistant_message: undefined, transcript_path: undefined, cwd: undefined, scratchpad_dir: undefined, session_id: undefined }).slice(0, 500));
+      if (process.env.MAESTRO_HOOK_DEBUG) console.log('[hook]', Date.now(), JSON.stringify({ ...body, tool_response: undefined, last_assistant_message: undefined, transcript_path: undefined, cwd: undefined, scratchpad_dir: undefined, session_id: undefined }).slice(0, 500));
       if (manager.has(body.session_id)) {
         hookState.handle(body);
         if (body.hook_event_name === 'UserPromptSubmit') {
@@ -281,7 +281,7 @@ function start() {
   server.listen(PORT, '127.0.0.1', () => {
     warmStats();
     const url = `http://127.0.0.1:${PORT}/?t=${currentToken()}`;
-    console.log(`Claude Panel çalışıyor: ${url}`);
+    console.log(`Maestro çalışıyor: ${url}`);
     console.log('Bu pencereyi kapatırsan paneldeki oturumlar da kapanır.');
     if (process.argv.includes('--open')) spawn('cmd.exe', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref();
   });

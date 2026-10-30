@@ -1,5 +1,5 @@
 @echo off
-title Claude Panel
+title Maestro
 cd /d "%~dp0"
 if not exist node_modules (
   echo Bagimliliklar kuruluyor...

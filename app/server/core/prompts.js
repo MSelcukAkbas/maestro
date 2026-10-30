@@ -3,15 +3,15 @@
 //                                       (panelin zorladığı izinler); adı "_" ile başlayan klasör okunmaz
 //   shared/*.md                         üye sistem isteminin ortak bölümleri (ad sırasıyla birleşir)
 //   tools/<ad>/tool.json + *.md         panelin yardımcı model çağrılarının (bekçi, kurulum danışmanı, …) metni ve ayarı
-//   messages/<ad>.md                    panelden üyelere giden bildirimler ("[Claude Panel · …]")
+//   messages/<ad>.md                    panelden üyelere giden bildirimler ("[Maestro · …]")
 // Dosyalar okunurken önbelleğe alınır; değişiklik zamanı / boyutu değişen dosya yeniden okunur, böylece elle yapılan
 // düzenleme yeniden başlatmadan bir sonraki kullanımda geçer. Panelden yapılan kayıt da aynı dosyalara yazılır.
 const fs = require('fs');
 const path = require('path');
 const { APP_ROOT } = require('./paths');
 
-// CLAUDE_PANEL_PROMPTS ile ayrı bir klasör verilebilir (testler geçici kopya kullanır).
-const PROMPTS_DIR = process.env.CLAUDE_PANEL_PROMPTS || path.join(APP_ROOT, 'prompts');
+// MAESTRO_PROMPTS ile ayrı bir klasör verilebilir (testler geçici kopya kullanır).
+const PROMPTS_DIR = process.env.MAESTRO_PROMPTS || path.join(APP_ROOT, 'prompts');
 const ROLE_ID = /^[a-z0-9][a-z0-9_-]{0,23}$/;
 // Rol klasörü taraması en fazla bu sıklıkta yenilenir (settings.roles sık okunur).
 const ROLE_RECHECK_MS = 1000;

@@ -10,7 +10,7 @@ const llm = require('../core/llm');
 const prompts = require('../core/prompts');
 const options = require('../core/options');
 
-const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
+const CWD = path.join(os.tmpdir(), 'maestro-helper');
 const MODELS = ['', ...options.MODELS];
 const EFFORTS = ['', ...options.EFFORTS];
 // plan önerilmez: plan modundaki üye komut çalıştıramaz, ekiple çalışırken takılır.

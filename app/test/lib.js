@@ -14,7 +14,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 const wait = (ms) => new Promise((r) => setTimeout(r, ms));
 
 // Canlı ayarların kopyasıyla geçici veri klasörü: hesaplar, projeler, yetenekler ve rol klasörleri gerçek, gruplar boş.
-// Canlı veride panelin kendi projesi yoksa (ör. veri sıfırlandıysa) testlerin kullandığı "claude-panel" projesi eklenir.
+// Canlı veride panelin kendi projesi yoksa (ör. veri sıfırlandıysa) testlerin kullandığı "maestro" projesi eklenir.
 function makeDataDir(name = 'panel-test') {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), `${name}-`));
   for (const f of ['settings.json', 'projects.json', 'caps.json']) {
@@ -24,7 +24,7 @@ function makeDataDir(name = 'panel-test') {
   const pf = path.join(dir, 'projects.json');
   const projects = fs.existsSync(pf) ? JSON.parse(fs.readFileSync(pf, 'utf8')) : [];
   if (!projects.some((p) => path.resolve(p.path) === path.resolve(REPO))) {
-    projects.push({ id: 'test-claude-panel', name: 'claude-panel', path: REPO, addedAt: Date.now(), lastUsedAt: Date.now() });
+    projects.push({ id: 'test-maestro', name: 'maestro', path: REPO, addedAt: Date.now(), lastUsedAt: Date.now() });
     fs.writeFileSync(pf, JSON.stringify(projects, null, 2));
   }
   // Rol ve istem klasörü: Ayarlar'dan kayıt depodaki prompts/'a yazmasın diye kopya.
@@ -34,7 +34,7 @@ function makeDataDir(name = 'panel-test') {
 
 async function startPanel(dataDir) {
   const child = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
-    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: dataDir, CLAUDE_PANEL_PORT: String(PORT), CLAUDE_PANEL_PROMPTS: path.join(dataDir, 'panel-prompts') }, windowsHide: true,
+    cwd: ROOT, env: { ...process.env, MAESTRO_DATA: dataDir, MAESTRO_PORT: String(PORT), MAESTRO_PROMPTS: path.join(dataDir, 'panel-prompts') }, windowsHide: true,
   });
   let log = '';
   child.stdout.on('data', (d) => { log += d; });

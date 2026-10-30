@@ -353,7 +353,7 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
     out.quiet = [quietOf(g, g.sessions[0]), quietOf(g, g.sessions[1]), quietOf(g, { ...g.sessions[1], roleId: 'custom' }), quietOf({ sessions: [g.sessions[1]] }, g.sessions[1]), quietOf(g, mk('d', 'yeni-rol'))];
     out.solo = buildPrompt({ ...g, sessions: [g.sessions[1]] }, g.sessions[1], { path: 'C:/p' }, []);
     process.stdout.write(JSON.stringify(out));`;
-  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_PROMPTS: dir, CLAUDE_PANEL_DATA: tmp('prompts-data') }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, MAESTRO_PROMPTS: dir, MAESTRO_DATA: tmp('prompts-data') }, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   const o = JSON.parse(r.stdout);
   assert.strictEqual(o.first, 'yeni talimat\n\nikinci');
@@ -388,7 +388,7 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   const data = tmp('store');
   fs.writeFileSync(path.join(data, 'settings.json'), JSON.stringify({ port: 7788, roles: [{ id: 'eski' }], roleDefaultsVersion: 7 }));
   const s2 = spawnSync(process.execPath, ['-e', "const st=require('./server/core/store');const s=st.loadSettings();st.saveSettings({ ...s, roles: [1] });process.stdout.write(JSON.stringify(s))"], {
-    cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: data }, encoding: 'utf8',
+    cwd: ROOT, env: { ...process.env, MAESTRO_DATA: data }, encoding: 'utf8',
   });
   assert.strictEqual(s2.status, 0, s2.stderr);
   assert.strictEqual(JSON.parse(s2.stdout).roles, undefined);
@@ -416,7 +416,7 @@ test('prompts: rol kaydında değişen dosyaların eski hali arşive girer, en f
     out.kept = p.roleArchive('review').length;
     out.sef = p.roleArchive('sef').length;
     process.stdout.write(JSON.stringify(out));`;
-  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_PROMPTS: dir, CLAUDE_PANEL_DATA: tmp('prompts-arch-data') }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, MAESTRO_PROMPTS: dir, MAESTRO_DATA: tmp('prompts-arch-data') }, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   const o = JSON.parse(r.stdout);
   // Değişiklik yoksa arşiv kaydı açılmaz.
@@ -520,7 +520,7 @@ test('asistan gelen kutusu: mesaj / bilgi notu iletimi, yenilemede devir, üye c
   box.send('s1', 'testleri çalıştır', true);
   assert.ok(box.hasPending('s1'));
   const msg = box.take('s1');
-  assert.match(msg, /^\[Claude Panel · Kullanıcı\]/);
+  assert.match(msg, /^\[Maestro · Kullanıcı\]/);
   assert.match(msg, /asistana_yanit/);
   assert.match(msg, /testleri çalıştır/);
   assert.strictEqual(box.take('s1'), null);
@@ -530,7 +530,7 @@ test('asistan gelen kutusu: mesaj / bilgi notu iletimi, yenilemede devir, üye c
   box.reassign('s1', 's2');
   assert.ok(!box.hasInfo('s1') && box.hasInfo('s2'));
   const info = box.takeInfo('s2');
-  assert.match(info, /^\[Claude Panel · Kullanıcı bilgi\]/);
+  assert.match(info, /^\[Maestro · Kullanıcı bilgi\]/);
   assert.match(info, /- review bitti/);
   box.reply('s2', 'coder', 'grup', '  %80 bitti  ');
   assert.strictEqual(box.unread(), 1);
@@ -551,7 +551,7 @@ test('asistan: araç metinleri ve ayarı var, model seçeneklerde, yazma araçla
   const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
   const http = fs.readFileSync(path.join(ROOT, 'server', 'panel', 'http.js'), 'utf8');
   assert.ok(html.includes('/js/assistant.js') && http.includes("'/js/assistant.js'"));
-  assert.match(fs.readFileSync(path.join(ROOT, 'prompts', 'shared', '03-iletisim.md'), 'utf8'), /\[Claude Panel · Kullanıcı\]/);
+  assert.match(fs.readFileSync(path.join(ROOT, 'prompts', 'shared', '03-iletisim.md'), 'utf8'), /\[Maestro · Kullanıcı\]/);
 });
 
 test('zamanlayıcı: saat yorumu', () => {
@@ -690,7 +690,7 @@ test('asistan: accountRisk seviyeleri ve panel_durumu süzgeci', () => {
       bos: a.openText([]),
     }));
     process.exit(0);`;
-  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, CLAUDE_PANEL_DATA: tmp('asistan-risk') }, encoding: 'utf8' });
+  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, MAESTRO_DATA: tmp('asistan-risk') }, encoding: 'utf8' });
   assert.strictEqual(r.status, 0, r.stderr);
   const o = JSON.parse(r.stdout);
   assert.deepStrictEqual([o.dolu, o.tahmin, o.az, o.normal, o.olculemedi, o.pencereYok], ['kritik', 'kritik', 'uyarı', 'normal', 'bilinmiyor', 'bilinmiyor']);

@@ -30,7 +30,7 @@ Before writing any code, operate in read-only mode:
 - Map dependencies between components
 - Note risks and unknowns
 
-**Do NOT write code during planning.** The output is a plan document and a task list recorded in the task list target (see Output Files; in a Claude Panel team, the panel's task board), not implementation.
+**Do NOT write code during planning.** The output is a plan document and a task list recorded in the task list target (see Output Files; in a Maestro team, the panel's task board), not implementation.
 
 ### Step 2: Identify the Dependency Graph
 
@@ -142,7 +142,7 @@ If a task is L or larger, it should be broken into smaller tasks. An agent perfo
 
 ## Output Files
 
-- **Plan document:** Design decisions, risks, and open questions don't map cleanly onto individual tasks, so they go in a plan document. In a Claude Panel team, write it as a group note (`not_ekle`, or `not_guncelle` when revising) so every member can read it. Outside the panel, save it to `tasks/plan.md` (create `tasks/` if it does not exist).
+- **Plan document:** Design decisions, risks, and open questions don't map cleanly onto individual tasks, so they go in a plan document. In a Maestro team, write it as a group note (`not_ekle`, or `not_guncelle` when revising) so every member can read it. Outside the panel, save it to `tasks/plan.md` (create `tasks/` if it does not exist).
 - **Task list:** Record each task in the **task list target** (defined below).
 
 **Never overwrite an incomplete plan.** Before writing a plan or task list, check whether one already exists with open tasks (`pano_listele` and `not_listele` in the panel; `tasks/plan.md` / `tasks/todo.md` outside it):
@@ -156,7 +156,7 @@ The same rule applies to an external task list target: never bulk-close or delet
 
 The task list target is where tasks and checkpoints are recorded. It is defined once, here; every other reference in this skill defers to it.
 
-- **In a Claude Panel team: the panel's task board.** Open one card per task with `pano_ekle` and assign it to the member whose role fits; the panel delivers the card to that member, so do not send the same task again by SendMessage. Put acceptance criteria, verification steps, files, and dependencies ("blocked by #N") in the card description. Assign dependent tasks only when the task they depend on is done.
+- **In a Maestro team: the panel's task board.** Open one card per task with `pano_ekle` and assign it to the member whose role fits; the panel delivers the card to that member, so do not send the same task again by SendMessage. Put acceptance criteria, verification steps, files, and dependencies ("blocked by #N") in the card description. Assign dependent tasks only when the task they depend on is done.
 - **Outside the panel: a checklist-style markdown file at `tasks/todo.md`**, unless the project says otherwise.
 - **External tracker:** if the project's agent rules (`CLAUDE.md`, `AGENTS.md`, etc.) or the user designate an issue tracker (e.g. GitHub Issues, Jira, Linear, `bd`/beads), create one tracker item per task instead of writing `tasks/todo.md`. Map the Step 4 structure onto the tracker's fields: acceptance criteria and verification steps in the item body, dependencies via the tracker's linking mechanism (`bd dep add`, "blocked by", etc.). Record Step 5 checkpoints as tracker items too, or as a checklist in the plan document if the tracker has no natural equivalent.
 
@@ -245,7 +245,7 @@ Before starting implementation, confirm:
 - [ ] Every task has acceptance criteria
 - [ ] Every task has a verification step
 - [ ] Task dependencies are identified and ordered correctly
-- [ ] Tasks are recorded in the task list target (the panel's task board in a Claude Panel team)
+- [ ] Tasks are recorded in the task list target (the panel's task board in a Maestro team)
 - [ ] No pre-existing incomplete plan was overwritten without explicit user confirmation
 - [ ] No task touches more than ~5 files
 - [ ] Checkpoints exist between major phases

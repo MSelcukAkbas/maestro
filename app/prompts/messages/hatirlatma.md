@@ -1,4 +1,4 @@
-[Claude Panel · Hatırlatma] Kullanıcı sana şunu hatırlatıyor.
+[Maestro · Hatırlatma] Kullanıcı sana şunu hatırlatıyor.
 Kaynak: {{kaynak}}
 {{#not}}Kullanıcının notu: {{not}}{{/not}}
 {{icerik}}

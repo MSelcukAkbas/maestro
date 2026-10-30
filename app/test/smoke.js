@@ -25,7 +25,7 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
   };
   try {
     const st = await hit('GET', '/api/state');
-    const pid = st.projects.find((x) => x.name === 'claude-panel').id;
+    const pid = st.projects.find((x) => require('path').resolve(x.path) === require('path').resolve(__dirname, '..', '..')).id;
     const acc = st.settings.accounts[st.settings.accounts.length - 1].id;
     for (const u of ['/api/templates', '/api/meter', '/api/watch', '/api/quota', '/api/caps', '/api/caps/skill/yok-boyle-skill']) await hit('GET', u);
     await hit('POST', '/api/projects', { path: 'C:/Windows' });

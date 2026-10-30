@@ -34,7 +34,7 @@ const settings = store.loadSettings();
 Object.defineProperty(settings, 'roles', { enumerable: true, get: () => prompts.roles() });
 let token = store.loadToken();
 // Dinlenen port açılışta sabitlenir; ayarlardaki port değişikliği yeniden başlatınca geçerli olur.
-const PORT = Number(process.env.CLAUDE_PANEL_PORT) || settings.port;
+const PORT = Number(process.env.MAESTRO_PORT) || settings.port;
 const hookState = new HookState();
 const manager = new SessionManager(settings.shell, { env: { [TOKEN_ENV]: hookState.token } });
 manager.onExit((id) => hookState.clear(id));
@@ -202,7 +202,7 @@ let quotaInflight = null;
 function cachedQuota(force) {
   if (!force && quotaMemo && Date.now() - quotaMemo.fetchedAt < QUOTA_TTL) return Promise.resolve(quotaMemo);
   if (!quotaInflight) {
-    if (process.env.CLAUDE_PANEL_HOOK_DEBUG) console.log('[panel] kota çekiliyor');
+    if (process.env.MAESTRO_HOOK_DEBUG) console.log('[panel] kota çekiliyor');
     quotaInflight = allQuota(settings.accounts)
       .then((q) => {
         quotaMemo = q;

@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Çalışma ekranı: terminaller, harita, zaman çizelgesi, mesajlar, pano, notlar.
+// Maestro arayüzü · Çalışma ekranı: terminaller, harita, zaman çizelgesi, mesajlar, pano, notlar.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';

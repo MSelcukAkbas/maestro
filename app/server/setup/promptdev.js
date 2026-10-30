@@ -6,7 +6,7 @@ const os = require('os');
 const llm = require('../core/llm');
 const prompts = require('../core/prompts');
 
-const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
+const CWD = path.join(os.tmpdir(), 'maestro-helper');
 
 const str = (v, n) => (typeof v === 'string' ? v.trim().slice(0, n) : '');
 

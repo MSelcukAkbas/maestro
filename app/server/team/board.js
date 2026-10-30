@@ -278,7 +278,7 @@ function deliveryText(group, sid, items, removed) {
 const TOOLS = [
   {
     name: 'pano_listele',
-    description: 'Ekibin görev panosundaki kartları listeler (Claude Panel). Sana atanan işleri görmek için kapsam "benim" ver. '
+    description: 'Ekibin görev panosundaki kartları listeler (Maestro). Sana atanan işleri görmek için kapsam "benim" ver. '
       + 'Kart durumları: yapılacak, yapılıyor, review, bitti.',
     inputSchema: {
       type: 'object',
@@ -369,8 +369,8 @@ async function handleMcp(boards, group, sid, msg, extra = { tools: [], call: () 
       return ok({
         protocolVersion: (msg.params && msg.params.protocolVersion) || '2025-06-18',
         capabilities: { tools: {} },
-        serverInfo: { name: 'claude-panel', version: '0.1.0' },
-        instructions: extra.instructions || 'Claude Panel görev panosu ve grup notları. Görevler kartlarda tutulur; kart durumunu işin aşamasına göre pano_guncelle ile güncelle. '
+        serverInfo: { name: 'maestro', version: '0.1.0' },
+        instructions: extra.instructions || 'Maestro görev panosu ve grup notları. Görevler kartlarda tutulur; kart durumunu işin aşamasına göre pano_guncelle ile güncelle. '
           + 'Ekibin bilmesi gereken kararları ve ortak bilgileri not_ekle ile grup notlarına yaz.',
       });
     case 'ping':

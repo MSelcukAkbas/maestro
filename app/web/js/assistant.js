@@ -1,7 +1,7 @@
 // Panel asistanı: sağ alttaki düğme, asistanın terminalini taşıyan çekmeceyi açar. Asistan yalnızca kullanıcı yazınca
 // çalışan tek bir Claude oturumudur (sunucu: server/panel/assistant.js). Mikrofon düğmesi tarayıcının konuşma tanımasıyla
 // söyleneni terminalin giriş satırına yazar; gönderme (Enter) kullanıcıdadır. Kısayol: Ctrl+K (terminal dışındayken).
-const ASSISTANT_OPEN_KEY = 'claude-panel-assistant-open';
+const ASSISTANT_OPEN_KEY = 'maestro-assistant-open';
 
 const Assistant = {
   el: null,

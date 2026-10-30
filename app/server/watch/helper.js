@@ -8,7 +8,7 @@ const os = require('os');
 const llm = require('../core/llm');
 const prompts = require('../core/prompts');
 
-const CWD = path.join(os.tmpdir(), 'claude-panel-helper');
+const CWD = path.join(os.tmpdir(), 'maestro-helper');
 
 // Kota satırlarından en çok kotası kalan hesap (iki pencereden küçüğüne göre); yardımcı model onun hesabıyla çalışır.
 function pickAccount(accounts, quota) {

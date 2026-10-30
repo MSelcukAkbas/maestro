@@ -5,8 +5,8 @@ const crypto = require('crypto');
 const os = require('os');
 const { APP_ROOT } = require('./paths');
 
-// CLAUDE_PANEL_DATA ile ayrı bir veri klasörü verilebilir (deneme amaçlı ikinci bir panel için).
-const DATA_DIR = process.env.CLAUDE_PANEL_DATA || path.join(APP_ROOT, 'data');
+// MAESTRO_DATA ile ayrı bir veri klasörü verilebilir (deneme amaçlı ikinci bir panel için).
+const DATA_DIR = process.env.MAESTRO_DATA || path.join(APP_ROOT, 'data');
 const PROMPT_DIR = path.join(DATA_DIR, 'prompts');
 fs.mkdirSync(PROMPT_DIR, { recursive: true });
 

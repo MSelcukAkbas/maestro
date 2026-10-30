@@ -139,7 +139,7 @@ function describe(group, req, roles, accounts) {
 
 const TOOL_STATUS = {
   name: 'ekip_durumu',
-  description: 'Ekibin anlık durumu (Claude Panel): her üyenin rolü, hesabı, modeli, ne yaptığı, bağlam doluluğu ve harcaması; '
+  description: 'Ekibin anlık durumu (Maestro): her üyenin rolü, hesabı, modeli, ne yaptığı, bağlam doluluğu ve harcaması; '
     + 'hesapların kalan 5 saatlik ve 7 günlük kotası ve sıfırlanma zamanı. Kota birkaç dakikada bir yenilenir.',
   inputSchema: { type: 'object', properties: {} },
 };

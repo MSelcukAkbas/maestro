@@ -1,4 +1,4 @@
-// Claude Panel arayüzü · Bekçi görünümü (grubun çalışma ekranında).
+// Maestro arayüzü · Bekçi görünümü (grubun çalışma ekranında).
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';

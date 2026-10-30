@@ -30,7 +30,7 @@ const { hasDelivery } = require('./delivery');
 const NAME = 'Panel asistanı';
 const ACTOR = 'asistan';
 // Asistan proje klasöründe açılmaz: projenin CLAUDE.md'si ve ayarları onun bağlamına girmesin.
-const WORK_DIR = path.join(os.tmpdir(), 'claude-panel-asistan');
+const WORK_DIR = path.join(os.tmpdir(), 'maestro-asistan');
 const METER_KEEP = 10 * 60 * 1000;
 
 let rec = store.readJson('asistan.json', null) || {};
@@ -775,7 +775,7 @@ function handle(msg) {
   return handleMcp(boards, null, rec.id, msg, {
     tools: TOOLS,
     only: true,
-    instructions: 'Claude Panel asistan tool\'ları: panelin durumu, kota, olaylar, pano ve notları okuma; kullanıcının isteğiyle mesaj, bekçi hamlesi, pano kartı ve onay kartı.',
+    instructions: 'Maestro asistan tool\'ları: panelin durumu, kota, olaylar, pano ve notları okuma; kullanıcının isteğiyle mesaj, bekçi hamlesi, pano kartı ve onay kartı.',
     call: async (name, args) => {
       const fn = CALLS[name];
       if (!fn) throw new ToolError(`Bilinmeyen tool: ${name}`);
@@ -788,7 +788,7 @@ function handle(msg) {
 
 const REPLY_TOOL = {
   name: 'asistana_yanit',
-  description: 'Yalnızca "[Claude Panel · Kullanıcı]" mesajı senden cevap istediğinde çağır: cevabın kullanıcının panel asistanına iletilir. Kısa ve net yaz.',
+  description: 'Yalnızca "[Maestro · Kullanıcı]" mesajı senden cevap istediğinde çağır: cevabın kullanıcının panel asistanına iletilir. Kısa ve net yaz.',
   inputSchema: obj({ cevap: { type: 'string' } }, ['cevap']),
 };
 

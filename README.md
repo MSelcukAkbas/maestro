@@ -1,8 +1,8 @@
-# Claude Panel
+# Maestro
 
 Birden çok Claude Code oturumunu rollere ayrılmış bir ekip olarak tek panelden yönetmek için yerel web paneli.
 
-Panelin tamamı `app/` altındadır; başlatmak için `app/Claude-Panel.bat`. Aşağıdaki komutlar `app/` içinde çalıştırılır.
+Panelin tamamı `app/` altındadır; başlatmak için `app/Maestro.bat`. Aşağıdaki komutlar `app/` içinde çalıştırılır.
 
 ## Testler
 
