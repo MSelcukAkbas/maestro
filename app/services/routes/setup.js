@@ -2,7 +2,7 @@
 const crypto = require('crypto');
 
 const store = require('../core/store');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { sessionStats } = require('../core/usage');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
 const helper = require('../watch/helper');

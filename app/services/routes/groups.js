@@ -6,7 +6,7 @@ const crypto = require('crypto');
 
 const store = require('../core/store');
 const prompts = require('../core/prompts');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { sessionStats, sessionMessages } = require('../core/usage');
 const exporter = require('../team/exporter');
 const { STATUS_TEXT } = require('../team/board');

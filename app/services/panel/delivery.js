@@ -1,6 +1,6 @@
 // Görev panosu, grup notu, ekip isteği sonucu ve bekçi notlarının üyelere iletilmesi: tur biterken hook yanıtıyla
 // (boardDelivery) ya da boştaysa terminaline yapıştırarak (boardIdleTick).
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const {
   hookState, manager, boards, notes, requests, inbox, ops, sharedConfigDir, findSession, sessionStatus, runningLead, pasteTo,
 } = require('./context');

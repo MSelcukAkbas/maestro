@@ -3,7 +3,7 @@ const fs = require('fs');
 const path = require('path');
 
 const store = require('../core/store');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { sessionStats, sessionMessages } = require('../core/usage');
 const { KIND_TEXT, describe: describeRequest } = require('../team/team');
 const { AWAY_MS } = require('../session/presence');

@@ -1,7 +1,7 @@
 // Zamanlı işler: bekleyen ayar değişikliklerinin uygulanması, otomatik hesap rotasyonu, zaman çizelgesi örneklemesi
 // ve bekçi. Zamanlayıcılar index.js'te kurulur; bu dosya yalnızca tik fonksiyonlarını verir.
 const store = require('../core/store');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { WATCH_DEFAULTS, ctxLimits } = require('../watch/watch');
 const { asksUser } = require('../watch/ops');
 const helper = require('../watch/helper');

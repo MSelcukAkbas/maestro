@@ -51,7 +51,7 @@ test('timeline: panelin son ayakta olduğu an sonraki açılışta okunur', () =
 });
 
 test('sessions: başlatma betiği model ve effort verir', () => {
-  const { buildScript } = require('../services/session/sessions');
+  const { buildScript } = require('../agent');
   const s = buildScript({ name: 'x', sessionId: 'id', model: 'haiku', effort: 'low' });
   assert.match(s, /--model 'haiku' --effort 'low'/);
   assert.doesNotMatch(buildScript({ name: 'x', sessionId: 'id' }), /--effort/);
@@ -243,7 +243,7 @@ test('llm + defter: modelUsage aile token\'ına çevrilir, meter hesabına eklen
 });
 
 test('quota: sıfırlanma anı geçmiş pencere kullanılmamış sayılır, tahmin yeni pencerede beklemeye alınır', () => {
-  const { readBuckets, forecast } = require('../services/watch/quota');
+  const { readBuckets, forecast } = require('../agent/quota');
   const now = Date.parse('2026-10-21T10:00:00Z');
   const b = readBuckets({ limits: [
     { kind: 'session', percent: 100, resets_at: '2026-10-21T09:00:00Z' },
@@ -717,4 +717,28 @@ test('Meter saatlik geçmiş: kısmi ilk saat oransal sayılır, kota olmadan da
   assert.ok(!fs.existsSync(path.join(dir, 'meter.json')));
   m.persistHistory(t0 + 120000, true);
   assert.ok(fs.existsSync(path.join(dir, 'meter.json')));
+});
+
+test('ayrım: services/ ajana yalnızca agent/index.js üzerinden erişir, agent/ services/e hiç bağlanmaz', () => {
+  const walk = (d, out = []) => {
+    for (const e of fs.readdirSync(d, { withFileTypes: true })) {
+      const p = path.join(d, e.name);
+      if (e.isDirectory()) walk(p, out);
+      else if (e.name.endsWith('.js')) out.push(p);
+    }
+    return out;
+  };
+  const reqs = (f) => [...fs.readFileSync(f, 'utf8').matchAll(/require\('([^']+)'\)/g)].map((m) => m[1]).filter((r) => r.startsWith('.'));
+  for (const f of walk(path.join(ROOT, 'services'))) {
+    for (const r of reqs(f)) {
+      const target = path.resolve(path.dirname(f), r);
+      if (target.startsWith(path.join(ROOT, 'agent') + path.sep)) assert.fail(`${path.relative(ROOT, f)} agent/ içine doğrudan bağlanıyor: ${r}`);
+    }
+  }
+  for (const f of walk(path.join(ROOT, 'agent'))) {
+    for (const r of reqs(f)) {
+      const target = path.resolve(path.dirname(f), r);
+      if (target.startsWith(path.join(ROOT, 'services'))) assert.fail(`${path.relative(ROOT, f)} services/ içine bağlanıyor: ${r}`);
+    }
+  }
 });

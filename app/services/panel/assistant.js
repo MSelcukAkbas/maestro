@@ -10,7 +10,7 @@ const crypto = require('crypto');
 
 const store = require('../core/store');
 const prompts = require('../core/prompts');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { sessionRecent, sessionMessages, sessionStats } = require('../core/usage');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
 const { writeSettingsFile, writeMcpConfig } = require('../session/hooks');

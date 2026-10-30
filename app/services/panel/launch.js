@@ -6,7 +6,7 @@ const { spawn } = require('child_process');
 
 const store = require('../core/store');
 const prompts = require('../core/prompts');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { writeSettingsFile, writeMcpConfig } = require('../session/hooks');
 const { driftOf } = require('../session/pending');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');

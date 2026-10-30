@@ -4,6 +4,7 @@
 // "temiz" aralıklardan (panel dışı oturumların harcaması karışmamış) çıkarılır.
 const fs = require('fs');
 const path = require('path');
+const agent = require('../../agent');
 
 const FAMILIES = ['opus', 'sonnet', 'haiku', 'fable'];
 // Varsayım: abonelik kotası token türlerini API fiyat oranlarıyla tartar (Fable fiyatı bilinmediği için Opus'unki).
@@ -174,21 +175,13 @@ function readObj(r, j) {
 }
 
 function readMore(r, file) {
-  let size;
-  try { size = fs.statSync(file).size; } catch { return false; }
-  if (size < r.offset) Object.assign(r, newReader(0));
-  if (size === r.offset) return false;
-  const fd = fs.openSync(file, 'r');
-  try {
-    const buf = Buffer.alloc(size - r.offset);
-    fs.readSync(fd, buf, 0, buf.length, r.offset);
-    r.offset = size;
-    const lines = (r.rest + buf.toString('utf8')).split('\n');
-    r.rest = lines.pop();
-    for (const line of lines) if (line.trim()) readLine(r, line);
-  } finally {
-    fs.closeSync(fd);
-  }
+  const res = agent.transcripts.readNew(file, { offset: r.offset, rest: r.rest });
+  if (!res) return false;
+  if (res.reset) Object.assign(r, newReader(0));
+  if (res.cursor.offset === r.offset) return false;
+  r.offset = res.cursor.offset;
+  r.rest = res.cursor.rest;
+  for (const line of res.lines) readLine(r, line);
   return true;
 }
 
@@ -302,7 +295,7 @@ class Meter {
     if (r && r.shared) return require('../core/transcript').reader(file);
     if (!r) {
       let size = 0;
-      if (fromEnd) try { size = fs.statSync(file).size; } catch {}
+      if (fromEnd) size = agent.transcripts.size(file) || 0;
       r = newReader(size);
       this.readers.set(file, r);
     }
@@ -314,7 +307,7 @@ class Meter {
   firstSight(file) {
     if (this.counted.has(file)) return;
     let born = 0;
-    try { born = fs.statSync(file).birthtimeMs; } catch {}
+    born = agent.transcripts.birth(file) || 0;
     if (born > this.startedAt) this.counted.set(file, {});
   }
 
@@ -336,13 +329,10 @@ class Meter {
       const own = this.delta(s.file, r);
       mergeTok(accTok, own);
       this.addUsage(s, own, now);
-      const subDir = path.join(s.file.replace(/\.jsonl$/, ''), 'subagents');
-      let subs = [];
-      try { subs = fs.readdirSync(subDir).filter((f) => f.endsWith('.jsonl')); } catch {}
+      const subs = agent.transcripts.subagentFiles(s.file);
       // Alt ajan çalışırken ana dosya sessiz kalır; son etkinlik alt ajanların son turu da hesaba katılarak bulunur.
       let subLastAt = 0;
-      for (const f of subs) {
-        const p = path.join(subDir, f);
+      for (const p of subs) {
         this.firstSight(p);
         const sr = this.reader(p, false);
         const sub = this.delta(p, sr);
@@ -433,24 +423,16 @@ class Meter {
   // Panel dışı oturumların harcaması: hangi hesapta çalıştıkları bilinmediği için yalnızca aralığı kirletir.
   scanOutside() {
     const panelFiles = new Set([...this.sess.values()].map((w) => w.file));
-    let dirs;
-    try { dirs = fs.readdirSync(this.projectsDir); } catch { return; }
-    for (const d of dirs) {
-      let files;
-      try { files = fs.readdirSync(path.join(this.projectsDir, d)); } catch { continue; }
-      for (const f of files) {
-        if (!f.endsWith('.jsonl')) continue;
-        const p = path.join(this.projectsDir, d, f);
-        if (panelFiles.has(p)) continue;
-        // Açılışta var olan dosyalar sonundan, sonradan oluşanlar baştan okunur.
-        let fresh = false;
-        if (this.outsideReady && !this.readers.has(p)) {
-          try { fresh = fs.statSync(p).birthtimeMs > this.startedAt; } catch {}
-          if (fresh) this.counted.set(p, {});
-        }
-        const r = this.reader(p, !fresh);
-        mergeTok(this.outside, this.delta(p, r));
+    for (const p of agent.transcripts.allFiles(this.projectsDir)) {
+      if (panelFiles.has(p)) continue;
+      // Açılışta var olan dosyalar sonundan, sonradan oluşanlar baştan okunur.
+      let fresh = false;
+      if (this.outsideReady && !this.readers.has(p)) {
+        fresh = (agent.transcripts.birth(p) || 0) > this.startedAt;
+        if (fresh) this.counted.set(p, {});
       }
+      const r = this.reader(p, !fresh);
+      mergeTok(this.outside, this.delta(p, r));
     }
     this.outsideReady = true;
   }

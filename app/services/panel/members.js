@@ -1,6 +1,6 @@
 // Ekip yönetimi: üyelerin anlık görüntüsü (bekçi ve ekip_durumu), rol yetenekleri ve şefin onaylanan isteklerinin uygulanması.
 const store = require('../core/store');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { sessionStats } = require('../core/usage');
 const { MODELS } = require('../core/options');
 const {

@@ -1,7 +1,7 @@
 // Zamanlayıcının panele bağlanması (motor: team/schedule.js). Üye açma launch.js, iletim gelen kutusu, compact
 // bekçinin hamle kuyruğu üzerinden yürür; zamanlayıcı kendi başına oturuma yazmaz.
 const store = require('../core/store');
-const discovery = require('../core/discovery');
+const { discovery } = require('../../agent');
 const { Scheduler } = require('../team/schedule');
 const {
   manager, inbox, ops, meter, sharedConfigDir, sessionStatus, pushEvent,
