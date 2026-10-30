@@ -3,7 +3,8 @@
 // sistem istemi panel/prompt.js; üyelere iletim panel/delivery.js; zamanlı işler panel/ticks.js; HTTP / WebSocket
 // panel/http.js; API uçları routes/*.js.
 const store = require('./core/store');
-const { manager, ops, curator, cachedQuota, meterTick } = require('./panel/context');
+const agent = require('../agent');
+const { manager, ops, curator, cachedQuota, meterTick, PORT } = require('./panel/context');
 const { boardIdleTick } = require('./panel/delivery');
 const { ROTATE_EVERY, pendingTick, autoRotateTick, sampleTimeline, watchTick } = require('./panel/ticks');
 const http = require('./panel/http');
@@ -37,3 +38,17 @@ scheduler.recover();
 setInterval(() => { try { scheduler.tick(); } catch (err) { console.error('[panel] zamanlayıcı:', err.message); } }, 5000);
 
 http.start();
+
+// Yerel kullanım: terminal ajanı bağlı değilse ayrı süreç olarak başlatılır (çalışan bir ajan varsa yeniden bağlanması beklenir).
+// MAESTRO_AGENT=harici: ajan başka makinede, burada başlatılmaz.
+if (process.env.MAESTRO_AGENT !== 'harici') {
+  if (!agent.launcher.running(store.DATA_DIR)) agent.launcher.spawnLocal({ port: PORT, dataDir: store.DATA_DIR });
+  let missing = 0;
+  setInterval(() => {
+    missing = manager.connected ? 0 : missing + 1;
+    if (missing < 2 || agent.launcher.running(store.DATA_DIR)) return;
+    console.log('[panel] terminal ajanı başlatılıyor.');
+    agent.launcher.spawnLocal({ port: PORT, dataDir: store.DATA_DIR });
+    missing = 0;
+  }, 1500);
+}

@@ -53,7 +53,17 @@ async function startPanel(dataDir) {
     if (!r.ok) throw Object.assign(new Error(j.error || `HTTP ${r.status}`), { status: r.status });
     return j;
   };
+  // Terminal ajanı ayrı süreç olarak başlar; oturum açan testler bağlanmasını bekler.
+  for (let i = 0; i < 50; i++) {
+    const st = await api('GET', '/api/state').catch(() => null);
+    if (st && st.agent && st.agent.connected) break;
+    await wait(200);
+  }
   const stop = async () => {
+    if (child.exitCode != null) return;
+    // Ajan ayrı süreçtir; kapatma isteği onu da (ve açık oturumları) bitirir.
+    try { await api('POST', '/api/shutdown'); } catch {}
+    for (let i = 0; i < 10 && child.exitCode == null; i++) await wait(200);
     if (child.exitCode != null) return;
     child.kill();
     for (let i = 0; i < 25 && child.exitCode == null; i++) await wait(200);

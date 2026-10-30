@@ -208,18 +208,29 @@ const server = http.createServer(async (req, res) => {
   sendJson(res, 404, { error: 'Bulunamadı.' });
 });
 
-const wss = new WebSocketServer({
-  server,
-  path: '/ws',
-  verifyClient: ({ req }) => {
-    if (!allowedHosts().includes(req.headers.host)) return false;
-    const origin = req.headers.origin;
-    // Tarayıcı dışı istemcide (attach.js) origin olmaz; tarayıcıda yalnızca panelin kendi adresi.
-    if (origin && !allowedHosts().some((h) => origin === `http://${h}`)) return false;
-    const url = new URL(req.url, `http://${req.headers.host}`);
-    return tokenOk(url.searchParams.get('t'));
-  },
+// İki WebSocket yolu: /ws (tarayıcı, attach.js) ve /agent (terminal ajanı). Her ikisi de erişim anahtarı ister.
+const wss = new WebSocketServer({ noServer: true });
+const agentWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
+server.on('upgrade', (req, socket, head) => {
+  const refuse = (line) => {
+    socket.write(`HTTP/1.1 ${line}
+connection: close
+
+`);
+    socket.destroy();
+  };
+  if (!allowedHosts().includes(req.headers.host)) return refuse('421 Misdirected Request');
+  const origin = req.headers.origin;
+  // Tarayıcı dışı istemcide (attach.js, ajan) origin olmaz; tarayıcıda yalnızca panelin kendi adresi.
+  if (origin && !allowedHosts().some((h) => origin === `http://${h}`)) return refuse('403 Forbidden');
+  const url = new URL(req.url, `http://${req.headers.host}`);
+  const target = url.pathname === '/ws' ? wss : url.pathname === '/agent' ? agentWss : null;
+  if (!target) return refuse('404 Not Found');
+  if (!tokenOk(url.searchParams.get('t'))) return refuse('401 Unauthorized');
+  target.handleUpgrade(req, socket, head, (ws) => target.emit('connection', ws, req));
+  return undefined;
 });
+agentWss.on('connection', (ws) => manager.accept(ws));
 
 // Durum kanalı (?ch=state): arayüz iki saniyede bir yoklamak yerine durum değişince tam yanıtı alır.
 // Değişiklik saniyede bir denetlenir; kimse bağlı değilse durum hiç kurulmaz.
@@ -265,10 +276,10 @@ wss.on('connection', (ws, req) => {
 function start() {
   setInterval(pushState, 1000);
 
-  process.on('SIGINT', shutdown);
-  process.on('SIGTERM', shutdown);
+  process.on('SIGINT', () => shutdown());
+  process.on('SIGTERM', () => shutdown());
   // Windows'ta konsol penceresi kapatılınca gelir.
-  process.on('SIGHUP', shutdown);
+  process.on('SIGHUP', () => shutdown());
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
@@ -282,7 +293,7 @@ function start() {
     warmStats();
     const url = `http://127.0.0.1:${PORT}/?t=${currentToken()}`;
     console.log(`Maestro çalışıyor: ${url}`);
-    console.log('Bu pencereyi kapatırsan paneldeki oturumlar da kapanır.');
+    console.log('Bu pencereyi kapatırsan terminal oturumları ajanda açık kalır; hepsini kapatmak için Ayarlar → Sunucuyu kapat.');
     if (process.argv.includes('--open')) spawn('cmd.exe', ['/c', 'start', '""', url], { detached: true, stdio: 'ignore' }).unref();
   });
 }

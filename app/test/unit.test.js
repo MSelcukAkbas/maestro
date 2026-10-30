@@ -742,3 +742,7 @@ test('ayrım: services/ ajana yalnızca agent/index.js üzerinden erişir, agent
     }
   }
 });
+
+test('ajan: oturumlara verilen hook anahtarı değişkeni services ile aynı ad', () => {
+  assert.equal(require('../agent/host').HOOK_TOKEN_ENV, require('../services/session/hooks').TOKEN_ENV);
+});

@@ -194,11 +194,11 @@ class SessionManager {
     return this.map.get(id);
   }
 
-  launch({ id, name, cwd, configDir, resume, permissionMode, model, effort, promptFile, taskFile, settingsFile, mcpConfig, addDir }) {
+  launch({ id, name, cwd, configDir, shell, resume, permissionMode, model, effort, promptFile, taskFile, settingsFile, mcpConfig, addDir }) {
     if (this.map.has(id)) return this.map.get(id);
     const script = buildScript({ name, sessionId: id, resume, permissionMode, model, effort, promptFile, taskFile, settingsFile, mcpConfig, addDir });
     const s = new PtySession({
-      id, name, cwd, configDir, shell: this.shell, script, env: this.env,
+      id, name, cwd, configDir, shell: shell || this.shell, script, env: this.env,
       onInput: (sess, data) => {
         for (const fn of this.inputListeners) fn(sess, data);
       },

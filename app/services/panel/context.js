@@ -14,8 +14,8 @@ const { Meter } = require('../watch/meter');
 const { Watch, WATCH_DEFAULTS } = require('../watch/watch');
 const { Ops } = require('../watch/ops');
 const helper = require('../watch/helper');
-const { SessionManager } = require('../../agent');
-const { HookState, TOKEN_ENV } = require('../session/hooks');
+const { AgentLink } = require('./agentlink');
+const { HookState } = require('../session/hooks');
 const { Boards, STATUS_TEXT } = require('../team/board');
 const { Caps } = require('../setup/caps');
 const { Notes, actorLabel } = require('../team/notes');
@@ -36,7 +36,7 @@ let token = store.loadToken();
 // Dinlenen port açılışta sabitlenir; ayarlardaki port değişikliği yeniden başlatınca geçerli olur.
 const PORT = Number(process.env.MAESTRO_PORT) || settings.port;
 const hookState = new HookState();
-const manager = new SessionManager(settings.shell, { env: { [TOKEN_ENV]: hookState.token } });
+const manager = new AgentLink({ getShell: () => settings.shell, onToken: (t) => { hookState.token = t; } });
 manager.onExit((id) => hookState.clear(id));
 const boards = new Boards(store.DATA_DIR);
 const caps = new Caps(store.DATA_DIR);
@@ -87,7 +87,7 @@ const ops = new Ops({
 });
 
 const curator = new Curator({
-  notes, dataDir: store.DATA_DIR, port: PORT, token: hookState.token,
+  notes, dataDir: store.DATA_DIR, port: PORT, get token() { return hookState.token; },
   // Kapatılan (arşivlenen) grupların notları zamanlı düzenlemeye girmez.
   groups: () => store.viewGroups().filter((g) => !g.archived),
   cards: (g) => boards.load(g.id).cards.map((c) => ({
@@ -293,7 +293,8 @@ function boardGroup(gid) {
   return g;
 }
 
-function shutdown() {
+// withAgent: ajanı ve açık bütün oturumları da kapatır; olmadan yalnızca services biter, oturumlar ajanda yaşar.
+function shutdown(withAgent = false) {
   // Zaman çizelgesinde panelin kapandığı an "kapalı" olarak işaretlenir; yoksa son durum yeniden açılışa kadar uzar.
   try {
     for (const g of store.loadGroups()) {
@@ -305,8 +306,8 @@ function shutdown() {
     store.writeJson('events.json', events);
     meter.persistHistory(Date.now(), true);
   } catch {}
-  manager.stopAll();
-  setTimeout(() => process.exit(0), 300);
+  if (withAgent) manager.shutdownAgent();
+  setTimeout(() => process.exit(0), withAgent ? 800 : 300);
 }
 
 // Açılışta tüm konuşma kayıtlarının ilk ayrıştırması (arşivdekiler dahil birkaç saniye) ilk isteği bekletmesin diye

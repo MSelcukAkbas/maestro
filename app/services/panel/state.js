@@ -38,6 +38,7 @@ function buildState() {
     presence: presence.view(),
     measuredWindows: ledger.windows,
     assistant: assistant.status(live),
+    agent: { connected: manager.connected },
   };
 }
 

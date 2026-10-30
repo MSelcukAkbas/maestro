@@ -21,7 +21,7 @@ route('POST', '/api/autostart', async (req) => {
 });
 
 route('POST', '/api/shutdown', async () => {
-  setTimeout(shutdown, 200);
+  setTimeout(() => shutdown(true), 200);
   return { ok: true };
 });
 
