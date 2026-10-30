@@ -4,4 +4,4 @@
 Set fso = CreateObject("Scripting.FileSystemObject")
 Set sh = CreateObject("WScript.Shell")
 sh.CurrentDirectory = fso.GetParentFolderName(WScript.ScriptFullName)
-sh.Run "node server\index.js", 0, False
+sh.Run "node services\index.js", 0, False

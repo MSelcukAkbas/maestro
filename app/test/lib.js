@@ -33,7 +33,7 @@ function makeDataDir(name = 'panel-test') {
 }
 
 async function startPanel(dataDir) {
-  const child = spawn(process.execPath, [path.join(ROOT, 'server', 'index.js')], {
+  const child = spawn(process.execPath, [path.join(ROOT, 'services', 'index.js')], {
     cwd: ROOT, env: { ...process.env, MAESTRO_DATA: dataDir, MAESTRO_PORT: String(PORT), MAESTRO_PROMPTS: path.join(dataDir, 'panel-prompts') }, windowsHide: true,
   });
   let log = '';

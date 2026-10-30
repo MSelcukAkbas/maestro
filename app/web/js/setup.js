@@ -15,7 +15,7 @@ const MODELS = [['', 'Hesap varsayılanı'], ['opus', 'Opus'], ['sonnet', 'Sonne
 const EFFORTS = [['', 'Model varsayılanı'], ['low', 'Düşük'], ['medium', 'Orta'], ['high', 'Yüksek'], ['xhigh', 'Çok yüksek'], ['max', 'En yüksek']];
 // Skill listesinde ölçülen oran: 16,2k karakter kapatınca istek başına ~5,4k token düştü.
 const CHARS_PER_TOK = 3;
-// Yetenek grupları (server/caps.js inventory türleri; panel: panelden eklenenler).
+// Yetenek grupları (services/caps.js inventory türleri; panel: panelden eklenenler).
 const CAP_GROUPS = [['plugin', 'Eklentiler'], ['skill', 'Hesap skill\'leri'], ['project', 'Proje skill\'leri'], ['synced', 'claude.ai skill\'leri'], ['bundled', 'Claude Code yerleşik skill\'leri'], ['mcp', 'MCP sunucuları'], ['panel', 'Panel yetenekleri']];
 
 let rowSeq = 0;
@@ -138,7 +138,7 @@ const SetupView = {
               }).join('')}</div>`;
   },
 
-  // Rolün varsayılan olarak aldığı yetenekler (server/caps.js roleKeys ile aynı kural); anlık rol yalnızca globalleri alır.
+  // Rolün varsayılan olarak aldığı yetenekler (services/caps.js roleKeys ile aynı kural); anlık rol yalnızca globalleri alır.
   capDefault(row, key) {
     const c = this.capsData;
     if (!c) return false;

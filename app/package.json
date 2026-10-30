@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "description": "Yerel web paneli: çok hesaplı, rol bazlı Claude oturumları",
-  "main": "server/index.js",
+  "main": "services/index.js",
   "scripts": {
-    "start": "node server/index.js"
+    "start": "node services/index.js"
   },
   "engines": {
     "node": ">=22"

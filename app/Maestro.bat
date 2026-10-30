@@ -5,7 +5,7 @@ if not exist node_modules (
   echo Bagimliliklar kuruluyor...
   call npm install || goto :hata
 )
-node server\index.js --open
+node services\index.js --open
 echo.
 echo Panel kapandi. Bu pencereyi kapatabilirsin.
 pause

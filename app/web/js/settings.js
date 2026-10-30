@@ -13,7 +13,7 @@ const SETTINGS_TABS = [
 // "Ayarları kaydet" ile kaydedilen sekmeler; diğerlerindeki işlemler hemen uygulanır.
 const FORM_TABS = ['hesaplar', 'roller', 'genel'];
 const CAP_KIND = { plugin: 'eklenti', skill: 'skill', mcp: 'MCP' };
-// Salt okunur rolde kapatılan araçlar (server/core/prompts.js READ_ONLY_TOOLS ile aynı).
+// Salt okunur rolde kapatılan araçlar (services/core/prompts.js READ_ONLY_TOOLS ile aynı).
 const READ_ONLY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
 
 // İki satır listesinin farkı (en uzun ortak alt dizi): [{ t: ' ' | '-' | '+', s }]. Rol metinleri kısa, O(n·m) yeter.
@@ -46,9 +46,9 @@ function textToPairs(t, sep) {
   return out;
 }
 
-// Rollerin varsayılan bağlam profili (server/watch.js ROLE_CTX ile aynı): [eşik, üst sınır].
+// Rollerin varsayılan bağlam profili (services/watch.js ROLE_CTX ile aynı): [eşik, üst sınır].
 const ROLE_CTX_DEFAULTS = { sef: [500000, 700000], coder: [250000, 500000], review: [200000, 400000], arastirma: [150000, 300000] };
-// Sunucudaki bekçi varsayılanlarıyla aynı (server/watch.js); ayar hiç kaydedilmediyse bunlar gösterilir.
+// Sunucudaki bekçi varsayılanlarıyla aynı (services/watch.js); ayar hiç kaydedilmediyse bunlar gösterilir.
 const WATCH_DEFAULTS = { enabled: true, act: true, ai: true, quotaHalf: 50, quotaLow: 15, ctxWarn: 250000, ctxHigh: 500000, errStreak: 4, stuckMin: 20 };
 const CURATOR_DEFAULTS = { enabled: true, everyH: 3, model: 'sonnet', level: 'orta' };
 const CURATOR_LEVELS = [['dusuk', 'Düşük'], ['orta', 'Orta'], ['yuksek', 'Yüksek']];

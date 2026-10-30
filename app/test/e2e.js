@@ -284,7 +284,7 @@ const SCENARIOS = {
   // Kurulum optimizer'ı: hedefle projeyi inceler (turns > 1), effort ve rol önerileri doğrulanmış gelir.
   async optimize({ api, acc, pid }) {
     const r = await api('POST', '/api/setup/optimize', {
-      projectId: pid, permissionMode: 'manual', goal: 'Bekçinin hesap taşıma kararındaki bir hatayı düzelt (server/watch.js, server/ops.js).',
+      projectId: pid, permissionMode: 'manual', goal: 'Bekçinin hesap taşıma kararındaki bir hatayı düzelt (services/watch.js, services/ops.js).',
       rows: [
         { key: 'r1', roleId: 'sef', accountId: acc, model: 'opus', talkAll: true, reportsTo: [] },
         { key: 'r2', roleId: 'coder', accountId: acc, model: 'sonnet', reportsTo: ['r1'] },
