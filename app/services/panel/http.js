@@ -15,32 +15,14 @@ const { DOC_TOOL, callDocTool } = require('../team/docs');
 const { TOOL_STATUS, LEAD_TOOLS, callTeamTool } = require('../team/team');
 const { DEVIR_TOOL } = require('../watch/ops');
 const {
-  ROOT, PORT, settings, currentToken, hookState, manager, boards, notes, requests, meter, presence, ops,
+  PORT, settings, currentToken, hookState, manager, boards, notes, requests, meter, presence, ops,
   HttpError, findSession, cachedQuota, shutdown, warmStats,
 } = require('./context');
 const { boardDelivery } = require('./delivery');
 const { memberRows, roleCaps, capCatalogFor } = require('./members');
 const { buildState } = require('./state');
 const assistant = require('./assistant');
-
-const STATIC = {
-  '/': ['web/index.html', 'text/html; charset=utf-8'],
-  '/index.html': ['web/index.html', 'text/html; charset=utf-8'],
-  '/js/core.js': ['web/js/core.js', 'text/javascript; charset=utf-8'],
-  '/js/projects.js': ['web/js/projects.js', 'text/javascript; charset=utf-8'],
-  '/js/setup.js': ['web/js/setup.js', 'text/javascript; charset=utf-8'],
-  '/js/work.js': ['web/js/work.js', 'text/javascript; charset=utf-8'],
-  '/js/improve.js': ['web/js/improve.js', 'text/javascript; charset=utf-8'],
-  '/js/assistant.js': ['web/js/assistant.js', 'text/javascript; charset=utf-8'],
-  '/js/settings.js': ['web/js/settings.js', 'text/javascript; charset=utf-8'],
-  '/js/bekci.js': ['web/js/bekci.js', 'text/javascript; charset=utf-8'],
-  '/js/topbar.js': ['web/js/topbar.js', 'text/javascript; charset=utf-8'],
-  '/js/main.js': ['web/js/main.js', 'text/javascript; charset=utf-8'],
-  '/style.css': ['web/style.css', 'text/css; charset=utf-8'],
-  '/vendor/xterm.js': ['node_modules/@xterm/xterm/lib/xterm.js', 'text/javascript; charset=utf-8'],
-  '/vendor/xterm.css': ['node_modules/@xterm/xterm/css/xterm.css', 'text/css; charset=utf-8'],
-  '/vendor/addon-fit.js': ['node_modules/@xterm/addon-fit/lib/addon-fit.js', 'text/javascript; charset=utf-8'],
-};
+const web = require('../../web/serve');
 
 function sendJson(res, status, body) {
   res.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store' });
@@ -92,17 +74,7 @@ const server = http.createServer(async (req, res) => {
   }
   const url = new URL(req.url, `http://${req.headers.host}`);
 
-  if (req.method === 'GET' && STATIC[url.pathname]) {
-    const [rel, type] = STATIC[url.pathname];
-    try {
-      const data = fs.readFileSync(path.join(ROOT, rel));
-      res.writeHead(200, { 'content-type': type, 'cache-control': 'no-store' });
-      return res.end(data);
-    } catch {
-      res.writeHead(404);
-      return res.end();
-    }
-  }
+  if (web.serve(req, res, url.pathname)) return;
 
   if (!url.pathname.startsWith('/api/')) {
     res.writeHead(404);
@@ -213,9 +185,12 @@ const wss = new WebSocketServer({ noServer: true });
 const agentWss = new WebSocketServer({ noServer: true, maxPayload: 64 * 1024 * 1024 });
 server.on('upgrade', (req, socket, head) => {
   const refuse = (line) => {
-    socket.write(`HTTP/1.1 ${line}
-connection: close
-
+    socket.write(`HTTP/1.1 ${line}
+
+connection: close
+
+
+
 `);
     socket.destroy();
   };

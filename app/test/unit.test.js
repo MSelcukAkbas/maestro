@@ -549,8 +549,7 @@ test('asistan: araç metinleri ve ayarı var, model seçeneklerde, yazma araçla
   for (const tool of ['Edit', 'Write', 'Bash', 'SendMessage', 'ListAgents']) assert.ok(t.config.deny.includes(tool), tool);
   assert.match(t.system(), /## Persona[\s\S]*## Görevler[\s\S]*## Sınırlar[\s\S]*## Çıktı/);
   const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
-  const http = fs.readFileSync(path.join(ROOT, 'services', 'panel', 'http.js'), 'utf8');
-  assert.ok(html.includes('/js/assistant.js') && http.includes("'/js/assistant.js'"));
+  assert.ok(html.includes('/js/assistant.js') && require('../web/serve').resolve('/js/assistant.js'));
   assert.match(fs.readFileSync(path.join(ROOT, 'prompts', 'shared', '03-iletisim.md'), 'utf8'), /\[Maestro · Kullanıcı\]/);
 });
 
@@ -745,4 +744,13 @@ test('ayrım: services/ ajana yalnızca agent/index.js üzerinden erişir, agent
 
 test('ajan: oturumlara verilen hook anahtarı değişkeni services ile aynı ad', () => {
   assert.equal(require('../agent/host').HOOK_TOKEN_ENV, require('../services/session/hooks').TOKEN_ENV);
+});
+
+test('web/serve: arayüz dosyaları sunulur, web/ dışına ve serve.js\'e çıkılamaz', () => {
+  const { resolve } = require('../web/serve');
+  for (const p of ['/', '/index.html', '/js/core.js', '/style.css', '/vendor/xterm.js', '/vendor/xterm.css', '/vendor/addon-fit.js']) {
+    const f = resolve(p);
+    assert.ok(f && fs.existsSync(f), p);
+  }
+  for (const p of ['/serve.js', '/../package.json', '/..%2Fpackage.json', '/js/../../package.json', '/js', '/nope.exe']) assert.equal(resolve(p), null, p);
 });
