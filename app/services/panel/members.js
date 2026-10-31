@@ -90,14 +90,14 @@ function execRequest(req) {
     return `${s.name} açıldı (hesap ${accountId}); sana kendini tanıtacak${a.task ? ' ve ilk görevine başlayacak' : ''}.`;
   }
   if (req.kind === 'settings') {
-    // targets: asistanın tek kartta birden çok üyeye istediği ayar.
+    // targets: şefin tek kartta birden çok üyeye istediği ayar.
     const ids = Array.isArray(a.targets) ? a.targets : [a.target];
     const out = [];
     for (const id of ids) {
       const t = memberOf(id);
       if (!t) continue;
       const change = { ...(a.model ? { model: a.model } : {}), ...(a.effort ? { effort: a.effort } : {}), ...(a.permissionMode ? { permissionMode: a.permissionMode } : {}) };
-      const r = changeSettings(t.id, change, req.by === 'asistan' ? 'asistan' : 'sef');
+      const r = changeSettings(t.id, change, 'sef');
       out.push(`${t.name} ayarı değişti${r.pending ? '; boşta kalınca kaldığı yerden yeni ayarla açılacak' : r.running ? '' : '; sonraki açılışta geçerli'}.`);
     }
     if (!out.length) throw new HttpError(409, 'Üye artık ekipte değil.');

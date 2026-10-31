@@ -1,6 +1,6 @@
 // Duman testi: panelin API uç noktalarının hepsini 7799'da ayrı veri klasörüyle çağırır; hiçbiri 500 vermemeli
-// ve panel ayakta kalmalı. Oturum açan çağrılar istem göndermez (model harcaması yok denecek kadar az). optimize ve
-// curator/run model çağırdığı için e2e.js'te; open-pc masaüstünde pencere açtığı için yalnızca SMOKE_PC=1 ile.
+// ve panel ayakta kalmalı. Oturum açan çağrılar istem göndermez (model harcaması yok denecek kadar az). optimize model
+// çağırdığı için e2e.js'te; open-pc masaüstünde pencere açtığı için yalnızca SMOKE_PC=1 ile.
 // Kullanım: node test/smoke.js
 const { makeDataDir, startPanel, wait, until } = require('./lib');
 
@@ -53,27 +53,15 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     await hit('POST', `/api/groups/${g.id}/notes/${nid}/restore`, { index: 0 });
     await hit('POST', `/api/groups/${g.id}/notes/${nid}/unarchive`);
     await hit('DELETE', `/api/groups/${g.id}/notes/${nid}`);
-    await hit('GET', `/api/groups/${g.id}/curator`);
     await hit('POST', `/api/groups/${g.id}/remind`, { text: 'hatırlatma', to: [sid] });
     await hit('PUT', `/api/groups/${g.id}/watch`, { act: false });
-    await hit('POST', `/api/groups/${g.id}/ask-summary`);
     await hit('GET', `/api/groups/${g.id}/close`);
     // Mesaj geliştirici: boş mesaj ve bilinmeyen oturum model çağırmadan reddedilir.
     await hit('POST', `/api/sessions/${sid}/improve-prompt`, { text: ' ' }, (s) => s === 400);
     await hit('POST', '/api/sessions/yok-boyle/improve-prompt', { text: 'x' }, (s) => s === 404);
     await hit('POST', `/api/sessions/${sid}/send`, { text: '' }, (s) => s === 400);
     await hit('POST', `/api/groups/${g.id}/board-improve`, { title: ' ', text: '' }, (s) => s === 400);
-    // Panel asistanı: istemsiz açılır (model çağrılmaz), durumu okunur, kapatılır.
-    if (!('assistant' in st)) fails.push('GET /api/state → assistant alanı yok');
-    await hit('GET', '/api/assistant');
-    await hit('POST', '/api/assistant/open', {}, (s) => s === 200);
-    await wait(1500);
-    const as = await hit('GET', '/api/assistant');
-    if (!as.running) fails.push('asistan açılmadı');
-    await hit('POST', '/api/assistant/stop');
-    // Zamanlayıcı: liste; olmayanı iptal 409. Üye menüsünden izin modu (kapalı üye: yalnızca kayıt).
-    await hit('GET', '/api/schedules');
-    await hit('DELETE', '/api/schedules/999999', undefined, (s) => s === 409);
+    // Üye menüsünden izin modu (kapalı üye: yalnızca kayıt).
     await hit('POST', `/api/sessions/${sid}/settings`, { permissionMode: 'acceptEdits' });
     await hit('POST', `/api/sessions/${sid}/settings`, { permissionMode: 'yolo' }, (s) => s === 400);
     await hit('POST', `/api/sessions/${sid}/settings`, { effort: 'medium' });

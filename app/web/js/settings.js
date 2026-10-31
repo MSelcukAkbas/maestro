@@ -50,8 +50,6 @@ function textToPairs(t, sep) {
 const ROLE_CTX_DEFAULTS = { sef: [500000, 700000], coder: [250000, 500000], review: [200000, 400000], arastirma: [150000, 300000] };
 // Sunucudaki bekçi varsayılanlarıyla aynı (services/watch.js); ayar hiç kaydedilmediyse bunlar gösterilir.
 const WATCH_DEFAULTS = { enabled: true, act: true, ai: true, quotaHalf: 50, quotaLow: 15, ctxWarn: 250000, ctxHigh: 500000, errStreak: 4, stuckMin: 20 };
-const CURATOR_DEFAULTS = { enabled: true, everyH: 3, model: 'sonnet', level: 'orta' };
-const CURATOR_LEVELS = [['dusuk', 'Düşük'], ['orta', 'Orta'], ['yuksek', 'Yüksek']];
 
 const SettingsView = {
   mount({ tab, role }) {
@@ -365,10 +363,6 @@ const SettingsView = {
           return [k, typeof WATCH_DEFAULTS[k] === 'boolean' ? !!v : Number(v)];
         })),
         contextWindows: Object.fromEntries(FAMILIES.map((k) => [k, Number(this.model[`cw.${k}`] ?? (this.model.contextWindows || {})[k])])),
-        curator: Object.fromEntries(Object.keys(CURATOR_DEFAULTS).map((k) => {
-          const v = this.model[`cur.${k}`] ?? (this.model.curator || {})[k] ?? CURATOR_DEFAULTS[k];
-          return [k, k === 'enabled' ? !!v : k === 'everyH' ? Number(v) : v];
-        })),
       };
       const r = await act(() => api('PUT', '/api/settings', body), 'Ayarlar kaydedildi.');
       if (r) {
@@ -1215,7 +1209,6 @@ ${this.roleArchiveSection(r)}`;
   tabGeneral() {
     const m = this.model;
     const wv = (k) => m[`watch.${k}`] ?? (m.watch || {})[k] ?? WATCH_DEFAULTS[k];
-    const cv = (k) => m[`cur.${k}`] ?? (m.curator || {})[k] ?? CURATOR_DEFAULTS[k];
     return `
         <section class="section">
           <div class="section-head"><h2>Sunucu</h2></div>
@@ -1243,17 +1236,6 @@ ${this.roleArchiveSection(r)}`;
             ${[['quotaHalf', 'Kota yarılama uyarısı (% kullanıldı)'], ['quotaLow', 'Kritik kota (% kaldı)'], ['ctxWarn', 'Bağlam eşiği, profili olmayan roller (token)'], ['ctxHigh', 'Bağlam üst sınırı, profili olmayan roller (token)'], ['errStreak', 'Art arda hatalı tool'], ['stuckMin', 'Takılma süresi (dk)']]
   .map(([k, label]) => `<div class="field"><label for="w-${k}">${label}</label><input id="w-${k}" type="number" data-f="watch.${k}" value="${esc(wv(k))}"></div>`).join('')}
             <p class="note" style="grid-column: 1 / -1">Bekçi dakikada bir kota, bağlam ve takılma sinyallerine bakar. Kotası azalan üyeyi başka hesaba taşır, bağlamı büyüyeni compact eder ya da devir notu yazdırıp aynı adla sıfır bağlamla yeniden açar; bunları üye boştayken ya da işini bitirirken yapar, şefe yalnızca bilgi notu düşer. Seçimi, panelin ölçtüğü maliyetlere bakarak yardımcı model verir: CLAUDE.md, proje ve tool görmeden, en çok kotası kalan hesapta tek seferlik kısa bir çağrı (~1k token). Şefe yalnızca proje kararı gerektiren durumlar yazılır: hiçbir hesapta kota kalmaması, art arda hata, takılma.</p>
-          </div>
-        </section>
-        <section class="section">
-          <div class="section-head"><h2>Not düzenleyici</h2><span class="count">grup notlarını aralıklı olarak toparlayan alt model</span></div>
-          <div class="card set-card" style="display: grid; gap: 12.5px; grid-template-columns: repeat(auto-fit, minmax(162px, 1fr))">
-            <label class="check" style="grid-column: 1 / -1; align-self: flex-start"><input type="checkbox" data-f="cur.enabled" ${cv('enabled') ? 'checked' : ''}>Açık (kapalıyken yalnızca Notlar ekranındaki "Şimdi düzenle" ile çalışır)</label>
-            <div class="field"><label for="cur-every">Aralık (saat)</label><input id="cur-every" type="number" min="1" max="168" data-f="cur.everyH" value="${esc(cv('everyH'))}"></div>
-            <div class="field"><label for="cur-model">Model</label><select id="cur-model" data-f="cur.model">${['haiku', 'sonnet', 'opus'].map((x) => `<option value="${x}" ${cv('model') === x ? 'selected' : ''}>${x[0].toUpperCase() + x.slice(1)}</option>`).join('')}</select></div>
-            <div class="field"><label for="cur-level">Derinlik (zamanlı çalışma)</label><select id="cur-level" data-f="cur.level">${CURATOR_LEVELS.map(([k, v]) => `<option value="${k}" ${cv('level') === k ? 'selected' : ''}>${v}</option>`).join('')}</select></div>
-            <p class="note" style="grid-column: 1 / -1">Derinlik: <b>düşük</b> yalnızca yeni ve değişen notlara bakar, araştırma yapmaz; <b>orta</b> bunlarla aynı kart ya da konudaki eski notları da ele alır, sonuçlanmış review/düzeltme zincirlerini ana nota "İnceleme geçmişi" olarak katar; <b>yüksek</b> tüm notları kart ve konu gruplarıyla baştan toparlar, geçersiz kalan kural ve kararları işaretler, notlardaki yol ve iddiaları projede doğrular (uzun ve pahalı; elle başlatman önerilir). Her çalıştırma önceki üç çalıştırmanın özetini görür, bilerek ayrı bıraktığı notlara yeniden takılmaz.</p>
-            <p class="note" style="grid-column: 1 / -1">İlk düzenlemeyi Notlar ekranındaki "Şimdi düzenle" başlatır; sonra notlar değiştiyse aralık dolunca kendisi çalışır: tekrarları toplar, aynı konudaki notları birleştirir, çelişkiyi önce projede araştırır, çözemezse şefe sorar ve cevaba göre notu netleştirir. Notlara yalnızca panelin tool'larıyla yazar, projede yalnızca okur. Senin yazdığın kısımlara dokunamaz; her değişiklikten önceki sürüm saklanır, birleştirilen not silinmez arşive alınır. Üyelere bildirim gitmez, şefe tek bilgi notu düşer. En çok kotası kalan hesapta çalışır.</p>
           </div>
         </section>
         <section class="section">

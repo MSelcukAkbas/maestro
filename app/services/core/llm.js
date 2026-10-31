@@ -1,4 +1,4 @@
-// Panelin yardımcı model çağrıları (bekçi yardımcısı, kurulum danışmanı, not düzenleyici) tek yerden: claude -p, hesabın
+// Panelin yardımcı model çağrıları (bekçi yardımcısı, kurulum danışmanı, rol danışmanı, mesaj geliştirici) tek yerden: claude -p, hesabın
 // kendi ayar klasörüyle, üst oturumun CLAUDE* / ANTHROPIC* değişkenleri temizlenmiş ortamda, ayar kaynakları kapalı.
 // Çağrılar --no-session-persistence ile çalıştığı için oturum kaydı bırakmaz; harcamaları buradan deftere yazılır ve
 // ölçüme (meter) eklenir. Yoksa kota yüzdesindeki artış token'sız görünür ve kota / birim oranı şişer.

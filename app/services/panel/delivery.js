@@ -2,7 +2,7 @@
 // (boardDelivery) ya da boştaysa terminaline yapıştırarak (boardIdleTick).
 const { discovery } = require('../../agent');
 const {
-  hookState, manager, boards, notes, requests, inbox, ops, sharedConfigDir, findSession, sessionStatus, runningLead, pasteTo,
+  hookState, manager, boards, notes, requests, ops, sharedConfigDir, findSession, sessionStatus, pasteTo,
 } = require('./context');
 const store = require('../core/store');
 
@@ -14,7 +14,7 @@ const store = require('../core/store');
 // Yenilenmekte olan üyeye iletim yapılmaz; bekleyenler yeni oturuma geçer.
 function hasDelivery(gid, sid, viaIdle) {
   if (ops.blocks(sid)) return false;
-  return !!ops.renewAsk(sid, viaIdle) || boards.hasPending(gid, sid) || notes.hasPending(gid, sid) || requests.hasInbox(sid) || inbox.hasPending(sid);
+  return !!ops.renewAsk(sid, viaIdle) || boards.hasPending(gid, sid) || notes.hasPending(gid, sid) || requests.hasInbox(sid);
 }
 
 function takeDelivery(group, sid, viaIdle) {
@@ -25,24 +25,22 @@ function takeDelivery(group, sid, viaIdle) {
   const b = boards.hasPending(group.id, sid) ? boards.pendingFor(group, sid, true) : null;
   const n = notes.hasPending(group.id, sid) ? notes.pendingFor(group, sid, true) : null;
   const r = requests.takeInbox(sid);
-  const u = inbox.take(sid);
-  const text = [u, r, b, n].filter(Boolean).join('\n\n');
-  return text ? { text, activity: u ? 'kullanıcı mesajı okunuyor' : r ? 'istek sonucu okunuyor' : b ? 'pano güncellemesi okunuyor' : 'grup notu okunuyor' } : null;
+  const text = [r, b, n].filter(Boolean).join('\n\n');
+  return text ? { text, activity: r ? 'istek sonucu okunuyor' : b ? 'pano güncellemesi okunuyor' : 'grup notu okunuyor' } : null;
 }
 
 // Bekçinin şefe bilgi notu: şefin bir sonraki istemine ya da tool sonucuna ek bağlam olarak eklenir, ayrı tur açmaz.
-// Kullanıcının asistan aracılığıyla bıraktığı bilgi notları da aynı yoldan gider.
 function leadInfo(body) {
   const found = findSession(store.loadGroups(), body.session_id);
   if (!found || found.session.removed) return null;
-  const parts = [];
-  if (inbox.hasInfo(found.session.id)) parts.push(inbox.takeInfo(found.session.id));
   if (ops.hasInfo(found.group.id)) {
     const lead = runningLead(found.group);
-    if (lead && lead.id === found.session.id) parts.push(ops.takeInfo(found.group.id));
+    if (lead && lead.id === found.session.id) {
+      const text = ops.takeInfo(found.group.id);
+      if (text) return { hookSpecificOutput: { hookEventName: body.hook_event_name, additionalContext: text } };
+    }
   }
-  const text = parts.filter(Boolean).join('\n\n');
-  return text ? { hookSpecificOutput: { hookEventName: body.hook_event_name, additionalContext: text } } : null;
+  return null;
 }
 
 function boardDelivery(body) {

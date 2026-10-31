@@ -386,11 +386,6 @@ function openStateChannel() {
   ws.onmessage = (e) => {
     let m;
     try { m = JSON.parse(e.data); } catch { return; }
-    // Panel asistanının ekrani_ac tool'u: arayüzü verilen adrese götürür.
-    if (m.t === 'nav' && typeof m.hash === 'string' && m.hash.startsWith('#/')) {
-      location.hash = m.hash;
-      return;
-    }
     if (m.t !== 'state' || !m.d) return;
     state = m.d;
     setServer(true);

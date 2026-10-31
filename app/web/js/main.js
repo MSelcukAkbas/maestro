@@ -86,7 +86,6 @@ function watchState() {
 // Durum iki saniyede bir yenilenir; açık ekranın canlı kısmı (varsa) yeniden çizilir.
 function afterState() {
   watchState();
-  Assistant.sync();
   if (current && current.poll && !document.hidden) current.poll();
 }
 
@@ -102,6 +101,5 @@ setInterval(async () => {
   } catch {}
 }, 2000);
 
-Assistant.init();
 openStateChannel();
 navigate();

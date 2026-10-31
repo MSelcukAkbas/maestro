@@ -4,11 +4,10 @@
 // panel/http.js; API uçları routes/*.js.
 const store = require('./core/store');
 const agent = require('../agent');
-const { manager, ops, curator, cachedQuota, meterTick, PORT } = require('./panel/context');
+const { manager, ops, cachedQuota, meterTick, PORT } = require('./panel/context');
 const { boardIdleTick } = require('./panel/delivery');
 const { ROTATE_EVERY, pendingTick, autoRotateTick, sampleTimeline, watchTick } = require('./panel/ticks');
 const http = require('./panel/http');
-const { scheduler } = require('./panel/schedule');
 
 require('./routes/groups');
 require('./routes/board');
@@ -16,7 +15,6 @@ require('./routes/sessions');
 require('./routes/setup');
 require('./routes/settings');
 require('./routes/caps');
-require('./routes/assistant');
 
 setInterval(pendingTick, 10000);
 setInterval(autoRotateTick, ROTATE_EVERY);
@@ -24,7 +22,6 @@ setInterval(sampleTimeline, 2000);
 setInterval(() => { try { meterTick(); } catch (err) { console.error('[panel] ölçüm:', err.message); } }, 10000);
 setInterval(() => { try { ops.tick(); } catch (err) { console.error('[panel] bekçi hamlesi:', err.message); } }, 3000);
 setInterval(() => { try { watchTick(); } catch (err) { console.error('[panel] bekçi:', err.message); } }, 60 * 1000);
-setInterval(() => { try { curator.tick(); } catch (err) { console.error('[panel] not düzenleyici:', err.message); } }, 10 * 60 * 1000);
 
 // Arayüz kapalıyken de ölçüm sürsün: üye çalışırken kota 5 dakikada bir (önbellek süresine uyarak) okunur.
 setInterval(() => {
@@ -33,9 +30,6 @@ setInterval(() => {
 }, 5 * 60 * 1000);
 
 setInterval(boardIdleTick, 2000);
-// Zamanlayıcı: panel kapalıyken yarıda kalan / zamanı geçenler açılışta işaretlenir.
-scheduler.recover();
-setInterval(() => { try { scheduler.tick(); } catch (err) { console.error('[panel] zamanlayıcı:', err.message); } }, 5000);
 
 http.start();
 

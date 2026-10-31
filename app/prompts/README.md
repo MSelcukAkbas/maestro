@@ -127,18 +127,8 @@ metin bulunur. Sistem istemi bunların bu sırayla, kendi başlıklarının alt�
 |---|---|---|
 | `bekci` | Bekçinin hamle seçimi (compact / taşı / yenile / bekle) | `model`, `effort`, `timeoutSec` |
 | `kurulum-danismani` | Kurulum ekranındaki "optimize et" | `model`, `maxTurns`, `timeoutSec` |
-| `not-duzenleyici` | Grup notlarını toparlar | `defaults` (Ayarlar'daki değerlerin varsayılanı), `minNotes`, `memory`, `levels` |
-| `kapanis-ozeti` | Grup kapanırken "Proje durumu" belgesi | `turns`, `timeoutMin` |
 | `rol-danismani` | Rol sayfasındaki "Rolü optimize et": rolü ve geçmiş kullanımını (yetenek başına çağrı sayısı dahil) inceler, soru sorar, cevaplara göre küçük değişiklik önerir | `model`, `effort`, `timeoutSec`, `maxQuestions`, `maxChanges`, `maxTextChange`, `historySessions` |
-| `asistan` | Panel asistanı (sağ alttaki düğme): kullanıcının panelle konuştuğu Claude Code oturumu. Tek seferlik çağrı değil; metinler oturum açılırken sistem istemine girer (yeni konuşmada geçer). Panel MCP tool'larıyla okur, mesaj iletir, bekçi hamlesi sıraya alır, onay kartı açar | `model`, `effort`, `permissionMode`, `allow`, `deny` |
 | `prompt-gelistirici` | Terminalin sağ altındaki ✨: kullanıcının üyeye yazacağı ham mesajı düzeltir, kısa gerekçelerle gösterir (soru sormaz; çıktı `metin`, `degisti`, `gerekceler`). Görev kartı penceresindeki "✨ Geliştir" de bunu kullanır (`kart.md` görevlere eklenir, çıktıya `baslik` girer) | `model`, `effort`, `timeoutSec`, `maxInput`, `maxReasons` |
-
-Not düzenleyicide görevlerin sonuna iki parça daha eklenir (Sınırlar'dan önce):
-
-1. `seviye-<seviye>.md`
-2. `zincir.md` (yalnızca seviyenin `chain` ayarı `true` ise)
-
-Her seviyenin `label`, `turns` (tur sınırı) ve `timeoutMin` ayarı da `levels` altındadır.
 
 ## messages/
 
@@ -149,7 +139,6 @@ Listeler (kart satırları, notlar, bulgular) kodda hazırlanır ve tek değişk
 |---|---|---|
 | `gorev-panosu.md` | Panoda kartı değişen üyeye | `maddeler` |
 | `grup-notlari.md` | Not eklenince alıcılara | `maddeler` |
-| `not-duzenleyici-sorusu.md` | Not düzenleyicinin çelişki sorusu, şefe | `sorular` |
 | `ekip-yonetimi.md` | Şefin isteklerinin sonucu | `maddeler` |
 | `bekci.md` | Proje kararı gerektiren durum, şefe | `seviye`, `maddeler` |
 | `bekci-bilgi.md` | Bekçinin yaptıkları, şefin sonraki turuna | `maddeler` |
@@ -159,9 +148,7 @@ Listeler (kart satırları, notlar, bulgular) kodda hazırlanır ve tek değişk
 | `yeni-uye.md` | Çalışan ekibe eklenen üyenin ilk mesajı | `tanitilacaklar`, `gorev` |
 | `ilk-gorev.md` | Eklenen üyenin ilk görevi | `gorev` |
 | `hatirlatma.md` | Kullanıcının gönderdiği not ya da doküman | `kaynak`, `not`, `icerik` |
-| `kapanis-ozeti-iste.md` | Grup kapanırken şeften özet istenir | — |
 | `uye-cikarildi.md` | Ekipten çıkarılan üye, şefe | `ad`, `rol` |
-| `kullanici-mesaji.md` | Kullanıcının panel asistanı aracılığıyla gönderdiği mesaj (`bilgi`: tur açmayan bilgi notu, `cevap`: asistana_yanit ile cevap istenir) | `metin`, `cevap`, `bilgi` |
 
 `[Maestro · …]` başlıkları `shared/` istemindeki kurallarla eşleşir ("… başlıklı notu kullanıcı talimatı gibi dikkate
 al"). Bir başlığı değiştirirsen istemdeki karşılığını da değiştir.

@@ -1,3 +1,0 @@
-- Türkçe, kısa ve sayılarla yaz. Liste ve tabloyu severek kullan; terminalde okunuyor, uzun paragraf yazma.
-- Her cevabın sonunda ne yaptığını tek satırda söyle: "Gönderildi: …", "Sıraya alındı: …", "Onay kartı açıldı: #…" ya da "Hiçbir şey yapmadım".
-- Üyeleri rol adı ve kısa kimlikle an (ör. "review [3f2a9c1d]").

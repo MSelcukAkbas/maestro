@@ -1,5 +1,5 @@
 // Ajan testi: services yeniden başlayınca terminal oturumları ajanda açık kalmalı ve terminal akışı yeniden bağlanmalı.
-// Model çağırmaz (asistan oturumu açılır, istem gönderilmez). Kullanım: node test/agent.js
+// Model çağırmaz (grup istemsiz açılır, istem gönderilmez). Kullanım: node test/agent.js
 const path = require('path');
 const { makeDataDir, startPanel, wait, until } = require('./lib');
 
@@ -21,10 +21,21 @@ async function terminalOutput(p, sid, ms = 4000) {
   let p = await startPanel(makeDataDir('panel-agent'));
   const dataDir = p.dataDir;
   try {
-    await p.api('POST', '/api/assistant/open', {});
     let st = await p.api('GET', '/api/state');
-    const sid = st.assistant.id;
-    check(st.assistant.running, 'asistan açıldı');
+    const pid = st.projects.find((x) => path.resolve(x.path) === path.resolve(__dirname, '..', '..')).id;
+    const acc = st.settings.accounts[st.settings.accounts.length - 1].id;
+    const g = await p.api('POST', '/api/groups', {
+      projectId: pid, name: 'agent-test', permissionMode: 'manual',
+      rows: [{ key: 'a', roleId: 'arastirma', accountId: acc, model: 'haiku', effort: 'low' }],
+    });
+    const sid = g.sessions[0].id;
+    st = await p.api('GET', '/api/state');
+    const running = async (id) => {
+      st = await p.api('GET', '/api/state');
+      const grp = st.groups.find((x) => x.id === id);
+      return !!(grp && grp.sessions[0] && grp.sessions[0].running);
+    };
+    check(await until(() => running(g.id), 15000, 500), 'grup oturumu açıldı');
     check(st.agent.connected, 'ajan bağlı');
 
     const before = await terminalOutput(p, sid);
@@ -36,7 +47,7 @@ async function terminalOutput(p, sid, ms = 4000) {
     p = await startPanel(dataDir);
     st = await p.api('GET', '/api/state');
     check(st.agent.connected, 'services yeniden başladı, ajan yeniden bağlandı');
-    check(st.assistant.running, 'asistan oturumu yeniden başlatmadan sonra hâlâ açık');
+    check(await running(g.id), 'grup oturumu yeniden başlatmadan sonra hâlâ açık');
 
     const after = await terminalOutput(p, sid);
     check(after.includes(before.slice(0, 200)) || after.length >= before.length, 'terminal geçmişi yeniden bağlanınca geliyor');

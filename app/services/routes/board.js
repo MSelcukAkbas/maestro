@@ -1,12 +1,11 @@
-// Görev panosu, grup notları, not düzenleyici, proje dokümanları ve hatırlatma.
+// Görev panosu, grup notları, proje dokümanları ve hatırlatma.
 const store = require('../core/store');
 const prompts = require('../core/prompts');
 const { resolveMember } = require('../team/board');
-const { curatorLevels } = require('../team/curator');
 const { cleanRef, listDocs, readDoc, searchDocs } = require('../team/docs');
 const helper = require('../watch/helper');
 const promptdev = require('../setup/promptdev');
-const { settings, boards, notes, curator, HttpError, cleanText, boardGroup, cachedQuota, lastQuota } = require('../panel/context');
+const { settings, boards, notes, HttpError, cleanText, boardGroup, cachedQuota, lastQuota } = require('../panel/context');
 const { route, readBody } = require('../panel/http');
 
 function boardAssignee(g, v) {
@@ -203,16 +202,6 @@ route('POST', '/api/groups/([\\w-]+)/notes/(\\d+)/unarchive', async (req, m) => 
   const g = boardGroup(m[1]);
   noteCall(() => notes.unarchive(g, m[2]));
   return { notes: notesView(g) };
-});
-
-route('GET', '/api/groups/([\\w-]+)/curator', async (req, m) => curator.status(boardGroup(m[1]).id));
-
-route('POST', '/api/groups/([\\w-]+)/curator/run', async (req, m) => {
-  const g = boardGroup(m[1]);
-  if (curator.status(g.id).running) throw new HttpError(409, 'Not düzenleyici bu grupta zaten çalışıyor.');
-  const body = await readBody(req).catch(() => ({}));
-  curator.run(g, true, curatorLevels().includes(body && body.level) ? body.level : null).catch((err) => console.error('[panel] not düzenleyici:', err.message));
-  return curator.status(g.id);
 });
 
 route('DELETE', '/api/groups/([\\w-]+)/notes/(\\d+)', async (req, m) => {

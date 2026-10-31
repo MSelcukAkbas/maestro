@@ -1,7 +1,0 @@
-{
-  "model": "sonnet",
-  "effort": "medium",
-  "permissionMode": "default",
-  "allow": ["Read", "Grep", "Glob"],
-  "deny": ["Edit", "Write", "NotebookEdit", "Bash", "PowerShell", "WebFetch", "WebSearch", "SendMessage", "ListAgents"]
-}

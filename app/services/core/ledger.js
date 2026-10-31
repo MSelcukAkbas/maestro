@@ -1,5 +1,5 @@
-// Harcama defteri: panelin kendi yaptığı model çağrıları (bekçi yardımcısı, kurulum danışmanı, not düzenleyici,
-// kapanış özeti). Oturum kaydı bırakmadıkları için kota ekranında başka yerde görünmezler. data/ledger.json, son 500 çağrı.
+// Harcama defteri: panelin kendi yaptığı model çağrıları (bekçi yardımcısı, kurulum danışmanı, rol danışmanı,
+// mesaj geliştirici). Oturum kaydı bırakmadıkları için kota ekranında başka yerde görünmezler. data/ledger.json, son 500 çağrı.
 const fs = require('fs');
 const path = require('path');
 const { units } = require('../watch/meter');

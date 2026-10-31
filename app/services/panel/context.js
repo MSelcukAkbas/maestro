@@ -13,15 +13,12 @@ const { Timeline } = require('../team/timeline');
 const { Meter } = require('../watch/meter');
 const { Watch, WATCH_DEFAULTS } = require('../watch/watch');
 const { Ops } = require('../watch/ops');
-const helper = require('../watch/helper');
 const { AgentLink } = require('./agentlink');
 const { HookState } = require('../session/hooks');
-const { Boards, STATUS_TEXT } = require('../team/board');
+const { Boards } = require('../team/board');
 const { Caps } = require('../setup/caps');
-const { Notes, actorLabel } = require('../team/notes');
-const { Curator } = require('../team/curator');
+const { Notes } = require('../team/notes');
 const { Requests } = require('../team/team');
-const { Inbox } = require('../team/inbox');
 const { Presence } = require('../session/presence');
 const { Ledger } = require('../core/ledger');
 const { Pending } = require('../session/pending');
@@ -42,7 +39,6 @@ const boards = new Boards(store.DATA_DIR);
 const caps = new Caps(store.DATA_DIR);
 const notes = new Notes(store.DATA_DIR);
 const requests = new Requests(store.DATA_DIR);
-const inbox = new Inbox(store.DATA_DIR);
 const timeline = new Timeline(store.DATA_DIR);
 const meter = new Meter(store.DATA_DIR, path.join(sharedConfigDir(), 'projects'));
 const watch = new Watch(store.DATA_DIR);
@@ -73,7 +69,7 @@ const ops = new Ops({
   lastText: (sid) => lastText(sid),
   delivering: (sid) => {
     const found = findSession(store.viewGroups(), sid);
-    return !!found && (boards.hasPending(found.group.id, sid) || notes.hasPending(found.group.id, sid) || requests.hasInbox(sid) || inbox.hasPending(sid));
+    return !!found && (boards.hasPending(found.group.id, sid) || notes.hasPending(found.group.id, sid) || requests.hasInbox(sid));
   },
   paste: (sid, text, activity) => {
     const found = findSession(store.loadGroups(), sid);
@@ -84,24 +80,6 @@ const ops = new Ops({
   renew: (sid, note, accountId) => require('./launch').renewSession(sid, note, accountId),
   event: (text, gid) => pushEvent(text.slice(0, 300), 'bekci', gid),
   log: (entry) => watch.note(entry),
-});
-
-const curator = new Curator({
-  notes, dataDir: store.DATA_DIR, port: PORT, get token() { return hookState.token; },
-  // Kapatılan (arşivlenen) grupların notları zamanlı düzenlemeye girmez.
-  groups: () => store.viewGroups().filter((g) => !g.archived),
-  cards: (g) => boards.load(g.id).cards.map((c) => ({
-    id: c.id, status: c.status, statusText: STATUS_TEXT[c.status], title: c.title, desc: c.desc,
-    assignee: c.assignee ? actorLabel(g, c.assignee) : 'yok', lastNote: c.notes.length ? `${actorLabel(g, c.notes[c.notes.length - 1].by)}: ${c.notes[c.notes.length - 1].text}` : '',
-  })),
-  project: (g) => store.loadProjects().find((p) => p.id === g.projectId) || null,
-  // Sorular yalnızca açık şefe gider; cevap tool'u yalnızca şefte var.
-  lead: (g) => g.sessions.find((s) => !s.removed && s.roleId === 'sef' && manager.has(s.id)) || null,
-  actorName: (g, id) => actorLabel(g, id),
-  account: () => helper.pickAccount(settings.accounts, quotaMemo),
-  settings: () => settings,
-  event: (text, gid) => pushEvent(text.slice(0, 300), 'notlar', gid),
-  tell: (gid, text) => ops.tell(gid, text),
 });
 
 // ---------- yardımcılar ----------
@@ -240,17 +218,11 @@ function quotaLeft(row) {
 const USER_TL = '_user';
 
 
-// Ölçüm: çalışan ve son 10 dakikada kapanmış üyelerin harcaması bulundukları hesaba yazılır. Grup dışı oturumlar
-// (panel asistanı) setMeterExtra ile eklenir: [{ id, name, accountId }].
+// Ölçüm: çalışan ve son 10 dakikada kapanmış üyelerin harcaması bulundukları hesaba yazılır.
 const meterSeen = new Map();
-let meterExtra = () => [];
-function setMeterExtra(fn) {
-  meterExtra = fn;
-}
 function meterTick() {
   const now = Date.now();
   const list = [];
-  for (const s of meterExtra()) list.push({ ...s, file: discovery.transcriptPath(sharedConfigDir(), s.id) });
   for (const g of store.viewGroups()) {
     for (const s of g.sessions) {
       if (manager.has(s.id)) meterSeen.set(s.id, now);
@@ -346,8 +318,8 @@ function lastQuota() {
 
 module.exports = {
   ROOT, PORT, settings, replaceSettings, currentToken, rotateToken,
-  hookState, manager, boards, caps, notes, requests, inbox, timeline, meter, watch, presence, ledger, launched, pending, ops, curator,
+  hookState, manager, boards, caps, notes, requests, timeline, meter, watch, presence, ledger, launched, pending, ops,
   HttpError, isAllowedDir, sharedConfigDir, hhmm, cleanText, findSession, sessionStatus,
   events, pushEvent, runningLead, pasteTo, cachedQuota, lastQuota, trustsDir, quotaLeft,
-  USER_TL, meterTick, setMeterExtra, groupWatchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
+  USER_TL, meterTick, groupWatchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
 };

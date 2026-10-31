@@ -220,67 +220,6 @@ const SCENARIOS = {
     }
   },
 
-  // Not düzenleyici: panel MCP'si ve hook anahtarıyla çalışır; tekrar eden iki notu birleştirmesi beklenir, harcaması deftere düşer.
-  async curator({ api, acc, pid }) {
-    const g = await api('POST', '/api/groups', {
-      projectId: pid, name: 'e2e-curator', permissionMode: 'manual',
-      rows: [{ key: 'a', roleId: 'arastirma', accountId: acc, model: 'haiku', effort: 'low' }],
-    });
-    await api('POST', `/api/groups/${g.id}/stop`);
-    await api('POST', `/api/groups/${g.id}/notes`, { title: 'Port', body: 'Panel 7788 portunda çalışır.' });
-    await api('POST', `/api/groups/${g.id}/notes`, { title: 'Panel portu', body: 'Panelin portu 7788.' });
-    await api('POST', `/api/groups/${g.id}/notes`, { title: 'Test portu', body: 'Test paneli 7799 portunu kullanır.' });
-    await api('POST', `/api/groups/${g.id}/curator/run`, { level: 'dusuk' });
-    const done = await until(async () => {
-      const s = await api('GET', `/api/groups/${g.id}/curator`);
-      return !s.running && s.lastRunAt ? s : null;
-    }, 15 * 60 * 1000, 5000);
-    assert.ok(done, 'not düzenleyici bitmedi');
-    const m = await api('GET', '/api/meter');
-    const e = m.ledger.recent.find((x) => x.kind === 'not düzenleyici' && x.gid === g.id);
-    assert.ok(e, 'deftere kayıt düşmedi');
-    assert.ok(e.ok, `not düzenleyici hata verdi: ${e.error}`);
-    spent += e.costUSD || 0;
-    const notes = (await api('GET', `/api/groups/${g.id}/notes`)).notes;
-    const last = done.last || {};
-    assert.ok(last.ok, `not düzenleyici başarısız: ${last.text}`);
-    return `$${(e.costUSD || 0).toFixed(3)}, ${e.turns} tur, ${notes.filter((n) => !n.archived).length} aktif not, birleşen ${(last.merged || []).length}; ${last.changes || ''} — ${String(last.text || '').slice(0, 200)}`;
-  },
-
-  // Not düzenleyici birleştirme: üyenin yazdığı (kullanıcı notu olmayan) iki tekrar not birleştirilmeli.
-  async curatormerge({ api, acc, pid }) {
-    const g = await api('POST', '/api/groups', {
-      projectId: pid, name: 'e2e-curatormerge', permissionMode: 'manual',
-      firstTask: 'not_ekle aracıyla iki not ekle. 1) başlık "Port", içerik "Panel 7788 portunda çalışır." 2) başlık "Panel portu", içerik "Panelin portu 7788; test paneli 7799 kullanır." Başka hiçbir şey yapma, bitince "eklendi" yaz.',
-      rows: [{ key: 'a', roleId: 'arastirma', accountId: acc, model: 'haiku', effort: 'low' }],
-    });
-    try {
-      const two = await until(async () => {
-        const n = (await api('GET', `/api/groups/${g.id}/notes`)).notes.filter((x) => !x.archived);
-        return n.length >= 2 ? n : null;
-      }, 150000);
-      assert.ok(two, 'üye notları eklemedi');
-      await api('POST', `/api/groups/${g.id}/stop`);
-      await api('POST', `/api/groups/${g.id}/curator/run`, { level: 'orta' });
-      const done = await until(async () => {
-        const s = await api('GET', `/api/groups/${g.id}/curator`);
-        return !s.running && s.lastRunAt ? s : null;
-      }, 15 * 60 * 1000, 5000);
-      assert.ok(done && done.last && done.last.ok, `not düzenleyici bitmedi: ${done && done.last && done.last.text}`);
-      const notes = (await api('GET', `/api/groups/${g.id}/notes`)).notes;
-      const active = notes.filter((x) => !x.archived);
-      const m = await api('GET', '/api/meter');
-      const e = m.ledger.recent.find((x) => x.kind === 'not düzenleyici' && x.gid === g.id);
-      spent += (e && e.costUSD) || 0;
-      assert.ok((done.last.merged || []).length >= 1 && active.length === 1, `birleştirme yok: ${active.length} aktif not; ${done.last.text.slice(0, 200)}`);
-      const body = active[0].body;
-      assert.ok(/7788/.test(body) && /7799/.test(body), `birleşen notta bilgi kaybı: ${body}`);
-      return `$${((e && e.costUSD) || 0).toFixed(3)}; birleşik not: ${active[0].title} — ${body.replace(/\n/g, ' ').slice(0, 120)}`;
-    } finally {
-      await api('POST', `/api/groups/${g.id}/stop`).catch(() => {});
-    }
-  },
-
   // Kurulum optimizer'ı: hedefle projeyi inceler (turns > 1), effort ve rol önerileri doğrulanmış gelir.
   async optimize({ api, acc, pid }) {
     const r = await api('POST', '/api/setup/optimize', {
@@ -298,44 +237,6 @@ const SCENARIOS = {
   },
 
   // Rol danışmanı (Sonnet): sorular → her sorunun ilk seçeneğiyle cevap → doğrulanmış öneriler. Hiçbir şey yazılmaz.
-  // Panel asistanı: kullanıcının isteğiyle üyeye cevap isteyen mesaj gönderir, üyenin asistana_yanit cevabı gelir.
-  async asistan({ api, token, acc, pid, dataDir }) {
-    // Test kotası için asistan Haiku ile açılır (test verisindeki istem kopyası).
-    const cfgFile = path.join(dataDir, 'panel-prompts', 'tools', 'asistan', 'tool.json');
-    fs.writeFileSync(cfgFile, JSON.stringify({ ...JSON.parse(fs.readFileSync(cfgFile, 'utf8')), model: 'haiku', effort: 'low' }));
-    const g = await api('POST', '/api/groups', {
-      projectId: pid, name: 'e2e-asistan', permissionMode: 'manual', firstTask: 'Yalnızca "ok" yaz.',
-      rows: [{ key: 'a', roleId: 'arastirma', accountId: acc, model: 'haiku', effort: 'low' }],
-    });
-    const sid = g.sessions[0].id;
-    let as = null;
-    try {
-      assert.ok(await idle(api, g.id, sid), 'üyenin ilk görevi bitmedi');
-      as = await api('POST', '/api/assistant/open', { fresh: true, accountId: acc });
-      // Asistanın çalışma klasörü hesapta ilk kez açılıyorsa güven sorusu gelir; Enter varsayılanı (güven) seçer.
-      let ready = await until(async () => ((await api('GET', '/api/assistant')).status === 'idle' ? true : null), 30000);
-      if (!ready) {
-        await typeInto(token, as.id, '');
-        ready = await until(async () => ((await api('GET', '/api/assistant')).status === 'idle' ? true : null), 60000);
-      }
-      assert.ok(ready, 'asistan açılmadı');
-      await typeInto(token, as.id, `Araştırma üyesine [${sid.slice(0, 8)}] mesaj_gonder ile cevap_iste true olarak şunu gönder: "Yalnızca asistana_yanit tool'uyla tamam cevabını ver." Başka bir şey yapma.`);
-      const got = await until(async () => ((await api('GET', '/api/assistant')).unread > 0 ? true : null), 240000);
-      assert.ok(got, 'üyenin cevabı asistana gelmedi');
-      const used = transcript(as.id).some((l) => l.type === 'assistant' && Array.isArray(l.message.content)
-        && l.message.content.some((c) => c && c.type === 'tool_use' && c.name === 'mcp__panel__mesaj_gonder'));
-      assert.ok(used, 'asistan mesaj_gonder çağırmadı');
-      const wrote = transcript(as.id).some((l) => l.type === 'assistant' && Array.isArray(l.message.content)
-        && l.message.content.some((c) => c && c.type === 'tool_use' && ['Write', 'Edit', 'Bash'].includes(c.name)));
-      assert.ok(!wrote, 'asistan yazma / komut aracı çağırdı');
-      const ev = (await api('GET', '/api/state')).events.filter((e) => e.source === 'asistan');
-      assert.ok(ev.length, 'asistan olayı yok');
-    } finally {
-      await api('POST', '/api/assistant/stop').catch(() => {});
-      await api('POST', `/api/groups/${g.id}/stop`).catch(() => {});
-    }
-  },
-
   async roleopt({ api, dataDir }) {
     const before = fs.readFileSync(path.join(dataDir, 'panel-prompts', 'roles', 'review', 'gorevler.md'), 'utf8');
     const q = await api('POST', '/api/roles/review/optimize', { step: 'sorular' });

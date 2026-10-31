@@ -206,8 +206,6 @@ const WorkView = {
     this.noteEd = null;
     this.noteHist = null;
     this.showArchived = false;
-    this.curStatus = null;
-    this.curAt = 0;
     this.lineSel = null;
     this.notesKey = null;
     this.boardKey = null;
@@ -436,7 +434,7 @@ const WorkView = {
     if (key === this.reqKey) return;
     this.reqKey = key;
     bar.innerHTML = list.map((r) => {
-      const by = r.by === 'asistan' ? { roleLabel: 'Asistan' } : nameOf(r.by);
+      const by = nameOf(r.by);
       const t = r.args && r.args.target ? nameOf(r.args.target) : null;
       const busy = t && t.running && (t.status === 'busy' || t.status === 'waiting');
       const warn = t && r.kind !== 'add' && t.running
@@ -444,7 +442,7 @@ const WorkView = {
       return `
           <div class="rq">
             <div class="rq-main">
-              <div class="rq-top"><span class="rq-tag">${r.by === 'asistan' ? 'Asistan' : 'Şef'} isteği #${r.id}</span><b>${esc(r.kindText)}</b><span class="note">${esc(by ? by.roleLabel : '?')} · ${esc(timeAgo(r.createdAt))}</span></div>
+              <div class="rq-top"><span class="rq-tag">Şef isteği #${r.id}</span><b>${esc(r.kindText)}</b><span class="note">${esc(by ? by.roleLabel : '?')} · ${esc(timeAgo(r.createdAt))}</span></div>
               <div class="rq-what">${esc(r.text)}</div>
               ${r.reason ? `<div class="rq-why"><span class="note">Gerekçe:</span> ${esc(r.reason)}</div>` : ''}
               ${r.kind === 'add' && r.args.task ? `<details class="rq-task"><summary>İlk görev</summary><div>${esc(r.args.task)}</div></details>` : ''}
@@ -530,7 +528,6 @@ const WorkView = {
     const modelLabel = (m) => (MODELS.find(([v]) => v === m) || [m, m])[1];
     const modelText = st && st.model ? st.model : s.model ? modelLabel(s.model) : 'hesap varsayılanı';
     const names = (ids) => (ids || []).map((id) => (g.sessions.find((x) => x.id === id) || {}).roleLabel).filter(Boolean).join(', ');
-    const members = g.sessions.filter((x) => !x.removed);
     const row = (k, v) => (v ? `<div class="sm-k">${k}</div><div class="sm-v">${v}</div>` : '');
     const opt = (v, l, cur) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(l)}</option>`;
     menu.innerHTML = `
@@ -567,7 +564,6 @@ const WorkView = {
                <button class="btn small" data-act="restart">Yeniden başlat</button>
                <button class="btn small danger" data-act="stop">Sonlandır</button>`
           : '<button class="btn small primary" data-act="start">Başlat</button>'}
-          ${s.roleId === 'sef' && members.some((x) => x.running) ? '<button class="btn small" data-act="summary" title="Şefin terminaline kapanış özeti isteği gönderir">Şeften özet iste</button>' : ''}
           <button class="btn small" data-act="renew" title="Devir notu yazdırıp aynı ad ve rolle sıfır context ile yeniden açar; pano ve notlar kalır">Sıfır context ile yenile</button>
           <button class="btn small ghost danger-text" data-act="remove">Gruptan çıkar</button>
         </div>`;
@@ -740,7 +736,6 @@ const WorkView = {
     if (a === 'stop' && !confirm('Oturum sonlandırılsın mı?')) return;
     if (a === 'restart' && !confirm('Oturum kapatılıp kaldığı yerden yeniden açılsın mı?')) return;
     if (a === 'remove' && !confirm('Oturum kapatılıp gruptan çıkarılsın mı? Konuşması silinmez; proje sayfasından gruba geri eklenebilir.\n\nPanel, ekibi yöneten üyeye (şef) bu üyenin ayrıldığını bildirecek.')) return;
-    if (a === 'summary' && !confirm('Şeften kapanış özeti istensin mi? Panel, şefin terminaline özet isteğini yazıp gönderecek.')) return;
     if (a === 'renew') {
       const s = (this.group() || { sessions: [] }).sessions.find((x) => x.id === sid);
       if (!confirm(s && s.running
@@ -752,13 +747,6 @@ const WorkView = {
       if (!r) return;
       this.closeMenu();
       toast(r.handoff ? 'Devir notu istendi; not gelince yeni oturum açılacak. İlerlemeyi Bekçi ekranından izleyebilirsin.' : 'Sıfır context ile açılıyor.');
-      return;
-    }
-    if (a === 'summary') {
-      b.disabled = true;
-      const r = await act(() => api('POST', `/api/groups/${this.gid}/ask-summary`));
-      b.disabled = false;
-      if (r) toast(`Kapanış özeti ${r.to} oturumundan istendi. Özet yazılınca "Tümünü sonlandır" ile kapatabilirsin.`);
       return;
     }
     const path = { pc: 'open-pc', restart: 'restart', stop: 'stop', start: 'start', remove: 'remove' }[a];
@@ -1262,7 +1250,6 @@ const WorkView = {
       if (a === 'hist') return this.openHistory(id);
       if (a === 'hsel') { this.noteHist.sel = Number(b.dataset.hi); this.notesKey = null; return this.renderNotes(this.group(), this.lastNotes); }
       if (a === 'hrestore') return this.restoreVersion(Number(b.dataset.hi));
-      if (a === 'currun') return this.runCurator();
       if (a === 'unarch') return this.unarchiveNote(id);
       // Buradan sonrakiler okuma alanını değiştirir: açık düzenleyicide kaydedilmemiş değişiklik varsa sorulur.
       if (['tab', 'sel', 'back', 'new', 'edit', 'arch', 'dsel', 'dhit'].includes(a) && !this.leaveEdit()) return;
@@ -1372,16 +1359,6 @@ const WorkView = {
     });
   },
 
-  async runCurator() {
-    const sel = $('#cur-run-level');
-    const r = await act(() => api('POST', `/api/groups/${this.gid}/curator/run`, { level: sel ? sel.value : undefined }), 'Not düzenleyici başladı; bitince bildirim gelir.');
-    if (!r) return;
-    this.curStatus = r;
-    this.curAt = Date.now();
-    this.notesKey = null;
-    this.renderNotes(this.group(), this.lastNotes);
-  },
-
   async unarchiveNote(id) {
     const r = await act(() => api('POST', `/api/groups/${this.gid}/notes/${id}/unarchive`), 'Not arşivden çıkarıldı.');
     if (!r) return;
@@ -1396,7 +1373,6 @@ const WorkView = {
     if (this.loadingNotes) return;
     this.loadingNotes = true;
     try {
-      await this.loadCurator(g);
       this.lastNotes = await api('GET', `/api/groups/${g.id}/notes`);
       this.renderNotes(g, this.lastNotes);
     } catch (err) {
@@ -1457,7 +1433,7 @@ const WorkView = {
       this.notesKey = null;
       return this.renderDocs(g);
     }
-    const key = JSON.stringify([data.notes, members.map((s) => [s.id, s.roleLabel]), q, this.noteSel, this.noteReading, this.srcView, this.showArchived, this.noteHist, this.curStatus, !!this.noteEd, Math.floor(Date.now() / 60000)]);
+    const key = JSON.stringify([data.notes, members.map((s) => [s.id, s.roleLabel]), q, this.noteSel, this.noteReading, this.srcView, this.showArchived, this.noteHist, !!this.noteEd, Math.floor(Date.now() / 60000)]);
     if (key === this.notesKey) return;
     this.notesKey = key;
     this.docKey = null;
@@ -1485,7 +1461,7 @@ const WorkView = {
           </button>`;
     }).join('') : `<div class="ns-empty">${q ? 'Aramaya uyan not yok.' : this.showArchived ? 'Arşiv boş.' : 'Henüz not yok.'}</div>`;
     listEl.scrollTop = scroll;
-    this.renderCurator(archived);
+    this.renderNotesFoot(archived);
 
     const read = $('#notes-read');
     if (this.noteEd) return this.renderEditor(g, read);
@@ -1545,33 +1521,11 @@ const WorkView = {
       </div>`;
   },
 
-  // Not düzenleyicinin durumu ve arşiv geçişi (not listesinin altında).
-  renderCurator(archived) {
+  // Arşiv geçişi (not listesinin altında).
+  renderNotesFoot(archived) {
     const el = $('#notes-foot');
     if (!el) return;
-    const c = this.curStatus;
-    const last = c && c.last;
-    const state = !c ? '' : c.running ? `çalışıyor (${esc(timeAgo(c.startedAt))} başladı)`
-      : last ? `${esc(timeAgo(last.at))}${last.level && c.levels ? ` (${esc(c.levels[last.level] || last.level)})` : ''}: ${last.ok ? esc(last.changes) : 'tamamlanamadı'}` : 'henüz çalışmadı · ilk düzenlemeyi Şimdi düzenle başlatır';
-    el.innerHTML = `
-        <div class="nf-row"><div class="nf-head"><span class="nf-label" title="${last && last.text ? esc(last.text) : 'Notları aralıklı olarak toparlar: tekrarları birleştirir, çelişkileri şefe sorar. Senin yazdığın kısımlara dokunmaz.'}">Not düzenleyici</span>
-          <span class="note nf-state">${state}${c && c.open ? ` · şefte ${c.open} soru` : ''}</span></div>
-          <div class="nf-actions">${c && c.levels ? `<select id="cur-run-level" class="small-select" title="Derinlik: düşük yalnızca yeni notlara bakar; orta bunlarla ilgili eski notları da ele alır, onaylanmış review zincirlerini katar; yüksek tüm notları kart ve konu gruplarıyla baştan toparlar, geçersiz kalanları işaretler, iddiaları projede doğrular (daha uzun ve pahalı)" ${c.running ? 'disabled' : ''}>${Object.entries(c.levels).map(([k, v]) => `<option value="${k}" ${k === c.level ? 'selected' : ''}>${esc(v)}</option>`).join('')}</select>` : ''}
-          <button class="btn small ghost" data-nact="currun" ${c && c.running ? 'disabled' : ''}>Şimdi düzenle</button></div></div>
-        ${archived ? `<button class="linkish" data-nact="arch">${this.showArchived ? '← Notlara dön' : `Arşiv (${archived})`}</button>` : ''}`;
-  },
-
-  async loadCurator(g) {
-    if (this.curLoading || (this.curAt && Date.now() - this.curAt < 15000)) return;
-    this.curLoading = true;
-    try {
-      this.curStatus = await api('GET', `/api/groups/${g.id}/curator`);
-    } catch {
-      this.curStatus = null;
-    } finally {
-      this.curAt = Date.now();
-      this.curLoading = false;
-    }
+    el.innerHTML = archived ? `<button class="linkish" data-nact="arch">${this.showArchived ? '← Notlara dön' : `Arşiv (${archived})`}</button>` : '';
   },
 
   async openHistory(id) {

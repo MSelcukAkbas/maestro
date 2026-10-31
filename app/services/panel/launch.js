@@ -14,7 +14,7 @@ const { permissionOf, quietOf, writePromptFile } = require('./prompt');
 const ctx = require('./context');
 
 const {
-  ROOT, PORT, settings, hookState, manager, boards, caps, notes, requests, inbox, meter, launched, pending,
+  ROOT, PORT, settings, hookState, manager, boards, caps, notes, requests, meter, launched, pending,
   HttpError, isAllowedDir, sharedConfigDir, hhmm, cleanText, findSession, meterTick, whenStopped,
 } = ctx;
 
@@ -364,7 +364,6 @@ function renewSession(oldSid, note, accountId) {
   boards.reassign(group.id, old.id, s.id);
   notes.reassign(group.id, old.id, s.id);
   requests.reassign(old.id, s.id);
-  inbox.reassign(old.id, s.id);
   manager.stop(old.id);
   whenStopped(old.id, (err) => {
     if (err) console.error(`[panel] ${old.name}: eski oturum kapanmadı, yenisi yine de açılıyor.`);

@@ -376,8 +376,7 @@ async function handleMcp(boards, group, sid, msg, extra = { tools: [], call: () 
     case 'ping':
       return ok({});
     case 'tools/list':
-      // only: yalnızca verilen tool'lar (not düzenleyici pano tool'larını görmez).
-      return ok({ tools: extra.only ? extra.tools : [...TOOLS, ...extra.tools] });
+      return ok({ tools: [...TOOLS, ...extra.tools] });
     case 'tools/call': {
       const p = msg.params || {};
       try {

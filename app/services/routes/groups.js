@@ -1,18 +1,17 @@
 // Projeler ve gruplar: durum, proje ekleme / silme, grup kurma, devam ettirme, üye ekleme, mesajlar, durdurma,
-// kapanış özeti, grubu kapatma (dışa aktarma), arşiv, bekçi ayarı ve üye sırası.
+// grubu kapatma (dışa aktarma), arşiv, bekçi ayarı ve üye sırası.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
 
 const store = require('../core/store');
-const prompts = require('../core/prompts');
 const { discovery } = require('../../agent');
 const { sessionStats, sessionMessages } = require('../core/usage');
 const exporter = require('../team/exporter');
 const { STATUS_TEXT } = require('../team/board');
 const { actorLabel } = require('../team/notes');
 const {
-  manager, boards, notes, curator, HttpError, isAllowedDir, sharedConfigDir, cleanText, pushEvent, runningLead, pasteTo,
+  manager, boards, notes, HttpError, isAllowedDir, sharedConfigDir, cleanText, pushEvent,
   groupWatchCfg, boardGroup,
 } = require('../panel/context');
 const { createGroup, addSessionToGroup, startSessions } = require('../panel/launch');
@@ -72,30 +71,19 @@ route('POST', '/api/groups/([\\w-]+)/stop', async (req, m) => {
   const groups = store.loadGroups();
   const g = groups.find((x) => x.id === m[1]);
   if (!g) throw new HttpError(404, 'Grup bulunamadı.');
-  // Şefin son mesajı kapanış özeti olarak saklanır (grup sonra devam ettirilse bile bu an kalır).
+  // Şefin son mesajı grubun kapanış kaydına saklanır (grup sonra devam ettirilse bile bu an kalır).
   const lead = g.sessions.find((s) => s.roleId === 'sef' && !s.removed) || g.sessions[0];
   const st = lead && sessionStats(discovery.transcriptPath(sharedConfigDir(), lead.id));
-  if (st && (st.lastSummary || st.lastText)) {
-    g.closing = { at: Date.now(), by: lead.name, text: st.lastSummary || st.lastText };
+  if (st && st.lastText) {
+    g.closing = { at: Date.now(), by: lead.name, text: st.lastText };
     store.saveGroups(groups);
   }
   for (const s of g.sessions) manager.stop(s.id);
   return { ok: true };
 });
 
-route('POST', '/api/groups/([\\w-]+)/ask-summary', async (req, m) => {
-  const g = store.loadGroups().find((x) => x.id === m[1]);
-  if (!g) throw new HttpError(404, 'Grup bulunamadı.');
-  const lead = runningLead(g);
-  if (!lead) throw new HttpError(409, 'Grupta çalışan oturum yok.');
-  pasteTo(lead, prompts.message('kapanis-ozeti-iste'));
-  return { ok: true, to: lead.name };
-});
-
-
-// Grubu kapatma: oturumlar durdurulur, istenirse not düzenleyici kapanış özetini yazar ve notlar, pano ve özet proje
-// klasörüne Markdown olarak aktarılır; en son grup arşivlenir. Bir adım hata verirse grup kapanmaz, notlar yerinde kalır.
-// İş arka planda sürer; arayüz durumu GET ile izler.
+// Grubu kapatma: oturumlar durdurulur, istenirse notlar ve pano proje klasörüne Markdown olarak aktarılır; en son grup
+// arşivlenir. Bir adım hata verirse grup kapanmaz, notlar yerinde kalır. İş arka planda sürer; arayüz durumu GET ile izler.
 const closeJobs = new Map();
 
 function closeJobView(gid) {
@@ -104,7 +92,7 @@ function closeJobView(gid) {
 }
 
 async function runClose(gid, opts) {
-  const job = { state: 'running', step: 'Oturumlar durduruluyor', startedAt: Date.now(), export: opts.export, summary: opts.summary };
+  const job = { state: 'running', step: 'Oturumlar durduruluyor', startedAt: Date.now(), export: opts.export };
   closeJobs.set(gid, job);
   try {
     let g = boardGroup(gid);
@@ -113,24 +101,11 @@ async function runClose(gid, opts) {
       const project = store.loadProjects().find((p) => p.id === g.projectId);
       if (!project) throw new HttpError(404, 'Proje bulunamadı.');
       if (!isAllowedDir(project.path)) throw new HttpError(403, 'Proje klasörü izinli klasörlerin dışında.');
-      let summary = null;
-      if (opts.summary) {
-        job.step = 'Kapanış özeti yazılıyor (not düzenleyici notları ve panoyu okuyor; birkaç dakika sürebilir)';
-        try {
-          const r = await curator.handoff(g);
-          summary = r.text;
-          job.costUSD = r.costUSD;
-        } catch (err) {
-          // Özetsiz devam etmek kullanıcının kararı: iş durur, arayüz "özetsiz aktar" seçeneğini sunar.
-          Object.assign(job, { state: 'failed', step: null, error: `Kapanış özeti yazılamadı: ${err.message}`, canSkipSummary: true });
-          return;
-        }
-      }
       job.step = 'Dosyalar yazılıyor';
       g = boardGroup(gid);
       const out = exporter.exportGroup({
         projectPath: project.path, rel: opts.dir, group: g, notes: notes.load(gid).notes, cards: boards.load(gid).cards,
-        summary, actor: (id) => actorLabel(g, id), statusText: STATUS_TEXT,
+        actor: (id) => actorLabel(g, id), statusText: STATUS_TEXT,
       });
       job.dir = out.dir;
       job.files = out.files.length;
@@ -166,7 +141,7 @@ route('POST', '/api/groups/([\\w-]+)/close', async (req, m) => {
   const cur = closeJobs.get(g.id);
   if (cur && cur.state === 'running') throw new HttpError(409, 'Grup zaten kapatılıyor.');
   if (g.archived) throw new HttpError(409, 'Grup zaten kapalı.');
-  const opts = { export: body.export !== false, summary: body.export !== false && body.summary !== false, dir: body.dir ? String(body.dir).slice(0, 300) : null };
+  const opts = { export: body.export !== false, dir: body.dir ? String(body.dir).slice(0, 300) : null };
   runClose(g.id, opts).catch((err) => console.error('[panel] grup kapatma:', err.message));
   return closeJobView(g.id);
 });

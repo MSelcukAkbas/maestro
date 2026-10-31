@@ -143,15 +143,9 @@ test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan
   for (const id of ids) assert.ok(Object.values(map).some((rs) => rs.includes(id)), `${id} rolüne skill yok`);
   // Yardımcı model araçlarının dosyaları tam.
   // Yardımcı model araçlarının dosyaları tam: dört bölüm de dolu.
-  for (const t of ['bekci', 'kurulum-danismani', 'not-duzenleyici', 'kapanis-ozeti']) {
+  for (const t of ['bekci', 'kurulum-danismani']) {
     for (const f of ['persona.md', 'gorevler.md', 'sinirlar.md', 'cikti.md']) assert.ok(prompts.tool(t).text(f).trim().length > 20, `${t}/${f}`);
     assert.match(prompts.tool(t).system(), /^## Persona\n[\s\S]+\n## Görevler\n[\s\S]+\n## Sınırlar\n[\s\S]+\n## Çıktı\n/, t);
-  }
-  // Not düzenleyicinin seviye metni görevlerin sonuna, sınırlardan önce girer.
-  const { systemPrompt, curatorLevels } = require('../services/team/curator');
-  for (const lv of curatorLevels()) {
-    const s = systemPrompt(lv);
-    assert.ok(s.indexOf('Derinlik:') > s.indexOf('## Görevler') && s.indexOf('Derinlik:') < s.indexOf('## Sınırlar'), lv);
   }
   // Koddaki her bildirim adının messages/ altında dosyası var.
   const used = new Set();
@@ -161,7 +155,7 @@ test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan
     else if (e.name.endsWith('.js')) for (const m of fs.readFileSync(p, 'utf8').matchAll(/\bmessage\('([a-z0-9-]+)'/g)) used.add(m[1]);
   });
   walk(path.join(ROOT, 'services'));
-  assert.ok(used.size >= 14, `bildirim adları bulunamadı: ${[...used]}`);
+  assert.ok(used.size >= 12, `bildirim adları bulunamadı: ${[...used]}`);
   for (const n of used) assert.doesNotThrow(() => prompts.message(n, {}), n);
 });
 
@@ -514,140 +508,6 @@ test('mesaj geliştirici: kart modunda başlık zorunlu, kart istemi göreve ekl
   assert.ok(require('../services/core/prompts').tool('prompt-gelistirici').text('kart.md').includes('baslik'));
 });
 
-test('asistan gelen kutusu: mesaj / bilgi notu iletimi, yenilemede devir, üye cevapları', () => {
-  const { Inbox } = require('../services/team/inbox');
-  const box = new Inbox(tmp('inbox'));
-  box.send('s1', 'testleri çalıştır', true);
-  assert.ok(box.hasPending('s1'));
-  const msg = box.take('s1');
-  assert.match(msg, /^\[Maestro · Kullanıcı\]/);
-  assert.match(msg, /asistana_yanit/);
-  assert.match(msg, /testleri çalıştır/);
-  assert.strictEqual(box.take('s1'), null);
-  box.send('s1', 'cevapsız');
-  assert.doesNotMatch(box.take('s1'), /asistana_yanit/);
-  box.note('s1', 'review bitti');
-  box.reassign('s1', 's2');
-  assert.ok(!box.hasInfo('s1') && box.hasInfo('s2'));
-  const info = box.takeInfo('s2');
-  assert.match(info, /^\[Maestro · Kullanıcı bilgi\]/);
-  assert.match(info, /- review bitti/);
-  box.reply('s2', 'coder', 'grup', '  %80 bitti  ');
-  assert.strictEqual(box.unread(), 1);
-  const r = box.replies();
-  assert.strictEqual(r[0].text, '%80 bitti');
-  assert.strictEqual(box.unread(), 0);
-  assert.strictEqual(box.replies().length, 0);
-  assert.strictEqual(box.replies(true).length, 1);
-});
-
-test('asistan: araç metinleri ve ayarı var, model seçeneklerde, yazma araçları kapalı, arayüz dosyası yüklenir', () => {
-  const prompts = require('../services/core/prompts');
-  const { MODELS } = require('../services/core/options');
-  const t = prompts.tool('asistan');
-  assert.ok(MODELS.includes(t.config.model));
-  for (const tool of ['Edit', 'Write', 'Bash', 'SendMessage', 'ListAgents']) assert.ok(t.config.deny.includes(tool), tool);
-  assert.match(t.system(), /## Persona[\s\S]*## Görevler[\s\S]*## Sınırlar[\s\S]*## Çıktı/);
-  const html = fs.readFileSync(path.join(ROOT, 'web', 'index.html'), 'utf8');
-  assert.ok(html.includes('/js/assistant.js') && require('../web/serve').resolve('/js/assistant.js'));
-  assert.match(fs.readFileSync(path.join(ROOT, 'prompts', 'shared', '03-iletisim.md'), 'utf8'), /\[Maestro · Kullanıcı\]/);
-});
-
-test('zamanlayıcı: saat yorumu', () => {
-  const { parseWhen } = require('../services/team/schedule');
-  const now = new Date(2026, 9, 27, 18, 0, 0).getTime();
-  assert.strictEqual(parseWhen('+90dk', now), now + 90 * 60000);
-  assert.strictEqual(parseWhen('+1 sa 30 dk', now), now + 90 * 60000);
-  assert.strictEqual(parseWhen('2 saat sonra', now), now + 2 * 3600000);
-  assert.strictEqual(parseWhen('21:30', now), new Date(2026, 9, 27, 21, 30).getTime());
-  // Geçmiş saat ertesi güne kayar.
-  assert.strictEqual(parseWhen('08:00', now), new Date(2026, 9, 28, 8, 0).getTime());
-  assert.strictEqual(parseWhen('yarın 19:00', now), new Date(2026, 9, 28, 19, 0).getTime());
-  for (const bad of ['', 'akşam', '25:00', '+0dk', '+3 gün']) assert.throws(() => parseWhen(bad, now));
-});
-
-test('zamanlayıcı: zamanında başlar, açar, compact (soğukta da) ve yalnızca boştakini kapatır; geç kalan ve yarıda kalan işaretlenir', () => {
-  const { Scheduler } = require('../services/team/schedule');
-  const dir = tmp('sched');
-  const st = { a: 'off', b: 'off', c: 'busy' };
-  const compacts = { a: 0, b: 0, c: 0 };
-  const ops = new Map();
-  const log = { launched: [], stopped: [], sent: [], events: [] };
-  const group = { id: 'g', sessions: [
-    { id: 'a', roleLabel: 'Şef' }, { id: 'b', roleLabel: 'Coder', taskFile: 'x', taskSent: false }, { id: 'c', roleLabel: 'Review' },
-    { id: 'old', roleLabel: 'Test', removed: true, renewedTo: 'c' },
-  ] };
-  const deps = {
-    group: () => group,
-    resolve: (gid, sid) => {
-      let s = group.sessions.find((x) => x.id === sid);
-      while (s && s.renewedTo) s = group.sessions.find((x) => x.id === s.renewedTo);
-      return s && !s.removed ? s : null;
-    },
-    members: () => group.sessions.filter((s) => !s.removed),
-    status: (sid) => st[sid] || 'off',
-    delivering: () => false,
-    firstTask: (s) => !!(s.taskFile && !s.taskSent),
-    launch: (gid, sid) => { log.launched.push(sid); st[sid] = 'starting'; },
-    stop: (sid) => { log.stopped.push(sid); st[sid] = 'off'; },
-    send: (sid, text, ask) => log.sent.push(`${sid}:${text}:${ask}`),
-    compact: (gid, sid) => { ops.set(sid, { kind: 'compact' }); return true; },
-    op: (sid) => ops.get(sid) || null,
-    cancelOp: (sid) => ops.delete(sid),
-    compacts: (sid) => compacts[sid],
-    repliedSince: () => false,
-    event: (text) => log.events.push(text),
-  };
-  const s = new Scheduler(dir, deps);
-  const t0 = 1_000_000_000_000;
-  const job = s.add({ ad: 'gece', at: t0 + 60000, adimlar: [
-    { tur: 'ac', gid: 'g', uyeler: null },
-    { tur: 'mesaj', gid: 'g', uyeler: ['old'], metin: 'özet', cevap: true },
-    { tur: 'compact', gid: 'g', uyeler: null },
-    { tur: 'kapat', gid: 'g', uyeler: null, enCok: 10 },
-  ] }, t0);
-  s.tick(t0);
-  assert.strictEqual(s.get(job.id).durum, 'bekliyor');
-  // Zamanı gelince: a açılır; b ilk görevini başlatacağı için açılmaz (uyarı); c zaten açık.
-  s.tick(t0 + 61000);
-  assert.deepStrictEqual(log.launched, ['a']);
-  assert.ok(s.get(job.id).kayit.some((x) => x.uyari && /Coder hiç açılmamış/.test(x.text)));
-  st.a = 'idle';
-  // ac biter, mesaj (yenilenen üye yerine açılana) ve compact aynı tikte sıraya girer.
-  s.tick(t0 + 70000);
-  assert.deepStrictEqual(log.sent, ['c:özet:true']);
-  assert.deepStrictEqual([...ops.keys()].sort(), ['a', 'c']);
-  // a'nın compact'ı oldu, c'ninki olmadı (hamle silindi ama sayı artmadı).
-  compacts.a = 1;
-  ops.clear();
-  s.tick(t0 + 80000);
-  const j = s.get(job.id);
-  assert.ok(j.kayit.some((x) => /compact edildi: Şef/.test(x.text)) && j.kayit.some((x) => x.uyari && /compact olmadı: Review/.test(x.text)));
-  // kapat: a boşta → iki örnekte kapanır; c çalışıyor → kapatılmaz, süre dolunca uyarı.
-  s.tick(t0 + 85000);
-  s.tick(t0 + 90000);
-  assert.deepStrictEqual(log.stopped, ['a']);
-  s.tick(t0 + 90000 + 11 * 60000);
-  assert.strictEqual(s.get(job.id).durum, 'bitti');
-  assert.ok(s.get(job.id).kayit.some((x) => x.uyari && /Review hâlâ çalışıyordu, kapatılmadı/.test(x.text)));
-  assert.ok(!log.stopped.includes('c'));
-  // Panel kapalıyken zamanı çok geçen iş kaçırılır; çalışırken panel kapanan iş yarıda kalır; iptal.
-  const late = s.add({ ad: 'geç', at: t0 + 120000, adimlar: [{ tur: 'mesaj', gid: 'g', uyeler: null, metin: 'x' }] }, t0);
-  const mid = s.add({ ad: 'yarım', at: t0 + 120000, adimlar: [{ tur: 'bekle', gid: 'g', dakika: 30 }] }, t0);
-  const later = s.add({ ad: 'sonra', at: t0 + 3600000, adimlar: [{ tur: 'mesaj', gid: 'g', uyeler: null, metin: 'x' }] }, t0);
-  s.get(mid.id).durum = 'calisiyor';
-  const s2 = new Scheduler(dir, deps);
-  s2.data = s.data;
-  s2.recover(t0 + 120000 + 20 * 60000);
-  assert.strictEqual(s2.get(late.id).durum, 'kacirildi');
-  assert.strictEqual(s2.get(mid.id).durum, 'yarida');
-  assert.strictEqual(s2.get(later.id).durum, 'bekliyor');
-  s2.cancel(later.id);
-  assert.strictEqual(s2.get(later.id).durum, 'iptal');
-  assert.throws(() => s2.cancel(later.id));
-  assert.throws(() => s2.add({ ad: 'x', at: t0 + 8 * 86400000, adimlar: [{ tur: 'mesaj' }] }, t0));
-});
-
 test('Meter saatlik geçmiş: üye başına birim sırası, kota serisi, kalıcılık ve 7 gün sınırı', () => {
   const { Meter } = require('../services/watch/meter');
   const dir = tmp('meterhist');
@@ -669,33 +529,6 @@ test('Meter saatlik geçmiş: üye başına birim sırası, kota serisi, kalıc�
   assert.strictEqual(again.history(24, t0 + 3 * HOUR).members.length, 2);
   again.pruneHistory(t0 + 8 * 24 * HOUR);
   assert.strictEqual(again.usage.length, 0);
-});
-
-test('asistan: accountRisk seviyeleri ve panel_durumu süzgeci', () => {
-  const script = `
-    const a = require('./services/panel/assistant');
-    const b = (used, beforeReset) => ({ used, forecast: { beforeReset } });
-    const risk = (r) => a.accountRisk({ status: 'canlı', ...r }).level;
-    const m = (accountId, status) => ({ session: { accountId }, status });
-    process.stdout.write(JSON.stringify({
-      dolu: risk({ blocked: true }),
-      tahmin: risk({ five: b(50, true), week: b(10, false) }),
-      az: risk({ five: b(85, false), week: b(10, false) }),
-      normal: risk({ five: b(50, false), week: b(10, false) }),
-      olculemedi: a.accountRisk({ status: 'giriş yapılmamış', five: null, week: null }).level,
-      pencereYok: risk({ five: null, week: null }),
-      filtre: ['a:calisiyor', 'a:bosta', 'b:hepsi', 'a:'].map((x) => { const [acc, d] = x.split(':'); return [m('a', 'idle'), m('a', 'busy'), m('a', 'waiting'), m('b', 'busy')].map((s) => a.keepMember(s, acc, d)); }),
-      metin: a.openText([{ label: 'X', state: 'boşta' }, { label: 'Y', state: 'çalışıyor' }]),
-      bos: a.openText([]),
-    }));
-    process.exit(0);`;
-  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, MAESTRO_DATA: tmp('asistan-risk') }, encoding: 'utf8' });
-  assert.strictEqual(r.status, 0, r.stderr);
-  const o = JSON.parse(r.stdout);
-  assert.deepStrictEqual([o.dolu, o.tahmin, o.az, o.normal, o.olculemedi, o.pencereYok], ['kritik', 'kritik', 'uyarı', 'normal', 'bilinmiyor', 'bilinmiyor']);
-  assert.deepStrictEqual(o.filtre, [[false, true, true, false], [true, false, false, false], [false, false, false, true], [true, true, true, false]]);
-  assert.strictEqual(o.metin, 'açık 2 (çalışıyor 1, boşta 1): X boşta, Y çalışıyor');
-  assert.strictEqual(o.bos, 'açık üye yok');
 });
 
 test('Meter saatlik geçmiş: kısmi ilk saat oransal sayılır, kota olmadan da yazılır ve kapanışta zorla yazılır', () => {

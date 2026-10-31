@@ -1,3 +1,0 @@
-- Hiçbir notu değiştirme; yazma tool'ların yok.
-- Bilgi uydurma.
-- Kısaltma uğruna karar, sayı, yol ya da komut atma.

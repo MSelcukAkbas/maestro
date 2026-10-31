@@ -6,7 +6,6 @@ const store = require('../core/store');
 const prompts = require('../core/prompts');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
 const { WATCH_DEFAULTS } = require('../watch/watch');
-const { curatorDefaults, curatorLevels } = require('../team/curator');
 const {
   PORT, settings, replaceSettings, rotateToken, caps, meter, watch, ledger, ops, HttpError, cleanText, cachedQuota,
   groupWatchCfg, shutdown,
@@ -63,15 +62,6 @@ route('PUT', '/api/settings', async (req) => {
     num('errStreak', 2, 50);
     num('stuckMin', 5, 240);
     next.watch = w;
-  }
-  if (body.curator && typeof body.curator === 'object') {
-    const c = { ...curatorDefaults(), ...(settings.curator || {}) };
-    if (body.curator.enabled != null) c.enabled = !!body.curator.enabled;
-    const h = Number(body.curator.everyH);
-    if (body.curator.everyH != null && Number.isFinite(h) && h >= 1 && h <= 168) c.everyH = Math.round(h);
-    if (MODELS.includes(body.curator.model)) c.model = body.curator.model;
-    if (curatorLevels().includes(body.curator.level)) c.level = body.curator.level;
-    next.curator = c;
   }
   if (body.contextWindows && typeof body.contextWindows === 'object') {
     const cw = {};

@@ -11,7 +11,6 @@ const {
   ROOT, settings, manager, requests, timeline, presence, ledger, pending, events, HttpError, sharedConfigDir, sessionStatus, USER_TL,
 } = require('./context');
 const { launchDrift } = require('./launch');
-const assistant = require('./assistant');
 
 function buildState() {
   const live = discovery.liveSessions(sharedConfigDir());
@@ -37,7 +36,6 @@ function buildState() {
     autostart: fs.existsSync(STARTUP_LINK),
     presence: presence.view(),
     measuredWindows: ledger.windows,
-    assistant: assistant.status(live),
     agent: { connected: manager.connected },
   };
 }

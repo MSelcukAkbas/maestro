@@ -143,7 +143,7 @@ const ProjectView = {
     setTimeout(async () => { try { await refresh(); this.poll(); } catch {} }, 600);
   },
 
-  // Grubu kapatma penceresi: kapanış özeti + proje klasörüne dışa aktarma tek seçenek; iş sunucuda sürer, durum izlenir.
+  // Grubu kapatma penceresi: proje klasörüne dışa aktarma tek seçenek; iş sunucuda sürer, durum izlenir.
   async openClose(gid) {
     const g = state.groups.find((x) => x.id === gid);
     if (!g) return;
@@ -163,23 +163,21 @@ const ProjectView = {
     const p = project(this.id);
     const running = job.state === 'running';
     const body = job.state === 'done' ? `
-          <p>Grup kapatıldı.${job.dir ? ` Notlar, pano ve kapanış özeti <span class="mono">${esc(job.dir)}</span> klasörüne aktarıldı (${job.files} dosya)${job.docRef ? `; klasör projenin dokümanlarına eklendi` : ''}.` : ''}</p>
-          ${job.costUSD ? `<span class="note">Kapanış özeti: ${job.costUSD.toFixed(2)}</span>` : ''}`
+          <p>Grup kapatıldı.${job.dir ? ` Notlar ve pano <span class="mono">${esc(job.dir)}</span> klasörüne aktarıldı (${job.files} dosya)${job.docRef ? `; klasör projenin dokümanlarına eklendi` : ''}.` : ''}</p>`
       : running ? `
           <p><b>Kapatılıyor…</b></p><p class="note">${esc(job.step || '')}</p>
           <p class="note">Bu pencereyi kapatabilirsin; iş sunucuda sürer.</p>`
       : `
           ${job.state === 'failed' ? `<div class="warnbox">${esc(job.error || 'Kapatma tamamlanamadı.')} Grup kapanmadı, notlar yerinde.</div>` : ''}
           <p>Gruptaki açık oturumlar durdurulur ve grup arşive alınır. Claude'un konuşma dosyaları silinmez.</p>
-          <label class="check"><input type="checkbox" id="close-export" ${this.closeExport !== false ? 'checked' : ''}>Kapanış özeti yaz ve notları proje klasörüne aktar</label>
-          <p class="note">Not düzenleyici notları ve panoyu okuyup "Proje durumu" özetini yazar (birkaç dakika, birkaç dolar). Ardından özet, yapılacaklar (açık kartlar), biten işler ve her not ayrı Markdown dosyası olarak yazılır; senin yazdığın kısımlar olduğu gibi kalır.</p>
+          <label class="check"><input type="checkbox" id="close-export" ${this.closeExport !== false ? 'checked' : ''}>Notları ve panoyu proje klasörüne aktar</label>
+          <p class="note">Yapılacaklar (açık kartlar), biten işler ve her not ayrı Markdown dosyası olarak yazılır; senin yazdığın kısımlar olduğu gibi kalır.</p>
           <div class="field"><label for="close-dir">Hedef klasör (${esc(p ? p.path : 'proje')} altında)</label>
             <input id="close-dir" class="mono" value="${esc(this.closeDir || '')}"></div>`;
     const foot = job.state === 'done'
       ? '<button class="btn primary" data-cact="done">Tamam</button>'
       : running ? '<button class="btn ghost" data-cact="cancel">Kapat</button>'
       : `<button class="btn ghost" data-cact="cancel">Vazgeç</button>
-           ${job.canSkipSummary ? '<button class="btn" data-cact="nosum">Özetsiz aktar ve kapat</button>' : ''}
            <button class="btn danger" data-cact="go">${job.state === 'failed' ? 'Yeniden dene' : 'Grubu kapat'}</button>`;
     dlg.innerHTML = `
         <div class="dlg-head"><div><h2 id="close-title">Grubu kapat</h2><p class="note">${esc(g.name)}</p></div></div>
@@ -202,7 +200,7 @@ const ProjectView = {
     if (ex) this.closeExport = ex.checked;
     const dir = $('#close-dir');
     if (dir) this.closeDir = dir.value.trim();
-    const body = a === 'nosum' ? { export: true, summary: false, dir: this.closeDir } : { export: this.closeExport !== false, dir: this.closeDir };
+    const body = { export: this.closeExport !== false, dir: this.closeDir };
     b.disabled = true;
     let job;
     try { job = await api('POST', `/api/groups/${this.closeGid}/close`, body); } catch (err) { b.disabled = false; return toast(err.message, true); }
@@ -312,7 +310,7 @@ const ProjectView = {
         </div>`;
   },
 
-  // Kapanış özeti: süre, harcama, değişen satırlar ve her oturumun son mesajı. Konuşma dosyalarından hesaplanır, ek model çağrısı yapılmaz.
+  // Kapalı grubun sayısal özeti: süre, harcama, değişen satırlar ve her oturumun son mesajı. Konuşma dosyalarından hesaplanır, ek model çağrısı yapılmaz.
   // Ekip retrosu: kim kime ne kadar yazdı, kim ne kadar onay bekledi, harcama nerede; sonraki kurulum için öneriler.
   retroHtml(g, tot) {
     const a = retroCache.get(g.id);
@@ -389,7 +387,7 @@ const ProjectView = {
         <div class="summary">
           ${g.closing ? `
             <div class="closing">
-              <div class="note">Kapanış özeti · ${esc(g.closing.by)} · ${esc(new Date(g.closing.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</div>
+              <div class="note">Şefin son mesajı · ${esc(g.closing.by)} · ${esc(new Date(g.closing.at).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }))}</div>
               <div class="last">${esc(g.closing.text)}</div>
             </div>` : ''}
           ${this.retroHtml(g, tot)}

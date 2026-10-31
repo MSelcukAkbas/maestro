@@ -1,6 +1,6 @@
-// Grup kapanışında dışa aktarma: grubun notları, görev panosu ve kapanış özeti proje klasöründe okunabilir Markdown
-// dosyalarına yazılır. Klasör yapısı:
-//   00-proje-durumu.md   kapanış özeti (not düzenleyicinin yazdığı) ve içindekiler
+// Grup kapanışında dışa aktarma: grubun notları ve görev panosu proje klasöründe okunabilir Markdown dosyalarına
+// yazılır. Klasör yapısı:
+//   00-icindekiler.md    grup bilgisi ve içindekiler
 //   01-yapilacaklar.md   panodaki açık kartlar (yapılıyor, review, yapılacak) açıklama ve notlarıyla
 //   02-biten-isler.md    bitti kartları
 //   notlar/              her not ayrı dosya
@@ -55,10 +55,10 @@ function cardMd(c, actor, statusText) {
   return lines.join('\n');
 }
 
-// opts: { projectPath, rel, group, notes: [...], cards: [...], summary, actor(id) -> ad, statusText }
+// opts: { projectPath, rel, group, notes: [...], cards: [...], actor(id) -> ad, statusText }
 // Dönüş: { dir (mutlak), rel, files }
 function exportGroup(opts) {
-  const { projectPath, group, notes, cards, summary, actor, statusText } = opts;
+  const { projectPath, group, notes, cards, actor, statusText } = opts;
   let rel = String(opts.rel || defaultDir(group)).replace(/\\/g, '/').replace(/^\/+|\/+$/g, '');
   let dir = path.resolve(projectPath, rel);
   if (!rel || !inside(projectPath, dir) || path.resolve(projectPath) === dir) throw Object.assign(new Error('Hedef klasör proje klasörünün içinde olmalı.'), { status: 400 });
@@ -79,9 +79,7 @@ function exportGroup(opts) {
   };
 
   const toc = [
-    '---',
-    '',
-    `## İçindekiler`,
+    `# İçindekiler — ${group.name}`,
     '',
     `Grup: ${group.name} · açıldı ${fmt(group.createdAt)} · dışa aktarıldı ${fmt(Date.now())}`,
     `Üyeler: ${group.sessions.filter((s) => !s.removed).map((s) => `${s.roleLabel} (${s.name})`).join(', ')}`,
@@ -93,7 +91,7 @@ function exportGroup(opts) {
     ...(archived.length ? [`- Arşiv (${archived.length}; birleştirilmiş ya da arşive alınmış):`, ...archived.map((n) => `  - [#${n.id} ${n.title}](arsiv/${encodeURI(noteFile(n))})`)] : []),
     '',
   ];
-  write('00-proje-durumu.md', [summary ? summary.trim() : `# Proje durumu — ${group.name}\n\n(Kapanış özeti yazılmadı.)`, '', ...toc].join('\n'));
+  write('00-icindekiler.md', toc.join('\n'));
   write('01-yapilacaklar.md', [`# Yapılacaklar — ${group.name}`, '', open.length ? 'Panodaki açık kartlar: önce yapılıyor, sonra review, sonra yapılacak.' : 'Açık kart yok.', '', ...open.map((c) => cardMd(c, actor, statusText))].join('\n'));
   write('02-biten-isler.md', [`# Biten işler — ${group.name}`, '', ...(done.length ? done.map((c) => cardMd(c, actor, statusText)) : ['Biten kart yok.'])].join('\n'));
   for (const n of live) write(`notlar/${noteFile(n)}`, noteMd(n, actor));

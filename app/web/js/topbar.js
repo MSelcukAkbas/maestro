@@ -19,7 +19,7 @@ async function openQuota() {
   try {
     const [q, m] = await Promise.all([getQuota(true), api('GET', '/api/meter').catch(() => null)]);
     const t = new Date(q.fetchedAt);
-    // Panelin kendi model çağrıları (bekçi yardımcısı, kurulum danışmanı, not düzenleyici): oturum kaydı bırakmazlar.
+    // Panelin kendi model çağrıları (bekçi yardımcısı, kurulum danışmanı, rol danışmanı, mesaj geliştirici): oturum kaydı bırakmazlar.
     const lg = m && m.ledger && m.ledger.day;
     const kinds = lg ? Object.entries(lg.byKind) : [];
     const ledgerHtml = kinds.length ? `
@@ -108,11 +108,11 @@ function renderNotif(seenBefore) {
       return `<a class="notif-helper" href="${bekciHref(g.id)}"><span class="dot ${cfg.enabled ? 'busy' : ''}"></span><span><strong>Bekçi · ${esc(g.name)}</strong><span class="note">${esc(bekciModeText(cfg))}</span></span><span class="grow"></span>${ICON_CHEV}</a>`;
     }).join('')}
       <div class="notif-list">${evs.length ? evs.map((e) => {
-      // Kaynak etiketi (bekçi / not düzenleyici / panel) ve olayın grubu; grubu olan olay o grubun ilgili ekranına götürür.
+      // Kaynak etiketi (bekçi / notlar / panel) ve olayın grubu; grubu olan olay o grubun ilgili ekranına götürür.
       const bk = e.source === 'bekci';
       const gn = e.gid && gName(e.gid);
       const href = e.gid && gn ? (bk ? bekciHref(e.gid) : e.source === 'notlar' ? `#/g/${encodeURIComponent(e.gid)}?view=notes` : `#/g/${encodeURIComponent(e.gid)}`) : null;
-      const label = `${bk ? 'Bekçi' : { notlar: 'Notlar', asistan: 'Asistan', zamanlayici: 'Zamanlayıcı' }[e.source] || 'Panel'}${gn ? ` · ${gn}` : ''}`;
+      const label = `${bk ? 'Bekçi' : { notlar: 'Notlar' }[e.source] || 'Panel'}${gn ? ` · ${gn}` : ''}`;
       const inner = `<div class="bk-line"><span class="badge ${bk ? 'idle' : ''}">${esc(label)}</span><span class="note">${esc(when(e.ts))}</span></div><div>${esc(e.text)}</div>`;
       const cls = `notif-item${e.ts > seenBefore ? ' new' : ''}`;
       return href ? `<a class="${cls}" href="${href}">${inner}</a>` : `<div class="${cls}">${inner}</div>`;

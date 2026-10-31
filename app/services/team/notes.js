@@ -21,7 +21,7 @@ function short(s, max) {
 const MAX_TITLE = 200;
 const MAX_BODY = 20000;
 const HISTORY_MAX = 30;
-// Not düzenleyici (server/curator.js) notlara bu kimlikle yazar.
+// Kaldırılan not düzenleyicinin eski notlardaki kimliği; yalnızca gösterimde kullanılır.
 const CURATOR = 'curator';
 
 // Kullanıcının yazdığı kısımlar: kullanıcının kendi notu bütünüyle onundur; model notunda kullanıcının eklediği ya da
@@ -132,7 +132,7 @@ function actorName(group, actor) {
   return s ? s.name : 'bilinmeyen üye';
 }
 
-// Not düzenleyicinin özetindeki ekleyen: ad ve rol.
+// Dışa aktarılan notlardaki ekleyen: ad ve rol.
 function actorLabel(group, actor) {
   const s = group.sessions.find((x) => x.id === actor);
   return s && s.roleLabel && s.roleLabel !== s.name ? `${s.name} (${s.roleLabel})` : actorName(group, actor);
@@ -158,13 +158,13 @@ class Notes {
 
   // { seq, notes: [{ id, title, body, by, createdAt, updatedAt, updatedBy, to: [sid], delivered: { sid: ts },
   //   history: [{ title, body, by, at }], archived, mergedInto }], pending: { sid: [{ id, kind, ts }] },
-  //   reminders: { sid: [{ text, ts }] }, qseq, questions: [{ id, text, notes: [id], askedAt, sentAt, answer, answeredAt }] }
+  //   reminders: { sid: [{ text, ts }] } }
   load(gid) {
     try {
       const n = JSON.parse(fs.readFileSync(this.file(gid), 'utf8'));
-      if (n && Array.isArray(n.notes)) return { pending: {}, reminders: {}, qseq: 0, questions: [], ...n };
+      if (n && Array.isArray(n.notes)) return { pending: {}, reminders: {}, ...n };
     } catch {}
-    return { seq: 0, notes: [], pending: {}, reminders: {}, qseq: 0, questions: [] };
+    return { seq: 0, notes: [], pending: {}, reminders: {} };
   }
 
   // Değişmeden önceki sürüm geçmişe yazılır; kullanıcı her sürüme geri dönebilir.
@@ -217,17 +217,17 @@ class Notes {
     return note;
   }
 
-  // Notu ekleyen, kullanıcı ya da not düzenleyici değiştirebilir. expect: yazanın okuduğu sürümün updatedAt değeri;
+  // Notu ekleyen ya da kullanıcı değiştirebilir. expect: yazanın okuduğu sürümün updatedAt değeri;
   // not o zamandan beri değiştiyse yazım reddedilir. Kullanıcı gövdeyi işaretsiz gönderir, satır sahipliği sunucuda
   // yeniden hesaplanır; diğerleri kullanıcının metnini [kullanıcı] blokları içinde olduğu gibi korumak zorundadır.
-  // İçerik değiştiyse alıcılara "güncellendi" bildirimi gider; not düzenleyicinin düzenlemesi bildirilmez.
+  // İçerik değiştiyse alıcılara "güncellendi" bildirimi gider.
   update(group, id, { title, body, expect }, actor) {
     const n = this.load(group.id);
     const note = this.find(n, id);
     if (note.archived) throw new NoteError(409, `#${note.id} arşivde${note.mergedInto ? ` (#${note.mergedInto} notuyla birleştirildi)` : ''}; güncel not ${note.mergedInto ? `#${note.mergedInto}` : 'yok'}.`);
     if (expect != null && Number(expect) !== note.updatedAt) throw new NoteError(409, `#${note.id} sen okuduktan sonra değişti; not_oku ile yeniden oku, sonra düzenle.`);
-    if (actor !== 'user' && actor !== CURATOR && note.by !== actor) throw new NoteError(403, `#${note.id} notunu ${actorName(group, note.by)} ekledi; yalnızca o ya da kullanıcı değiştirebilir. Ek bilgi için yeni not ekle.`);
-    if (actor !== 'user' && note.by === 'user' && (body != null || title != null)) throw new NoteError(403, `#${note.id} kullanıcının notu; değiştirilemez. Gerekirse başka bir notla birleştir (kullanıcının metni [kullanıcı] bloğunda olduğu gibi kalmalı).`);
+    if (actor !== 'user' && note.by !== actor) throw new NoteError(403, `#${note.id} notunu ${actorName(group, note.by)} ekledi; yalnızca o ya da kullanıcı değiştirebilir. Ek bilgi için yeni not ekle.`);
+    if (actor !== 'user' && note.by === 'user' && (body != null || title != null)) throw new NoteError(403, `#${note.id} kullanıcının notu; değiştirilemez. Ek bilgi için yeni not ekle.`);
     checkLen(title, body);
     let nextTitle = note.title;
     let nextBody = note.body;
@@ -255,7 +255,7 @@ class Notes {
     note.body = nextBody;
     note.updatedAt = Date.now();
     note.updatedBy = actor;
-    if (actor !== CURATOR) this.queue(n, group, note, actor, 'edit');
+    this.queue(n, group, note, actor, 'edit');
     this.save(group.id, n);
     return note;
   }
@@ -273,52 +273,6 @@ class Notes {
     note.updatedBy = 'user';
     this.save(group.id, n);
     return note;
-  }
-
-  // Not düzenleyicinin birleştirmesi: kaynak notlar hedefe katılır ve arşive alınır (silinmez, mergedInto ile hedefi
-  // gösterir). Kaynakların ve hedefin kullanıcı metni yeni gövdede [kullanıcı] blokları içinde olduğu gibi durmalı.
-  // expect: { id: updatedAt } okunan sürümler.
-  merge(group, targetId, sourceIds, { title, body, expect }, actor) {
-    const n = this.load(group.id);
-    const target = this.find(n, targetId);
-    const ids = [...new Set((sourceIds || []).map(Number))].filter((x) => x !== target.id);
-    if (!ids.length) throw new NoteError(400, 'Birleştirilecek en az bir kaynak not gerekli.');
-    const sources = ids.map((x) => this.find(n, x));
-    const all = [target, ...sources];
-    for (const x of all) {
-      if (x.archived) throw new NoteError(409, `#${x.id} zaten arşivde${x.mergedInto ? ` (#${x.mergedInto} ile birleştirildi)` : ''}.`);
-      const e = expect && expect[x.id];
-      if (e == null) throw new NoteError(400, `#${x.id} için okuduğun sürüm (surumler alanında updatedAt) gerekli; önce not_oku.`);
-      if (Number(e) !== x.updatedAt) throw new NoteError(409, `#${x.id} sen okuduktan sonra değişti; yeniden oku.`);
-    }
-    if (target.by === 'user') throw new NoteError(403, `#${target.id} kullanıcının notu; hedef olamaz. Onu kaynak yap, metni yeni notta [kullanıcı] bloğunda kalsın.`);
-    checkLen(title, body);
-    const b = clean(body, MAX_BODY);
-    if (!b) throw new NoteError(400, 'Birleşmiş notun içeriği gerekli.');
-    const owned = all.flatMap((x) => userBlocks(x));
-    const lost = lostUserText(b, owned);
-    if (lost.length) throw new NoteError(400, `Kullanıcının yazdığı kısım yeni gövdede ${USER_OPEN} … ${USER_CLOSE} bloğu içinde olduğu gibi yok. Eksik: "${short(lost[0], 120)}"`);
-    const forged = forgedUserText(b, owned);
-    if (forged) throw new NoteError(400, `${USER_OPEN} bloğuna yalnızca kullanıcının yazdığı metin girer; kendi eklediğin metni bloğun dışına yaz. Fazla: "${short(forged, 120)}"`);
-    const now = Date.now();
-    this.remember(target);
-    if (title != null && clean(title, MAX_TITLE)) target.title = clean(title, MAX_TITLE);
-    target.body = b;
-    target.updatedAt = now;
-    target.updatedBy = actor;
-    target.to = [...new Set([...target.to, ...sources.flatMap((x) => x.to)])];
-    for (const x of sources) {
-      x.archived = true;
-      x.mergedInto = target.id;
-      x.archivedAt = now;
-      x.archivedBy = actor;
-    }
-    for (const sid of Object.keys(n.pending)) {
-      n.pending[sid] = n.pending[sid].filter((p) => !ids.includes(p.id));
-      if (!n.pending[sid].length) delete n.pending[sid];
-    }
-    this.save(group.id, n);
-    return target;
   }
 
   // Arşivdeki notu geri getirir (birleştirmenin geri alınması; hedefin önceki sürümü geçmişinde durur).
@@ -345,47 +299,6 @@ class Notes {
     }
     this.save(group.id, n);
     return { ok: true };
-  }
-
-  // Not düzenleyicinin şefe sorusu (çelişen bilgi). Toplu olarak şefe hatırlatma yoluyla iletilir (sendQuestions).
-  ask(group, text, noteIds) {
-    const n = this.load(group.id);
-    const t = clean(text, 2000);
-    if (!t) throw new NoteError(400, 'Soru boş olamaz.');
-    const ids = (noteIds || []).map(Number).filter((x) => n.notes.some((y) => y.id === x));
-    if (n.questions.some((q) => !q.answer && squash(q.text) === squash(t))) throw new NoteError(409, 'Bu soru zaten şefe soruldu, cevap bekleniyor.');
-    const q = { id: ++n.qseq, text: t, notes: ids, askedAt: Date.now(), sentAt: null, answer: null, answeredAt: null };
-    n.questions.push(q);
-    n.questions = n.questions.slice(-50);
-    this.save(group.id, n);
-    return q;
-  }
-
-  answer(group, qid, text) {
-    const n = this.load(group.id);
-    const q = n.questions.find((x) => x.id === Number(qid));
-    if (!q) throw new NoteError(404, `Soru bulunamadı: S${qid}`);
-    const t = clean(text, 4000);
-    if (!t) throw new NoteError(400, 'Cevap boş olamaz.');
-    q.answer = t;
-    q.answeredAt = Date.now();
-    this.save(group.id, n);
-    return q;
-  }
-
-  // Henüz gönderilmemiş soruları tek mesajda şefe iletir.
-  sendQuestions(group, leadId) {
-    const n = this.load(group.id);
-    const fresh = n.questions.filter((q) => !q.sentAt && !q.answer);
-    if (!fresh.length || !leadId) return 0;
-    const now = Date.now();
-    for (const q of fresh) q.sentAt = now;
-    this.save(group.id, n);
-    const text = prompts.message('not-duzenleyici-sorusu', {
-      sorular: fresh.map((q) => `- S${q.id}${q.notes.length ? ` (${q.notes.map((x) => `#${x}`).join(', ')})` : ''}: ${q.text}`).join('\n'),
-    });
-    this.remind(group, [leadId], text);
-    return fresh.length;
   }
 
   // Kullanıcının seçip gönderdiği hatırlatma (not ya da proje dokümanı, tamamı ya da bir kısmı); beklemeden iletilir.
@@ -483,35 +396,21 @@ const NOTE_TOOLS = [
   },
 ];
 
-// Yalnızca şefte: not düzenleyicinin sorularını cevaplamak için.
-const NOTE_LEAD_TOOLS = [
-  {
-    name: 'not_sorusu_cevapla',
-    description: 'Not düzenleyicinin "[Maestro · Not düzenleyici]" mesajıyla sorduğu çelişki sorusunu cevaplar; düzenleyici notları sonraki düzenlemede buna göre netleştirir.',
-    inputSchema: {
-      type: 'object',
-      properties: { soru: { type: 'number', description: 'soru numarası (S3 için 3)' }, cevap: { type: 'string', description: 'hangisinin doğru olduğu ya da doğru bilgi' } },
-      required: ['soru', 'cevap'],
-    },
-  },
-];
-
 const fmt = (ts) => new Date(ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
 
 function noteLine(group, note) {
   return `#${note.id} "${note.title}" · ${actorName(group, note.by)} · ${fmt(note.createdAt)}${note.by === 'user' ? ' · [kullanıcı notu]' : ''}`;
 }
 
-// Notun okunuşu: sahiplik açıklaması ve gövde. withVersion: düzenleyicinin yazarken vereceği sürüm.
-function noteText(group, note, withVersion) {
+// Notun okunuşu: sahiplik açıklaması ve gövde.
+function noteText(group, note) {
   const head = [`${noteLine(group, note)}${note.updatedBy ? ` (son değiştiren ${actorName(group, note.updatedBy)}, ${fmt(note.updatedAt)})` : ''}`];
-  if (withVersion) head.push(`surum: ${note.updatedAt}`);
   if (note.by === 'user') head.push('Bu notun tamamını kullanıcı yazdı.');
   else if (userBlocks(note).length) head.push(OWN_TEXT);
   return `${head.join('\n')}\n\n${note.body || '(içerik yok)'}`;
 }
 
-function readNote(notes, group, id, withVersion) {
+function readNote(notes, group, id) {
   const all = notes.load(group.id).notes;
   let note = all.find((x) => x.id === Number(id));
   if (!note) throw new NoteError(404, `Not bulunamadı: #${id}`);
@@ -523,7 +422,7 @@ function readNote(notes, group, id, withVersion) {
     prefix = `#${id} #${next.id} notuyla birleştirildi; güncel hali:\n\n`;
     note = next;
   }
-  return prefix + noteText(group, note, withVersion);
+  return prefix + noteText(group, note);
 }
 
 function listNotes(notes, group, q) {
@@ -537,7 +436,7 @@ function listNotes(notes, group, q) {
 function callNoteTool(notes, group, sid, name, args, resolve) {
   const a = args || {};
   if (name === 'not_listele') return listNotes(notes, group, clean(a.ara, 100).toLocaleLowerCase('tr'));
-  if (name === 'not_oku') return readNote(notes, group, a.id, false);
+  if (name === 'not_oku') return readNote(notes, group, a.id);
   if (name === 'not_ekle') {
     let to;
     const k = clean(a.kime, 1000);
@@ -553,89 +452,10 @@ function callNoteTool(notes, group, sid, name, args, resolve) {
     const note = notes.update(group, a.id, { title: a.baslik, body: a.icerik }, sid);
     return `Güncellendi: ${noteLine(group, note)}`;
   }
-  if (name === 'not_sorusu_cevapla') {
-    const q = notes.answer(group, a.soru, a.cevap);
-    return `S${q.id} cevabı kaydedildi; not düzenleyici notları sonraki düzenlemede buna göre netleştirecek.`;
-  }
   return undefined;
 }
 
-// ---------- not düzenleyicinin tool'ları (server/curator.js, ayrı MCP adresi) ----------
-
-const CURATOR_TOOLS = [
-  {
-    name: 'not_listele',
-    description: 'Arşivde olmayan notları listeler: numara, başlık, ekleyen, tarih, kısa önizleme.',
-    inputSchema: { type: 'object', properties: { ara: { type: 'string', description: 'başlıkta ya da içerikte geçen kelime (isteğe bağlı)' } } },
-  },
-  {
-    name: 'not_oku',
-    description: 'Bir notun tamamını ve sürümünü (surum) okur. Düzenlemeden ve birleştirmeden önce mutlaka oku.',
-    inputSchema: { type: 'object', properties: { id: { type: 'number' } }, required: ['id'] },
-  },
-  {
-    name: 'not_duzenle',
-    description: `Bir notun başlığını ya da içeriğini yeniden düzenler (tekrarları ayıklamak, toparlamak, netleştirmek). Bilgi kaybetme. ${OWN_TEXT} Kullanıcının kendi notu düzenlenemez.`,
-    inputSchema: {
-      type: 'object',
-      properties: {
-        id: { type: 'number' },
-        baslik: { type: 'string' },
-        icerik: { type: 'string', description: 'notun yeni tam içeriği' },
-        surum: { type: 'number', description: 'not_oku\'nun verdiği surum' },
-      },
-      required: ['id', 'surum'],
-    },
-  },
-  {
-    name: 'not_birlestir',
-    description: 'Aynı konudaki notları tek notta birleştirir: hedef not yeni içerikle güncellenir, kaynak notlar arşive alınır (silinmez, '
-      + `hedefi gösterir). Yeni içerik hedefin ve kaynakların tüm bilgisini taşımalı. ${OWN_TEXT} Kullanıcının notu kaynak olabilir, hedef olamaz; `
-      + `onun metni yeni içerikte ${USER_OPEN} … ${USER_CLOSE} bloğu içinde olduğu gibi yer almalı.`,
-    inputSchema: {
-      type: 'object',
-      properties: {
-        hedef: { type: 'number', description: 'kalacak notun numarası' },
-        kaynaklar: { type: 'array', items: { type: 'number' }, description: 'hedefe katılıp arşive alınacak notlar' },
-        baslik: { type: 'string' },
-        icerik: { type: 'string', description: 'birleşmiş notun tam içeriği' },
-        surumler: { type: 'object', description: 'hedef ve her kaynak için not_oku\'nun verdiği surum: {"12": 1760000000000, ...}' },
-      },
-      required: ['hedef', 'kaynaklar', 'icerik', 'surumler'],
-    },
-  },
-  {
-    name: 'sefe_sor',
-    description: 'Notlarda çelişen bilgi varsa ve hangisinin doğru olduğu notlardan ya da projeden anlaşılmıyorsa şefe sorar. '
-      + 'Sorular tur sonunda tek mesajda iletilir; cevap sonraki düzenlemede sana verilir. Çelişkiyi tahminle çözme.',
-    inputSchema: {
-      type: 'object',
-      properties: { soru: { type: 'string', description: 'çelişkiyi ve seçenekleri açıkça yaz' }, notlar: { type: 'array', items: { type: 'number' } } },
-      required: ['soru'],
-    },
-  },
-];
-
-function callCuratorTool(notes, group, name, args) {
-  const a = args || {};
-  if (name === 'not_listele') return listNotes(notes, group, clean(a.ara, 100).toLocaleLowerCase('tr'));
-  if (name === 'not_oku') return readNote(notes, group, a.id, true);
-  if (name === 'not_duzenle') {
-    const note = notes.update(group, a.id, { title: a.baslik, body: a.icerik, expect: a.surum }, CURATOR);
-    return `Düzenlendi: ${noteLine(group, note)} · yeni surum: ${note.updatedAt}`;
-  }
-  if (name === 'not_birlestir') {
-    const note = notes.merge(group, a.hedef, a.kaynaklar, { title: a.baslik, body: a.icerik, expect: a.surumler }, CURATOR);
-    return `Birleştirildi: ${noteLine(group, note)} · yeni surum: ${note.updatedAt}; ${(a.kaynaklar || []).map((x) => `#${x}`).join(', ')} arşive alındı.`;
-  }
-  if (name === 'sefe_sor') {
-    const q = notes.ask(group, a.soru, a.notlar);
-    return `Soru S${q.id} kaydedildi; tur sonunda şefe iletilecek.`;
-  }
-  throw new NoteError(400, `Bilinmeyen tool: ${name}`);
-}
-
 module.exports = {
-  Notes, NoteError, NOTE_TOOLS, NOTE_LEAD_TOOLS, CURATOR_TOOLS, CURATOR, callNoteTool, callCuratorTool,
+  Notes, NoteError, NOTE_TOOLS, callNoteTool,
   SETTLE_MS, plainBody, userBlocks, actorLabel, USER_OPEN, USER_CLOSE,
 };
