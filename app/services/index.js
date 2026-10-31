@@ -6,7 +6,7 @@ const store = require('./core/store');
 const agent = require('../agent');
 const { manager, ops, cachedQuota, meterTick, PORT } = require('./panel/context');
 const { boardIdleTick } = require('./panel/delivery');
-const { ROTATE_EVERY, pendingTick, autoRotateTick, sampleTimeline, watchTick } = require('./panel/ticks');
+const { pendingTick, sampleTimeline, watchTick } = require('./panel/ticks');
 const http = require('./panel/http');
 
 require('./routes/groups');
@@ -17,7 +17,6 @@ require('./routes/settings');
 require('./routes/caps');
 
 setInterval(pendingTick, 10000);
-setInterval(autoRotateTick, ROTATE_EVERY);
 setInterval(sampleTimeline, 2000);
 setInterval(() => { try { meterTick(); } catch (err) { console.error('[panel] ölçüm:', err.message); } }, 10000);
 setInterval(() => { try { ops.tick(); } catch (err) { console.error('[panel] bekçi hamlesi:', err.message); } }, 3000);

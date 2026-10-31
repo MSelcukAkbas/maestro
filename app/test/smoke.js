@@ -2,6 +2,8 @@
 // ve panel ayakta kalmalı. Oturum açan çağrılar istem göndermez (model harcaması yok denecek kadar az). optimize model
 // çağırdığı için e2e.js'te; open-pc masaüstünde pencere açtığı için yalnızca SMOKE_PC=1 ile.
 // Kullanım: node test/smoke.js
+const fs = require('fs');
+const path = require('path');
 const { makeDataDir, startPanel, wait, until } = require('./lib');
 
 (async () => {
@@ -25,9 +27,9 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
   };
   try {
     const st = await hit('GET', '/api/state');
-    const pid = st.projects.find((x) => require('path').resolve(x.path) === require('path').resolve(__dirname, '..', '..')).id;
+    const pid = st.projects.find((x) => path.resolve(x.path) === path.resolve(__dirname, '..', '..')).id;
     const acc = st.settings.accounts[st.settings.accounts.length - 1].id;
-    for (const u of ['/api/templates', '/api/meter', '/api/watch', '/api/quota', '/api/caps', '/api/caps/skill/yok-boyle-skill']) await hit('GET', u);
+    for (const u of ['/api/meter', '/api/watch', '/api/quota', '/api/caps']) await hit('GET', u);
     await hit('POST', '/api/projects', { path: 'C:/Windows' });
     await hit('GET', `/api/projects/${pid}/docs`);
     await hit('GET', `/api/projects/${pid}/doc?path=README.md`);
@@ -54,7 +56,6 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     await hit('POST', `/api/groups/${g.id}/notes/${nid}/unarchive`);
     await hit('DELETE', `/api/groups/${g.id}/notes/${nid}`);
     await hit('POST', `/api/groups/${g.id}/remind`, { text: 'hatırlatma', to: [sid] });
-    await hit('PUT', `/api/groups/${g.id}/watch`, { act: false });
     await hit('GET', `/api/groups/${g.id}/close`);
     // Mesaj geliştirici: boş mesaj ve bilinmeyen oturum model çağırmadan reddedilir.
     await hit('POST', `/api/sessions/${sid}/improve-prompt`, { text: ' ' }, (s) => s === 400);
@@ -88,19 +89,8 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     await hit('POST', '/api/requests/999999/approve', {});
     await hit('POST', '/api/watch/ops/yok/cancel');
 
-    // Şablon, ayar ve yetenek uçları.
-    const tpl = await hit('POST', '/api/templates', { name: 'duman şablonu', rows: [{ key: 'a', roleId: 'coder', accountId: acc, effort: 'low' }] });
-    const tid = (tpl.id) || ((await hit('GET', '/api/templates')).find((t) => t.name === 'duman şablonu') || {}).id;
-    if (tid) {
-      await hit('PUT', `/api/templates/${tid}`, { name: 'duman şablonu 2' });
-      await hit('DELETE', `/api/templates/${tid}`);
-    }
     // Rol danışmanı: bilinmeyen rol model çağırmadan 404.
     await hit('POST', '/api/roles/yok-boyle/optimize', { step: 'sorular' });
-    // Rol arşivi: liste her zaman dizi, olmayan sürüm 404.
-    const arch = await hit('GET', '/api/roles/review/archive');
-    if (!Array.isArray(arch)) fails.push('GET /api/roles/review/archive → dizi değil');
-    await hit('GET', '/api/roles/review/archive/20000101-000000', undefined, (s) => s === 404);
     const cu = await hit('GET', '/api/roles/review/cap-usage');
     if (typeof cu.oturum !== 'number' || !cu.keys) fails.push('GET /api/roles/review/cap-usage → biçim yanlış');
     await hit('GET', '/api/roles/yok-boyle/cap-usage', undefined, (s) => s === 404);
@@ -109,36 +99,21 @@ const { makeDataDir, startPanel, wait, until } = require('./lib');
     // Kaydet / geri oku: rol alanları korunmalı (boş alanların false / null'a dönmesi dışında).
     const norm = (rs) => JSON.stringify(rs.map((r) => ({ id: r.id, label: r.label, model: r.model || '', effort: r.effort || '', mode: r.permissionMode || '', persona: r.persona, gorevler: r.gorevler, sinirlar: r.sinirlar, ro: !!r.readOnly, w: r.ctxWarn || null, h: r.ctxHigh || null })));
     if (norm((saved.settings || saved).roles) !== norm(s2.settings.roles)) fails.push('PUT /api/settings rol alanlarını korumadı');
-    await hit('POST', '/api/caps/mcp', { name: 'duman-mcp', type: 'http', url: 'https://example.invalid/mcp' });
-    const mid = ((await hit('GET', '/api/caps')).mcps.find((m) => m.name === 'duman-mcp') || {}).id;
-    if (mid) {
-      await hit('PUT', `/api/caps/mcp/${mid}`, { name: 'duman-mcp', type: 'http', url: 'https://example.invalid/mcp2' });
-      await hit('DELETE', `/api/caps/mcp/${mid}`);
-    }
-    await hit('POST', '/api/caps/skill', { mode: 'text', name: 'duman-skill', description: 'test', body: 'gövde' });
-    await hit('PUT', '/api/caps/role', { key: 'pskill:duman-skill', roleId: 'coder', on: true });
+    // Bekçi düğmesi yalnızca { watch: { anahtar } } gönderir: roller, hesaplar ve diğer bekçi ayarları değişmemeli.
+    const w0 = (await hit('GET', '/api/watch')).settings;
+    await hit('PUT', '/api/settings', { watch: { ai: !w0.ai } });
+    const s3 = await hit('GET', '/api/state');
+    const w1 = (await hit('GET', '/api/watch')).settings;
+    if (norm(s3.settings.roles) !== norm(s2.settings.roles) || s3.settings.accounts.length !== s2.settings.accounts.length) fails.push('kısmi PUT /api/settings rolleri ya da hesapları değiştirdi');
+    if (w1.ai === w0.ai || JSON.stringify({ ...w1, ai: w0.ai }) !== JSON.stringify(w0)) fails.push('kısmi bekçi kaydı diğer bekçi ayarlarını değiştirdi');
+    await hit('PUT', '/api/settings', { watch: { ai: w0.ai } });
+    // Depodaki skill rol ataması (test paneli prompts/ kopyasına yazar) ve global skill'i rolde kapatma.
+    await hit('PUT', '/api/caps/role', { key: 'pskill:security-and-hardening', roleId: 'coder', on: true });
+    await hit('PUT', '/api/caps/role', { key: 'pskill:security-and-hardening', roleId: 'coder', on: false });
     await hit('PUT', '/api/caps/role', { keys: ['skill:dataviz'], roleId: 'coder', on: false });
     await hit('PUT', '/api/caps/role', { keys: ['skill:dataviz'], roleId: 'coder', on: true });
-    await hit('DELETE', '/api/caps/skill/duman-skill');
-
-    // Zip'ten skill yükleme: geçici klasördeki SKILL.md sıkıştırılıp gönderilir, sonra silinir.
-    const os = require('os');
-    const fs = require('fs');
-    const path = require('path');
-    const { execFileSync } = require('child_process');
-    const zdir = fs.mkdtempSync(path.join(os.tmpdir(), 'duman-zip-'));
-    fs.mkdirSync(path.join(zdir, 'duman-zip'));
-    fs.writeFileSync(path.join(zdir, 'duman-zip', 'SKILL.md'), '---\nname: duman-zip\ndescription: test\n---\ngövde\n');
-    const zip = path.join(zdir, 'skill.zip');
-    execFileSync('powershell', ['-NoProfile', '-Command', `Compress-Archive -Path '${path.join(zdir, 'duman-zip')}' -DestinationPath '${zip}'`]);
-    calls++;
-    const zr = await fetch('http://127.0.0.1:7799/api/caps/skill-zip?name=duman-zip', { method: 'POST', headers: { 'x-panel-token': p.token }, body: fs.readFileSync(zip) });
-    if (!zr.ok) fails.push(`POST /api/caps/skill-zip → ${zr.status} ${(await zr.json().catch(() => ({}))).error || ''}`);
-    else if (!(await hit('GET', '/api/caps')).skills.some((x) => x.name === 'duman-zip')) fails.push('zip skill listede yok');
-    await hit('DELETE', '/api/caps/skill/duman-zip');
-
-    // MCP sınaması: geçersiz komut açılmadığını bildirmeli (500 değil).
-    await hit('POST', '/api/caps/test', { config: { type: 'stdio', command: 'boyle-bir-komut-yok', args: [] } });
+    // MCP sınaması: hesapta olmayan MCP 404 (500 değil).
+    await hit('POST', '/api/caps/test', { key: 'mcp:yok-boyle-mcp' });
 
     // Windows başlangıcı: durum tersine çevrilip eski haline getirilir (kullanıcının ayarı değişmez).
     const auto = (await hit('GET', '/api/state')).autostart;

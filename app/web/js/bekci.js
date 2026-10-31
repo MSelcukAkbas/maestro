@@ -31,9 +31,9 @@ function logKind(x) {
   const m = /^(karar|tamamlandı|olmadı|iptal):/.exec(x.text);
   return m ? { karar: ['karar', 'idle'], 'tamamlandı': ['yapıldı', 'busy'], 'olmadı': ['olmadı', 'danger'], iptal: ['iptal', ''] }[m[1]] : ['kayıt', ''];
 }
-// Grubun bekçi ayarı: genel ayar (Ayarlar → Genel) üstüne grubun kendi açık/kapalı seçimleri.
-function groupWatch(g) {
-  return { ...WATCH_DEFAULTS, ...((state.settings && state.settings.watch) || {}), ...((g && g.watch) || {}) };
+// Geçerli bekçi ayarı (Ayarlar → Genel); bütün gruplar için tektir.
+function watchCfg() {
+  return { ...WATCH_DEFAULTS, ...((state.settings && state.settings.watch) || {}) };
 }
 function bekciModeText(cfg) {
   return !cfg.enabled ? 'kapalı' : !cfg.act ? 'öneri modu: hamleleri uygulamaz, yalnızca bildirir' : `hamleleri kendisi yapar · karar: ${cfg.ai ? 'Haiku' : 'panel kuralları'}`;
@@ -57,7 +57,7 @@ const Bekci = {
     this.render(g);
   },
 
-  // Görünümdeki düğmeler: grup ayarı ve işlem iptali. Çalışma ekranı açılırken bir kez bağlanır.
+  // Görünümdeki düğmeler: bekçi ayarı ve işlem iptali. Çalışma ekranı açılırken bir kez bağlanır.
   bind(box, group) {
     box.addEventListener('click', async (e) => {
       const b = e.target.closest('[data-bk-cancel]');
@@ -71,8 +71,7 @@ const Bekci = {
     box.addEventListener('change', async (e) => {
       const k = e.target.dataset && e.target.dataset.bkSet;
       if (!k) return;
-      const g = group();
-      if (await act(() => api('PUT', `/api/groups/${g.id}/watch`, { [k]: e.target.checked }), 'Bu grubun bekçi ayarı kaydedildi.')) {
+      if (await act(() => api('PUT', '/api/settings', { watch: { [k]: e.target.checked } }), 'Bekçi ayarı kaydedildi (bütün gruplar).')) {
         await refresh().catch(() => {});
         this.loadedAt = 0;
         this.refresh(group());
@@ -101,19 +100,17 @@ const Bekci = {
     };
     const stat = (label, value, sub) => `<div class="card bk-stat"><span class="note">${label}</span><strong>${value}</strong>${sub ? `<span class="note">${sub}</span>` : ''}</div>`;
     const toggle = (k, label) => `<label class="check bk-toggle"><input type="checkbox" data-bk-set="${k}" ${cfg[k] ? 'checked' : ''}>${label}</label>`;
-    const own = d.groupWatch || {};
     const keepScroll = box.scrollTop;
     box.innerHTML = `
         <div class="bk-page">
           <div class="bk-head">
             <div>
               <h2>Bekçi</h2>
-              <div class="note">Bu grubun kota ve context düzenini yönetir: compact, hesap taşıma ve yenilemeyi kendisi yapar; şefe yalnızca proje kararı gerektiren durumları yazar.</div>
+              <div class="note">Kota ve context düzenini yönetir: compact, hesap taşıma ve yenilemeyi kendisi yapar; şefe yalnızca proje kararı gerektiren durumları yazar. Buradaki düğmeler bütün grupların bekçisini değiştirir.</div>
             </div>
             <div class="actions">${toggle('enabled', 'Açık')}${toggle('act', 'Hamleleri kendisi yapsın')}${toggle('ai', 'Kararı Haiku versin')}
-              <a class="btn small ghost" href="#/ayarlar/genel" title="Eşikler ve yeni grupların varsayılanı">Eşikler</a></div>
+              <a class="btn small ghost" href="#/ayarlar/genel" title="Bekçi eşikleri">Eşikler</a></div>
           </div>
-          ${Object.keys(own).length ? '<div class="note">Bu grup için ayrı ayar yapıldı; diğer gruplar Ayarlar → Genel\'deki varsayılanı kullanır.</div>' : ''}
           <div class="bk-stats">
             ${stat('Durum', cfg.enabled ? 'Açık' : 'Kapalı', esc(bekciModeText(cfg)))}
             ${stat('Süren işlem', ops.length, ops.length ? esc(ops.map((o) => OP_TEXT[o.kind]).join(', ')) : 'yok')}

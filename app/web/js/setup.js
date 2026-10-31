@@ -1,4 +1,4 @@
-// Maestro arayüzü · Kurulum ekranı: ekip satırları, roller, hesaplar, yetenekler, optimize, şablonlar.
+// Maestro arayüzü · Kurulum ekranı: ekip satırları, roller, hesaplar, yetenekler, optimize.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -15,8 +15,8 @@ const MODELS = [['', 'Hesap varsayılanı'], ['opus', 'Opus'], ['sonnet', 'Sonne
 const EFFORTS = [['', 'Model varsayılanı'], ['low', 'Düşük'], ['medium', 'Orta'], ['high', 'Yüksek'], ['xhigh', 'Çok yüksek'], ['max', 'En yüksek']];
 // Skill listesinde ölçülen oran: 16,2k karakter kapatınca istek başına ~5,4k token düştü.
 const CHARS_PER_TOK = 3;
-// Yetenek grupları (services/caps.js inventory türleri; panel: panelden eklenenler).
-const CAP_GROUPS = [['plugin', 'Eklentiler'], ['skill', 'Hesap skill\'leri'], ['project', 'Proje skill\'leri'], ['synced', 'claude.ai skill\'leri'], ['bundled', 'Claude Code yerleşik skill\'leri'], ['mcp', 'MCP sunucuları'], ['panel', 'Panel yetenekleri']];
+// Yetenek grupları (services/caps.js inventory türleri; panel: depodaki skills/).
+const CAP_GROUPS = [['plugin', 'Eklentiler'], ['skill', 'Hesap skill\'leri'], ['project', 'Proje skill\'leri'], ['synced', 'claude.ai skill\'leri'], ['bundled', 'Claude Code yerleşik skill\'leri'], ['mcp', 'MCP sunucuları'], ['panel', 'Panel skill\'leri']];
 
 let rowSeq = 0;
 const newRow = (roleId, accountId, extra = {}) => ({
@@ -100,7 +100,7 @@ const SetupView = {
     api('GET', '/api/caps').then((c) => { this.capsData = c; if ($('#setup')) this.render(); }).catch(() => {});
   },
 
-  // Yetenek kataloğu: hesaplarda kurulu olanlar ve panelden eklenenler, satırdaki anahtar biçimiyle.
+  // Yetenek kataloğu: hesaplarda kurulu olanlar ve depodaki skill'ler, satırdaki anahtar biçimiyle.
   capCatalog() {
     const c = this.capsData;
     if (!c) return [];
@@ -110,7 +110,6 @@ const SetupView = {
         key: x.key, kind: x.kind, group: x.kind, name: x.kind === 'synced' ? x.name.replace(/^[^:]+:/, '') : x.name,
         desc: x.description || '', chars: x.chars || 0, hooks: !!x.hooks,
       })),
-      ...(c.mcps || []).map((m) => ({ key: `pmcp:${m.id}`, kind: 'mcp', group: 'panel', name: m.name, desc: m.url || m.command || '', chars: 0 })),
       ...(c.skills || []).map((k) => ({ key: `pskill:${k.name}`, kind: 'skill', group: 'panel', name: k.name, desc: k.description || '', chars: 0 })),
     ];
   },
@@ -144,7 +143,7 @@ const SetupView = {
     if (!c) return false;
     if (/^(plugin|skill|mcp):/.test(key)) return !(c.globalOff[key] || []).includes(row.roleId);
     if (row.roleId === 'custom') return false;
-    const m = key.startsWith('pmcp:') ? (c.mcps || []).find((x) => `pmcp:${x.id}` === key) : (c.skills || []).find((x) => `pskill:${x.name}` === key);
+    const m = (c.skills || []).find((x) => `pskill:${x.name}` === key);
     return !!(m && m.roles.includes(row.roleId));
   },
 
@@ -226,31 +225,6 @@ const SetupView = {
     return lines.join('\n');
   },
 
-  // Şablon satırları yeni anahtarlarla eklenir; rapor bağlantıları yeni anahtarlara çevrilir.
-  // Artık olmayan rol ya da hesap varsa satır ilk rol / ilk hesapla gelir.
-  rowsFromTemplate(tpl) {
-    const roles = state.settings.roles.map((r) => r.id);
-    const accs = state.settings.accounts.map((a) => a.id);
-    const map = new Map();
-    const rows = tpl.rows.map((t) => {
-      const roleId = t.roleId === 'custom' || roles.includes(t.roleId) ? t.roleId : roles[0];
-      const r = newRow(roleId, accs.includes(t.accountId) ? t.accountId : accs[0], {
-        model: t.model || '', effort: t.effort || '', permissionMode: t.permissionMode || '', talkAll: !!t.talkAll,
-        customLabel: t.customLabel || '', customPrompt: t.customPrompt || '',
-        prompt: t.prompt || null, promptManual: !!t.prompt,
-        caps: { on: [...((t.caps && t.caps.on) || [])], off: [...((t.caps && t.caps.off) || [])] },
-      });
-      map.set(t.key, r.key);
-      r.tplReports = t.reportsTo || [];
-      return r;
-    });
-    for (const r of rows) {
-      r.reportsTo = r.tplReports.map((k) => map.get(k)).filter(Boolean);
-      delete r.tplReports;
-    }
-    return rows;
-  },
-
   quotaWarnings() {
     const seen = new Set();
     const lines = [];
@@ -263,32 +237,6 @@ const SetupView = {
       else if (left != null && left < 15) lines.push(`${a ? a.name : r.accountId} hesabında %${left} kota kaldı; uzun işte yarıda kalabilir.`);
     }
     return lines.length ? `<div class="warnbox">${lines.map(esc).join('<br>')}</div>` : '';
-  },
-
-  templatesHtml() {
-    const p = this.project;
-    const list = (state.templates || []).filter((t) => t.scope === 'global' || t.scope === p.id);
-    return `
-        <details class="card tpl-card" ${list.length ? 'open' : ''}>
-          <summary><strong>Şablonlar</strong> <span class="note">${list.length} kullanılabilir</span></summary>
-          <div class="tpl-body">
-            ${list.length ? list.map((t) => `
-              <div class="tpl-row">
-                <div class="info">
-                  <div style="font-weight: 500">${esc(t.name)} <span class="badge">${t.scope === 'global' ? 'genel' : esc(p.name)}</span></div>
-                  <div class="note">${t.rows.length} oturum · ${esc(t.rows.map((r) => r.roleId === 'custom' ? r.customLabel : ((state.settings.roles.find((x) => x.id === r.roleId) || {}).label || r.roleId)).join(', '))}</div>
-                </div>
-                <button class="btn small primary" data-act="tpl-append" data-tid="${esc(t.id)}">Alta ekle</button>
-                <button class="btn small" data-act="tpl-load" data-tid="${esc(t.id)}">Yükle (değiştir)</button>
-                <button class="btn small ghost" data-act="tpl-del" data-tid="${esc(t.id)}" aria-label="Şablonu sil" title="Şablonu sil">✕</button>
-              </div>`).join('') : '<div class="note">Henüz şablon yok. Aşağıdaki satırları kurup şablon olarak kaydedebilirsin.</div>'}
-            <div class="tpl-save">
-              <input id="tpl-name" placeholder="Şablon adı" maxlength="60" aria-label="Şablon adı">
-              <select id="tpl-scope" aria-label="Şablon kapsamı"><option value="${esc(p.id)}">Sadece ${esc(p.name)}</option><option value="global">Tüm projeler</option></select>
-              <button class="btn small" data-act="tpl-save">Mevcut kurulumu kaydet</button>
-            </div>
-          </div>
-        </details>`;
   },
 
   // Rol dağılımına göre bağlantıları kurar. Düzenler: zincir (kod yazan → kod kalitesi → review → şef; diğerleri şefe),
@@ -397,38 +345,6 @@ const SetupView = {
       this.autoLinks();
       this.syncFlow();
       this.render();
-    } else if (a === 'tpl-append' || a === 'tpl-load') {
-      const tpl = (state.templates || []).find((t) => t.id === btn.dataset.tid);
-      if (!tpl) return;
-      if (a === 'tpl-load') {
-        this.form.rows = [];
-        this.form.permissionMode = tpl.permissionMode || this.form.permissionMode;
-      }
-      this.form.rows.push(...this.rowsFromTemplate(tpl));
-      // Şablonun kendi bağlantıları korunur; alta eklenen satırlar için düzen yeniden kurulur.
-      if (a === 'tpl-load') this.form.linkStyle = 'elle';
-      else this.autoLinks();
-      this.syncFlow();
-      this.render();
-      toast(a === 'tpl-load' ? `"${tpl.name}" yüklendi.` : `"${tpl.name}" alta eklendi.`);
-    } else if (a === 'tpl-del') {
-      const tpl = (state.templates || []).find((t) => t.id === btn.dataset.tid);
-      if (!tpl || !confirm(`"${tpl.name}" şablonu silinsin mi?`)) return;
-      if (await act(() => api('DELETE', `/api/templates/${tpl.id}`), 'Şablon silindi.')) {
-        await refresh().catch(() => {});
-        this.render();
-      }
-    } else if (a === 'tpl-save') {
-      const name = $('#tpl-name').value.trim();
-      if (!name) return toast('Şablon adı yaz.', true);
-      if (!this.form.rows.length) return toast('Kaydedilecek satır yok.', true);
-      const saved = await act(() => api('POST', '/api/templates', {
-        name, scope: $('#tpl-scope').value, permissionMode: this.form.permissionMode, rows: this.form.rows,
-      }), 'Şablon kaydedildi.');
-      if (saved) {
-        await refresh().catch(() => {});
-        this.render();
-      }
     } else if (a === 'regen-flow') {
       this.form.flowAuto = true;
       this.syncFlow();
@@ -667,7 +583,6 @@ const SetupView = {
               <div class="field"><label for="g-links">Bağlantı düzeni</label>
                 <select id="g-links" data-f="linkStyle" title="Rol ekleyip çıkardıkça kim kime rapor verecek kendiliğinden ayarlanır; bir bağlantıyı elle değiştirince düzen Elle'ye geçer">${LINK_STYLES.map(([v, l]) => opt(v, l, f.linkStyle || 'zincir')).join('')}</select></div>
             </div>
-            ${this.templatesHtml()}
             ${rowsHtml}
             <button class="btn ghost" data-act="add" style="border-style: dashed; color: var(--accent)">${ICON_PLUS} Satır ekle</button>
             <div class="field"><label for="g-task">İlk görev</label>

@@ -97,14 +97,14 @@ function updateNotifCount() {
 function renderNotif(seenBefore) {
   const evs = ((state && state.events) || []).slice().reverse().slice(0, 50);
   notifShownTop = evs.length ? evs[0].id : 0;
-  // Bekçi grup başına çalışır: çalışan her grubun bekçisi ayrı satır, tıklayınca o grubun Bekçi görünümü.
+  // Çalışan her grubun bekçisi ayrı satır (ayar bütün gruplar için tek), tıklayınca o grubun Bekçi görünümü.
   const active = ((state && state.groups) || []).filter((g) => g.state === 'active');
   const gName = (gid) => ((state.groups || []).find((g) => g.id === gid) || {}).name;
   const bekciHref = (gid) => `#/g/${encodeURIComponent(gid)}?view=bekci`;
   notifPop.innerHTML = `
       <div class="kv"><strong>Bildirimler</strong><span class="note">panel ve yardımcı modeller</span></div>
       ${active.map((g) => {
-      const cfg = groupWatch(g);
+      const cfg = watchCfg();
       return `<a class="notif-helper" href="${bekciHref(g.id)}"><span class="dot ${cfg.enabled ? 'busy' : ''}"></span><span><strong>Bekçi · ${esc(g.name)}</strong><span class="note">${esc(bekciModeText(cfg))}</span></span><span class="grow"></span>${ICON_CHEV}</a>`;
     }).join('')}
       <div class="notif-list">${evs.length ? evs.map((e) => {

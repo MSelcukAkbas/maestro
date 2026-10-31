@@ -1,4 +1,4 @@
-// Maestro arayüzü · Ayarlar: hesaplar, roller, yetenekler, genel, şablonlar, sistem.
+// Maestro arayüzü · Ayarlar: hesaplar, roller, yetenekler, genel, sistem.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -8,43 +8,13 @@ const COLORS = [['blue', 'Mavi'], ['amber', 'Turuncu'], ['violet', 'Mor'], ['gre
 
 const SETTINGS_TABS = [
   ['hesaplar', 'Hesaplar'], ['roller', 'Roller'], ['yetenekler', 'Yetenekler'],
-  ['genel', 'Genel'], ['sablonlar', 'Şablonlar'], ['sistem', 'Sistem'],
+  ['genel', 'Genel'], ['sistem', 'Sistem'],
 ];
 // "Ayarları kaydet" ile kaydedilen sekmeler; diğerlerindeki işlemler hemen uygulanır.
 const FORM_TABS = ['hesaplar', 'roller', 'genel'];
 const CAP_KIND = { plugin: 'eklenti', skill: 'skill', mcp: 'MCP' };
 // Salt okunur rolde kapatılan araçlar (services/core/prompts.js READ_ONLY_TOOLS ile aynı).
 const READ_ONLY_TOOLS = ['Edit', 'Write', 'NotebookEdit'];
-
-// İki satır listesinin farkı (en uzun ortak alt dizi): [{ t: ' ' | '-' | '+', s }]. Rol metinleri kısa, O(n·m) yeter.
-function lineDiff(a, b) {
-  const n = a.length;
-  const m = b.length;
-  const L = Array.from({ length: n + 1 }, () => new Uint16Array(m + 1));
-  for (let i = n - 1; i >= 0; i--) for (let j = m - 1; j >= 0; j--) L[i][j] = a[i] === b[j] ? L[i + 1][j + 1] + 1 : Math.max(L[i + 1][j], L[i][j + 1]);
-  const out = [];
-  let i = 0;
-  let j = 0;
-  while (i < n && j < m) {
-    if (a[i] === b[j]) { out.push({ t: ' ', s: a[i] }); i++; j++; }
-    else if (L[i + 1][j] >= L[i][j + 1]) out.push({ t: '-', s: a[i++] });
-    else out.push({ t: '+', s: b[j++] });
-  }
-  while (i < n) out.push({ t: '-', s: a[i++] });
-  while (j < m) out.push({ t: '+', s: b[j++] });
-  return out;
-}
-
-// "KEY=değer" / "Ad: değer" satırları ile nesne arasında.
-const pairsToText = (o, sep) => Object.entries(o || {}).map(([k, v]) => `${k}${sep}${v}`).join('\n');
-function textToPairs(t, sep) {
-  const out = {};
-  for (const line of String(t || '').split(/\r?\n/)) {
-    const i = line.indexOf(sep);
-    if (i > 0) out[line.slice(0, i).trim()] = line.slice(i + sep.length).trim();
-  }
-  return out;
-}
 
 // Rollerin varsayılan bağlam profili (services/watch.js ROLE_CTX ile aynı): [eşik, üst sınır].
 const ROLE_CTX_DEFAULTS = { sef: [500000, 700000], coder: [250000, 500000], review: [200000, 400000], arastirma: [150000, 300000] };
@@ -67,9 +37,6 @@ const SettingsView = {
     this.roleId = this.tab === 'roller' && role ? decodeURIComponent(role) : null;
     // Rol danışmanının açık kartı: { rid, busy, questions, changes, … }.
     this.ropt = null;
-    // Rol arşivleri (rolId → liste | { loading } | { error }) ve açık sürüm { rid, id, entry }.
-    this.archives = {};
-    this.archOpen = null;
     // Rol sayfasındaki yeteneklerin kullanım sayıları (rolId → { oturum, keys } | { loading } | { error }).
     this.capUse = {};
     this.caps = null;
@@ -100,148 +67,6 @@ const SettingsView = {
       this.capUse[rid] = { error: err.message };
     }
     if ($('#settings') && this.roleId === rid) this.renderBody();
-  },
-
-  // ---------- rol arşivi ----------
-
-  async loadArchive(rid) {
-    this.archives[rid] = { loading: true };
-    try {
-      this.archives[rid] = await api('GET', `/api/roles/${encodeURIComponent(rid)}/archive`);
-    } catch (err) {
-      this.archives[rid] = { error: err.message };
-    }
-    if ($('#settings') && this.roleId === rid) this.renderBody();
-  },
-
-  // Arşivdeki dosyaları formdaki karşılıklarıyla karşılaştırılabilir metne çevirir (json'da yalnızca formdaki alanlar).
-  archiveTexts(r, files) {
-    const out = [];
-    const pick = (o, keys) => JSON.stringify(Object.fromEntries(keys.map((k) => [k, o[k] ?? null])), null, 2);
-    const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
-    for (const [name, raw] of Object.entries(files)) {
-      const md = name.match(/^(persona|gorevler|sinirlar)\.md$/);
-      if (md) {
-        out.push({ name, title: { persona: 'Persona', gorevler: 'Görevler', sinirlar: 'Sınırlar' }[md[1]], old: raw.replace(/\n+$/, ''), cur: String(r[md[1]] || '').replace(/\n+$/, '') });
-        continue;
-      }
-      let j = {};
-      try { j = JSON.parse(raw); } catch {}
-      if (name === 'role.json') {
-        const keys = ['label', 'short', 'model', 'effort', 'ctxWarn', 'ctxHigh', 'sessiz'];
-        out.push({ name, title: 'Genel ve bağlam', old: pick({ ...j, sessiz: j.sessiz === true }, keys), cur: pick({ ...r, ctxWarn: r.ctxWarn || null, ctxHigh: r.ctxHigh || null, sessiz: !!r.sessiz }, keys) });
-      } else if (name === 'permissions.json') {
-        out.push({ name, title: 'İzinler', old: pick(j, ['mode', 'allow', 'deny']), cur: pick({ mode: r.permissionMode || '', allow: lines(r.allowText), deny: [...(r.readOnly ? READ_ONLY_TOOLS : []), ...lines(r.denyText)] }, ['mode', 'allow', 'deny']) });
-      }
-    }
-    return out;
-  },
-
-  // Eski sürümü forma yükler (yalnızca o kayıtta değişen dosyalar); kaydedince şimdiki hal de arşive girer.
-  restoreArchive(r, entry) {
-    for (const [name, raw] of Object.entries(entry.files)) {
-      const md = name.match(/^(persona|gorevler|sinirlar)\.md$/);
-      if (md) {
-        r[md[1]] = raw.replace(/\n+$/, '');
-        continue;
-      }
-      let j;
-      try { j = JSON.parse(raw); } catch { continue; }
-      if (name === 'role.json') {
-        for (const k of ['label', 'short', 'model', 'effort']) if (typeof j[k] === 'string') r[k] = j[k];
-        r.ctxWarn = j.ctxWarn || null;
-        r.ctxHigh = j.ctxHigh || null;
-        r.sessiz = j.sessiz === true;
-      } else if (name === 'permissions.json') {
-        const deny = Array.isArray(j.deny) ? j.deny : [];
-        r.permissionMode = j.mode || '';
-        r.readOnly = READ_ONLY_TOOLS.every((t) => deny.includes(t));
-        r.allowText = (Array.isArray(j.allow) ? j.allow : []).join('\n');
-        r.denyText = deny.filter((t) => !READ_ONLY_TOOLS.includes(t)).join('\n');
-      }
-    }
-    r.archiveNote = { kaynak: 'geri yükleme', geriYuklenen: entry.id };
-  },
-
-  async onArchive(a, b) {
-    const r = this.model.roles.find((x) => x.id === this.roleId);
-    if (!r) return;
-    if (a === 'arch-close') {
-      this.archOpen = null;
-      return this.renderBody();
-    }
-    const id = b.dataset.aid;
-    const entry = await act(() => api('GET', `/api/roles/${encodeURIComponent(r.id)}/archive/${encodeURIComponent(id)}`));
-    if (!entry) return;
-    if (a === 'arch-show') {
-      this.archOpen = { rid: r.id, id, entry };
-      this.renderBody();
-      const el = $(`#arch-${id}`);
-      if (el) el.scrollIntoView({ block: 'nearest' });
-    } else if (a === 'arch-restore') {
-      if (!confirm('Bu sürüm forma yüklensin mi? "Ayarları kaydet" ile yazılır; şimdiki hal de arşive girer.')) return;
-      this.restoreArchive(r, entry);
-      this.archOpen = null;
-      this.dirty = true;
-      this.renderHead();
-      this.renderBody();
-      window.scrollTo(0, 0);
-      toast('Eski sürüm forma yüklendi. Dosyaya yazmak için "Ayarları kaydet".');
-    }
-  },
-
-  roleArchiveSection(r) {
-    const list = this.archives[r.id];
-    if (!list) {
-      this.loadArchive(r.id);
-      return '';
-    }
-    let body;
-    if (list.loading) body = '<p class="note">Geçmiş yükleniyor…</p>';
-    else if (list.error) body = `<p class="note warn-note">Geçmiş alınamadı: ${esc(list.error)}</p>`;
-    else if (!list.length) body = '<p class="note">Henüz arşiv yok. Bu rolü panelden her kaydettiğinde değişen dosyaların eski hali burada saklanır.</p>';
-    else {
-      const KAYNAK = { elle: 'elle', 'rol danışmanı': 'rol danışmanı', 'geri yükleme': 'geri yükleme' };
-      const NAMES = { 'persona.md': 'persona', 'gorevler.md': 'görevler', 'sinirlar.md': 'sınırlar', 'role.json': 'genel', 'permissions.json': 'izinler' };
-      body = `<div class="card cap-list">${list.map((x) => {
-        const open = this.archOpen && this.archOpen.rid === r.id && this.archOpen.id === x.id;
-        return `
-          <div class="arch-row" id="arch-${esc(x.id)}">
-            <div class="cap-head">
-              <span class="cap-name">${esc(x.zaman ? new Date(x.zaman).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : x.id)}</span>
-              <span class="badge${x.kaynak === 'rol danışmanı' ? ' acc-green' : ''}">${esc(KAYNAK[x.kaynak] || x.kaynak || 'elle')}</span>
-              <span class="note">${esc((x.dosyalar || []).map((f) => NAMES[f] || f).join(', '))} değişmeden önceki hali</span>
-              <span class="grow"></span>
-              <button class="btn small ghost" data-act="${open ? 'arch-close' : 'arch-show'}" data-aid="${esc(x.id)}" aria-expanded="${open}">${open ? 'Gizle' : 'Farkı göster'}</button>
-              <button class="btn small" data-act="arch-restore" data-aid="${esc(x.id)}">Geri yükle</button>
-            </div>
-            ${x.kaynak === 'rol danışmanı' && x.uygulanan && x.uygulanan.length ? `<div class="cap-desc">Danışmanın uyguladığı: ${esc(x.uygulanan.map((u) => u.neden || u.alan).join(' · ').slice(0, 300))}</div>` : ''}
-            ${x.geriYuklenen ? `<div class="cap-desc">${esc(x.geriYuklenen)} sürümü geri yüklenmeden önceki hal.</div>` : ''}
-            ${open ? this.archiveDiff(r, this.archOpen.entry) : ''}
-          </div>`;
-      }).join('')}</div>`;
-    }
-    return `
-        <section class="section">
-          <div class="section-head"><h2>Geçmiş</h2><span class="count">panelden yapılan kayıtlar · son 30 sürüm</span></div>
-          ${body}
-        </section>`;
-  },
-
-  // Arşivdeki hal (−) ile formdaki şimdiki hal (+) arasındaki satır farkı; değişmeyen uzun bölümler kısaltılır.
-  archiveDiff(r, entry) {
-    const parts = this.archiveTexts(r, entry.files).map((f) => {
-      const d = lineDiff(f.old.split('\n'), f.cur.split('\n'));
-      if (d.every((x) => x.t === ' ')) return `<div class="arch-file"><div class="ropt-field">${esc(f.title)}</div><p class="note">Şimdiki halle aynı.</p></div>`;
-      const shown = [];
-      d.forEach((x, i) => {
-        const near = d.slice(Math.max(0, i - 1), i + 2).some((y) => y.t !== ' ');
-        if (x.t !== ' ' || near) shown.push(x);
-        else if (shown.length && shown[shown.length - 1].t !== '…') shown.push({ t: '…', s: '' });
-      });
-      return `<div class="arch-file"><div class="ropt-field">${esc(f.title)}</div><pre class="arch-diff">${shown.map((x) => (x.t === '…' ? '<span class="dm">…</span>' : `<span class="${x.t === '-' ? 'dl' : x.t === '+' ? 'da' : 'dc'}">${x.t} ${esc(x.s)}</span>`)).join('\n')}</pre></div>`;
-    });
-    return `<div class="arch-diffs"><p class="note">− arşivdeki hal · + formdaki şimdiki hal</p>${parts.join('')}</div>`;
   },
 
   setDirty() {
@@ -331,8 +156,6 @@ const SettingsView = {
       this.renderHead();
     } else if (a.startsWith('ropt-')) {
       this.onRoleOpt(a);
-    } else if (a.startsWith('arch-')) {
-      this.onArchive(a, b);
     } else if (a === 'role-open') {
       this.openRole(b.dataset.rid);
     } else if (a === 'role-back') {
@@ -352,12 +175,9 @@ const SettingsView = {
       const lines = (t) => String(t || '').split(/\r?\n/).map((s) => s.trim()).filter(Boolean);
       const body = {
         accounts: this.model.accounts,
-        roles: this.model.roles.map(({ allowText, denyText, archiveNote, ...r }) => ({ ...r, allow: lines(allowText), deny: lines(denyText) })),
-        // Rol arşivine yazılacak not: danışmanın uyguladığı öneriler ya da geri yüklenen sürüm.
-        roleNotes: Object.fromEntries(this.model.roles.filter((r) => r.archiveNote).map((r) => [r.id, r.archiveNote])),
+        roles: this.model.roles.map(({ allowText, denyText, ...r }) => ({ ...r, allow: lines(allowText), deny: lines(denyText) })),
         allowedDirs: this.model.allowedText.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
         port: Number(this.model.port),
-        autoRotate: !!this.model.autoRotate,
         watch: Object.fromEntries(Object.keys(WATCH_DEFAULTS).map((k) => {
           const v = this.model[`watch.${k}`] ?? (this.model.watch || {})[k] ?? WATCH_DEFAULTS[k];
           return [k, typeof WATCH_DEFAULTS[k] === 'boolean' ? !!v : Number(v)];
@@ -367,9 +187,6 @@ const SettingsView = {
       const r = await act(() => api('PUT', '/api/settings', body), 'Ayarlar kaydedildi.');
       if (r) {
         this.dirty = false;
-        for (const x of this.model.roles) delete x.archiveNote;
-        // Kayıt arşive yeni sürüm ekleyebilir; açık rol sayfası geçmişi yeniden okur.
-        this.archives = {};
         await refresh().catch(() => {});
         this.renderHead();
         this.loadCaps();
@@ -398,13 +215,6 @@ const SettingsView = {
     } else if (a === 'shutdown') {
       if (!confirm('Sunucu kapatılsın mı? Paneldeki tüm oturumlar da kapanır (sonra "Grubu devam ettir" ile açılabilir).')) return;
       if (await act(() => api('POST', '/api/shutdown'))) toast('Sunucu kapanıyor.');
-    } else if (a === 'tpl-del') {
-      const t = (state.templates || []).find((x) => x.id === b.dataset.tid);
-      if (!t || !confirm(`"${t.name}" şablonu silinsin mi?`)) return;
-      if (await act(() => api('DELETE', `/api/templates/${t.id}`), 'Şablon silindi.')) {
-        await refresh().catch(() => {});
-        this.renderBody();
-      }
     } else if (a === 'rotate') {
       if (!confirm('Erişim anahtarı yenilensin mi? Açık olan diğer panel sekmeleri ve PC pencereleri yeniden bağlanmak zorunda kalır.')) return;
       const r = await act(() => api('POST', '/api/token/rotate'), 'Erişim anahtarı yenilendi.');
@@ -423,27 +233,7 @@ const SettingsView = {
     } else if (a === 'cap-all') {
       this.setCapAllRoles(b.dataset.key, b.dataset.on === '1');
     } else if (a === 'cap-test') {
-      this.testCap(b.dataset.key, b.dataset.id ? { id: b.dataset.id } : { key: b.dataset.key });
-    } else if (a === 'mcp-new') {
-      this.openMcp(null);
-    } else if (a === 'mcp-edit') {
-      this.openMcp(this.caps.mcps.find((m) => m.id === b.dataset.id));
-    } else if (a === 'mcp-del') {
-      const m = this.caps.mcps.find((x) => x.id === b.dataset.id);
-      if (!m || !confirm(`"${m.name}" MCP'si silinsin mi? Yeni açılan oturumlara artık verilmez.`)) return;
-      const r = await act(() => api('DELETE', `/api/caps/mcp/${m.id}`), 'MCP silindi.');
-      if (r) { this.caps = r; this.renderBody(); }
-    } else if (a === 'skill-new') {
-      this.openSkill(null);
-    } else if (a === 'skill-edit') {
-      const r = await act(() => api('GET', `/api/caps/skill/${b.dataset.name}`));
-      if (r) this.openSkill(r);
-    } else if (a === 'skill-del') {
-      if (!confirm(`"${b.dataset.name}" skill'i silinsin mi? Paneldeki kopyası da silinir.`)) return;
-      const r = await act(() => api('DELETE', `/api/caps/skill/${b.dataset.name}`), 'Skill silindi.');
-      if (r) { this.caps = r; this.renderBody(); }
-    } else if (a.startsWith('dlg-')) {
-      this.onDialog(a, b);
+      this.testCap(b.dataset.key);
     }
   },
 
@@ -550,20 +340,6 @@ const SettingsView = {
         }
       }
       const caps = chosen.filter((c) => c.kind === 'cap' && !missed.includes(c)).length;
-      // Kaydedilince arşiv kaydına girer: hangi cevaplarla hangi öneriler uygulandı.
-      const applied = chosen.filter((c) => c.kind !== 'cap' && !missed.includes(c));
-      if (applied.length) {
-        const prev = r.archiveNote && r.archiveNote.kaynak === 'rol danışmanı' ? r.archiveNote : null;
-        r.archiveNote = {
-          kaynak: 'rol danışmanı',
-          ozet: this.ropt.proposalSummary || '',
-          cevaplar: [...(prev ? prev.cevaplar : []), ...(this.ropt.answers || [])],
-          uygulanan: [...(prev ? prev.uygulanan : []), ...applied.map((c) => ({
-            alan: c.field, neden: c.why || '',
-            ozet: c.kind === 'text' ? `${c.old ? `"${c.old}" → ` : 'sona eklendi: '}"${c.new}"` : String(c.value),
-          }))],
-        };
-      }
       this.ropt = null;
       if (form) this.dirty = true;
       this.renderHead();
@@ -641,13 +417,14 @@ const SettingsView = {
     return `<section class="card ropt">${head('Rol danışmanı', cost)}${err}<div class="actions"><button class="btn" data-act="ropt-start">Yeniden dene</button></div></section>`;
   },
 
-  async testCap(slot, payload) {
-    this.capTests[slot] = { running: true };
+  // Hesaptaki MCP sunucusuna bağlanıp tool listesini alır; sonuç yetenek satırında gösterilir.
+  async testCap(key) {
+    this.capTests[key] = { running: true };
     this.renderBody();
     try {
-      this.capTests[slot] = await api('POST', '/api/caps/test', payload);
+      this.capTests[key] = await api('POST', '/api/caps/test', { key });
     } catch (err) {
-      this.capTests[slot] = { ok: false, error: err.message };
+      this.capTests[key] = { ok: false, error: err.message };
     }
     if ($('#settings') && this.tab === 'yetenekler') this.renderBody();
   },
@@ -660,169 +437,6 @@ const SettingsView = {
     return `<div class="cap-test err">✕ ${esc(t.error)}${t.stderr ? `<pre class="mono">${esc(t.stderr)}</pre>` : ''}</div>`;
   },
 
-  // ---------- diyaloglar ----------
-
-  openMcp(m) {
-    this.dlg = { kind: 'mcp', id: m ? m.id : null };
-    const v = m || { name: '', type: 'stdio', command: '', args: [], env: {}, url: '', headers: {}, autoAllow: false };
-    const dlg = $('#cap-dlg');
-    dlg.innerHTML = `
-        <div class="dlg-head"><div><h2 id="cap-dlg-title">${m ? `MCP: ${esc(m.name)}` : 'MCP ekle'}</h2>
-          <div class="note">Yalnızca işaretlediğin rollerin oturumlarına verilir; hesap ayarlarına yazılmaz.</div></div>
-          <button class="btn icon" data-act="dlg-close" aria-label="Kapat">✕</button></div>
-        <div class="dlg-body">
-          <div class="row-fields">
-            <div class="field"><label for="mc-name">Ad</label><input id="mc-name" class="mono" maxlength="48" value="${esc(v.name)}" placeholder="ör. sshtools"></div>
-            <div class="field"><label for="mc-type">Tür</label><select id="mc-type">
-              <option value="stdio" ${v.type !== 'http' ? 'selected' : ''}>Komut (stdio)</option>
-              <option value="http" ${v.type === 'http' ? 'selected' : ''}>HTTP</option></select></div>
-          </div>
-          <div class="mc-stdio" ${v.type === 'http' ? 'hidden' : ''}>
-            <div class="field"><label for="mc-cmd">Komut</label><input id="mc-cmd" class="mono" value="${esc(v.command || '')}" placeholder="ör. C:\\Python314\\python.exe ya da npx"></div>
-            <div class="field"><label for="mc-args">Argümanlar (her satıra bir tane)</label><textarea id="mc-args" class="mono" rows="3" placeholder="-m&#10;app.main">${esc((v.args || []).join('\n'))}</textarea></div>
-            <div class="field"><label for="mc-env">Ortam değişkenleri (her satıra AD=değer)</label><textarea id="mc-env" class="mono" rows="3" placeholder="PYTHONPATH=C:\\...&#10;API_TOKEN=\${MY_TOKEN}">${esc(pairsToText(v.env, '='))}</textarea></div>
-          </div>
-          <div class="mc-http" ${v.type === 'http' ? '' : 'hidden'}>
-            <div class="field"><label for="mc-url">Adres</label><input id="mc-url" class="mono" value="${esc(v.url || '')}" placeholder="https://…/mcp"></div>
-            <div class="field"><label for="mc-headers">Header'lar (her satıra Ad: değer)</label><textarea id="mc-headers" class="mono" rows="3" placeholder="Authorization: Bearer \${MY_TOKEN}">${esc(pairsToText(v.headers, ': '))}</textarea></div>
-          </div>
-          <p class="note">Token ve parolayı düz yazmak yerine <span class="mono">\${DEĞİŞKEN}</span> yaz; değer Windows ortam değişkeninden okunur ve panelin dosyalarına girmez.</p>
-          <label class="check" style="align-self: flex-start"><input type="checkbox" id="mc-allow" ${v.autoAllow ? 'checked' : ''}>Tool'ları izin sormadan çalışsın</label>
-          <div id="mc-test"></div>
-        </div>
-        <div class="dlg-foot">
-          <button class="btn ghost" data-act="dlg-mcp-test" style="margin-right: auto">Dene</button>
-          <button class="btn ghost" data-act="dlg-close">Vazgeç</button>
-          <button class="btn primary" data-act="dlg-mcp-save">${m ? 'Kaydet' : 'Ekle'}</button>
-        </div>`;
-    $('#mc-type').addEventListener('change', (e) => {
-      const http = e.target.value === 'http';
-      $('.mc-stdio', dlg).hidden = http;
-      $('.mc-http', dlg).hidden = !http;
-    });
-    if (!dlg.open) dlg.showModal();
-    $('#mc-name').focus();
-  },
-
-  mcpForm() {
-    return {
-      name: $('#mc-name').value.trim(),
-      type: $('#mc-type').value,
-      command: $('#mc-cmd').value.trim(),
-      args: $('#mc-args').value.split(/\r?\n/).map((s) => s.trim()).filter(Boolean),
-      env: textToPairs($('#mc-env').value, '='),
-      url: $('#mc-url').value.trim(),
-      headers: textToPairs($('#mc-headers').value, ':'),
-      autoAllow: $('#mc-allow').checked,
-    };
-  },
-
-  openSkill(sk) {
-    this.dlg = { kind: 'skill', name: sk ? sk.name : null, mode: 'text' };
-    const dlg = $('#cap-dlg');
-    dlg.innerHTML = sk ? `
-        <div class="dlg-head"><div><h2 id="cap-dlg-title">Skill: ${esc(sk.name)}</h2>
-          <div class="note">${sk.files.length} dosya${sk.files.length > 1 ? ` · ${esc(sk.files.filter((f) => f !== 'SKILL.md').slice(0, 6).join(', '))}${sk.files.length > 7 ? '…' : ''}` : ''}. Burada yalnızca SKILL.md düzenlenir.</div></div>
-          <button class="btn icon" data-act="dlg-close" aria-label="Kapat">✕</button></div>
-        <div class="dlg-body">
-          <div class="field"><label for="sk-raw">SKILL.md</label><textarea id="sk-raw" class="mono" rows="20">${esc(sk.text)}</textarea>
-            <span class="note">Baştaki --- arasındaki name satırı "${esc(sk.name)}" kalmalı; description Claude'un skill'i ne zaman kullanacağını belirler.</span></div>
-        </div>
-        <div class="dlg-foot">
-          <button class="btn ghost" data-act="dlg-close">Vazgeç</button>
-          <button class="btn primary" data-act="dlg-skill-raw">Kaydet</button>
-        </div>` : `
-        <div class="dlg-head"><div><h2 id="cap-dlg-title">Skill ekle</h2>
-          <div class="note">Skill panelde saklanır, yalnızca işaretlediğin rollerin oturumlarına verilir.</div></div>
-          <button class="btn icon" data-act="dlg-close" aria-label="Kapat">✕</button></div>
-        <div class="dlg-body">
-          <div class="seg" role="group" aria-label="Ekleme yolu">
-            <button data-act="dlg-skill-mode" data-mode="text" aria-pressed="true">Panelde yaz</button>
-            <button data-act="dlg-skill-mode" data-mode="dir" aria-pressed="false">Klasörden</button>
-            <button data-act="dlg-skill-mode" data-mode="zip" aria-pressed="false">Zip yükle</button>
-          </div>
-          <div class="field"><label for="sk-name">Ad <span class="note">(küçük harf, rakam, -)</span></label><input id="sk-name" class="mono" maxlength="64" placeholder="ör. android-sdk"></div>
-          <div class="sk-mode" data-mode="text">
-            <div class="field"><label for="sk-desc">Açıklama</label><input id="sk-desc" maxlength="1000" placeholder="Ne işe yarar, Claude ne zaman kullanmalı"></div>
-            <div class="field"><label for="sk-body">İçerik (talimatlar, Markdown)</label><textarea id="sk-body" rows="12" class="mono"></textarea></div>
-          </div>
-          <div class="sk-mode" data-mode="dir" hidden>
-            <div class="field"><label for="sk-path">Klasör yolu</label><input id="sk-path" class="mono" placeholder="C:\\Users\\…\\android-skill">
-              <span class="note">SKILL.md klasörün kökünde ya da tek bir alt klasöründe olmalı. Klasör panele kopyalanır; ad boşsa SKILL.md'deki ad kullanılır.</span></div>
-          </div>
-          <div class="sk-mode" data-mode="zip" hidden>
-            <div class="field"><label for="sk-zip">Zip dosyası (en fazla 20 MB)</label><input id="sk-zip" type="file" accept=".zip,application/zip"></div>
-          </div>
-        </div>
-        <div class="dlg-foot">
-          <button class="btn ghost" data-act="dlg-close">Vazgeç</button>
-          <button class="btn primary" data-act="dlg-skill-save">Ekle</button>
-        </div>`;
-    if (!dlg.open) dlg.showModal();
-    (sk ? $('#sk-raw') : $('#sk-name')).focus();
-  },
-
-  async onDialog(a, b) {
-    const dlg = $('#cap-dlg');
-    const done = (r, msg) => {
-      if (!r) return;
-      this.caps = r;
-      dlg.close();
-      toast(msg);
-      this.renderBody();
-    };
-    if (a === 'dlg-close') return dlg.close();
-    if (a === 'dlg-mcp-test') {
-      const out = $('#mc-test');
-      out.innerHTML = '<div class="cap-test note">Bağlanılıyor…</div>';
-      const slot = '__dlg';
-      try {
-        this.capTests[slot] = await api('POST', '/api/caps/test', { config: this.mcpForm() });
-      } catch (err) {
-        this.capTests[slot] = { ok: false, error: err.message };
-      }
-      if ($('#mc-test')) $('#mc-test').innerHTML = this.testLine(slot);
-      return;
-    }
-    if (a === 'dlg-mcp-save') {
-      const id = this.dlg.id;
-      const r = await act(() => (id ? api('PUT', `/api/caps/mcp/${id}`, this.mcpForm()) : api('POST', '/api/caps/mcp', this.mcpForm())));
-      return done(r, id ? 'MCP kaydedildi.' : 'MCP eklendi. Hangi rollere verileceğini işaretle.');
-    }
-    if (a === 'dlg-skill-mode') {
-      this.dlg.mode = b.dataset.mode;
-      for (const x of dlg.querySelectorAll('[data-act="dlg-skill-mode"]')) x.setAttribute('aria-pressed', String(x === b));
-      for (const x of dlg.querySelectorAll('.sk-mode')) x.hidden = x.dataset.mode !== this.dlg.mode;
-      return;
-    }
-    if (a === 'dlg-skill-raw') {
-      const r = await act(() => api('POST', '/api/caps/skill', { mode: 'raw', name: this.dlg.name, text: $('#sk-raw').value }));
-      return done(r, 'Skill kaydedildi. Yeni açılan oturumlarda geçerli.');
-    }
-    if (a === 'dlg-skill-save') {
-      const name = $('#sk-name').value.trim();
-      const mode = this.dlg.mode;
-      let r;
-      if (mode === 'zip') {
-        const f = $('#sk-zip').files[0];
-        if (!f) return toast('Zip dosyası seç.', true);
-        r = await act(async () => {
-          const res = await fetch(`/api/caps/skill-zip?name=${encodeURIComponent(name)}`, {
-            method: 'POST', headers: { 'x-panel-token': token || '', 'content-type': 'application/zip' }, body: f,
-          });
-          const data = await res.json().catch(() => null);
-          if (!res.ok) throw new Error((data && data.error) || `HTTP ${res.status}`);
-          return data;
-        });
-      } else if (mode === 'dir') {
-        r = await act(() => api('POST', '/api/caps/skill', { mode: 'dir', path: $('#sk-path').value, name }));
-      } else {
-        r = await act(() => api('POST', '/api/caps/skill', { mode: 'text', name, description: $('#sk-desc').value, body: $('#sk-body').value }));
-      }
-      return done(r, 'Skill eklendi. Hangi rollere verileceğini işaretle.');
-    }
-  },
-
   // ---------- çizim ----------
 
   render() {
@@ -833,8 +447,7 @@ const SettingsView = {
             ${SETTINGS_TABS.map(([k, l]) => `<button role="tab" data-act="tab" data-tab="${k}" aria-selected="${k === this.tab}">${l}</button>`).join('')}
           </nav>
           <div class="set-body" id="set-body" role="tabpanel"></div>
-        </div>
-        <dialog class="dlg" id="cap-dlg" aria-labelledby="cap-dlg-title"></dialog>`;
+        </div>`;
     this.renderHead();
     this.renderBody();
   },
@@ -854,7 +467,7 @@ const SettingsView = {
     if (!body) return;
     const fn = {
       hesaplar: this.tabAccounts, roller: this.tabRoles, yetenekler: this.tabCaps,
-      genel: this.tabGeneral, sablonlar: this.tabTemplates, sistem: this.tabSystem,
+      genel: this.tabGeneral, sistem: this.tabSystem,
     }[this.tab];
     body.innerHTML = fn.call(this);
   },
@@ -882,11 +495,11 @@ const SettingsView = {
         </section>`;
   },
 
-  // Rolün aldığı panel yetenekleri ve kapatılan global yetenekler (kayıtlı rol kimliğine göre).
+  // Rolün aldığı depodaki skill'ler ve kapatılan global yetenekler (kayıtlı rol kimliğine göre).
   roleCaps(rid) {
     const c = this.caps;
     if (!c || c.error) return null;
-    const add = [...c.mcps.filter((m) => m.roles.includes(rid)).map((m) => m.name), ...c.skills.filter((s) => s.roles.includes(rid)).map((s) => s.name)];
+    const add = c.skills.filter((s) => s.roles.includes(rid)).map((s) => s.name);
     const off = Object.entries(c.globalOff).filter(([, roles]) => roles.includes(rid)).map(([k]) => k.split(':').slice(1).join(':').split('@')[0]);
     return { add, off };
   },
@@ -1006,7 +619,7 @@ const SettingsView = {
           <div class="section-head"><h2>Yetenekler</h2><span class="count">işaret hemen kaydedilir</span></div>
           ${this.roleCapsEditor(r.id)}
         </section>
-${this.roleArchiveSection(r)}`;
+`;
   },
 
   // Rol sayfasındaki yetenek listesi: Yetenekler sekmesindeki işaretlerin yalnızca bu rol için olanı (aynı istek).
@@ -1038,10 +651,7 @@ ${this.roleArchiveSection(r)}`;
           <div class="section-head"><h3>${title}</h3><span class="count">${rows.length}</span></div>
           ${note ? `<p class="note">${note}</p>` : ''}
           <div class="card cap-list">${rows.join('')}</div>` : '');
-    const panel = [
-      ...c.mcps.map((m) => row(`pmcp:${m.id}`, m.roles.includes(rid), m.name, '<span class="badge acc-green">panel</span><span class="badge">MCP</span>', m.type === 'http' ? m.url : [m.command, ...(m.args || [])].join(' '))),
-      ...c.skills.map((s) => row(`pskill:${s.name}`, s.roles.includes(rid), s.name, `<span class="badge acc-green">${s.builtin ? 'panel' : 'yerel'}</span><span class="badge">skill</span>`, s.description)),
-    ];
+    const panel = c.skills.map((s) => row(`pskill:${s.name}`, s.roles.includes(rid), s.name, '<span class="badge acc-green">panel</span><span class="badge">skill</span>', s.description));
     const global = [
       ...inv.filter((x) => x.kind === 'mcp').map((x) => row(x.key, on(x.key), x.name, '<span class="badge">MCP</span>', x.description)),
       ...inv.filter((x) => x.kind === 'skill').map((x) => row(x.key, on(x.key), x.name, '<span class="badge">skill</span>', x.description)),
@@ -1061,13 +671,13 @@ ${this.roleArchiveSection(r)}`;
           </div>`;
     }).join('');
     return `
-        <p class="note">Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur. ${measured ? `Çağrı sayıları bu rolün ${measured} oturumundan (skill çağrıları, /komutlar ve MCP araçları).` : use && use.keys ? 'Bu rolle henüz ölçülmüş oturum yok; kullanım sayıları ilk oturumlardan sonra görünür.' : ''} Yeni yetenek eklemek ve diğer rollerle birlikte görmek için <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler</a>.</p>
-        ${card('Panel yetenekleri', panel, 'Panelle gelen ya da panelden eklenen; yalnızca işaretli rollere verilir.')}
+        <p class="note">Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur. ${measured ? `Çağrı sayıları bu rolün ${measured} oturumundan (skill çağrıları, /komutlar ve MCP araçları).` : use && use.keys ? 'Bu rolle henüz ölçülmüş oturum yok; kullanım sayıları ilk oturumlardan sonra görünür.' : ''} Diğer rollerle birlikte görmek için <a href="#/ayarlar/yetenekler" data-act="tab" data-tab="yetenekler">Yetenekler</a>.</p>
+        ${card('Panel skill\'leri', panel, 'Panelle gelen (depodaki skills/); yalnızca işaretli rollere verilir.')}
         ${card('Hesaplarda kurulu olanlar', global, 'İşareti kaldırınca bu roldeki oturumlarda kapanır; hesap ayarların değişmez.')}
         ${seen}`;
   },
 
-  // Rol işaret kutuları: panel yeteneğinde açık roller, global olanda kapatılmamış roller işaretli.
+  // Rol işaret kutuları: panel skill'inde açık roller, global olanda kapatılmamış roller işaretli.
   roleChecks(key, isOn) {
     return `<div class="rchips">${state.settings.roles.map((r) => `
         <label class="rchip"><input type="checkbox" data-cap="${esc(key)}" data-role="${esc(r.id)}" ${isOn(r.id) ? 'checked' : ''}>
@@ -1081,13 +691,10 @@ ${this.roleArchiveSection(r)}`;
     if (c.error) return `<div class="empty">Yetenekler alınamadı: ${esc(c.error)}</div>`;
     const unsaved = this.dirty ? '<p class="note warn-note">Rollerde kaydedilmemiş değişiklik var; yeni ya da yeniden adlandırılan roller kaydedince burada görünür.</p>' : '';
     return `
-        <p class="note">Panel yetenekleri yalnızca işaretli rollere verilir. Global olanlar hesaplarda kurulu; işareti kaldırdığın rolde o oturumlar için kapanır, hesap ayarların değişmez. Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur (devam ettirilen oturumda skill listesi bir sonraki compact'tan sonra).</p>
+        <p class="note">Panel skill'leri (depodaki skills/) yalnızca işaretli rollere verilir. Global olanlar hesaplarda kurulu; işareti kaldırdığın rolde o oturumlar için kapanır, hesap ayarların değişmez. Değişiklik yeni açılan ya da yenilenen oturumda geçerli olur (devam ettirilen oturumda skill listesi bir sonraki compact'tan sonra).</p>
         ${unsaved}
         <div class="capx-bar">
           <input type="search" id="cap-q" placeholder="Yetenek ara (ad ya da açıklama)" value="${esc(this.capQuery || '')}" aria-label="Yetenek ara">
-          <span class="grow"></span>
-          <button class="btn small" data-act="mcp-new">${ICON_PLUS} MCP ekle</button>
-          <button class="btn small" data-act="skill-new">${ICON_PLUS} Skill ekle</button>
         </div>
         <div id="cap-list">${this.capList()}</div>`;
   },
@@ -1100,28 +707,15 @@ ${this.roleArchiveSection(r)}`;
     const globalOn = (key) => (rid) => !offOf(key).includes(rid);
     const accs = (x) => `<span class="note">hesap: ${esc(x.accounts.join(', '))}</span>`;
     const globalSkillNames = new Set(inv.filter((x) => x.kind === 'skill').map((x) => x.name));
-    const ghost = (act, attrs, text, danger) => `<button class="btn small ghost${danger ? ' danger-text' : ''}" data-act="${act}" ${attrs}>${text}</button>`;
     return [
-      ...c.mcps.map((m) => {
-        const secret = Object.keys(m.type === 'http' ? m.headers || {} : m.env || {});
-        return {
-          key: `pmcp:${m.id}`, tab: 'mcp', name: m.name, mono: true, isOn: (rid) => m.roles.includes(rid),
-          badges: `<span class="badge acc-green">panel</span><span class="badge">${m.type === 'http' ? 'HTTP' : 'komut'}</span>${m.autoAllow ? '<span class="badge">izin sormaz</span>' : ''}`,
-          desc: (m.type === 'http' ? m.url : [m.command, ...(m.args || [])].join(' ')) + (secret.length ? ` · ${secret.map((k) => `${k}=•••`).join(' ')}` : ''),
-          tools: ghost('cap-test', `data-key="pmcp:${esc(m.id)}" data-id="${esc(m.id)}"`, 'Dene') + ghost('mcp-edit', `data-id="${esc(m.id)}"`, 'Düzenle') + ghost('mcp-del', `data-id="${esc(m.id)}"`, 'Sil', true),
-        };
-      }),
       ...inv.filter((x) => x.kind === 'mcp').map((x) => ({
         key: x.key, tab: 'mcp', name: x.name, mono: true, isOn: globalOn(x.key), desc: x.description,
-        badges: '<span class="badge">global</span>', tools: ghost('cap-test', `data-key="${esc(x.key)}"`, 'Dene') + accs(x),
+        badges: '<span class="badge">global</span>', tools: `<button class="btn small ghost" data-act="cap-test" data-key="${esc(x.key)}">Dene</button>${accs(x)}`,
       })),
       ...c.skills.map((s) => ({
         key: `pskill:${s.name}`, tab: 'skill', name: s.name, isOn: (rid) => s.roles.includes(rid), desc: s.description,
-        badges: (s.builtin
-          ? `<span class="badge acc-green" title="Panelle gelen skill (depodaki skills/ klasörü); panelden düzenlenmez. Varsayılan roller: ${esc((s.defaults || []).join(', ') || 'yok')}">panel</span>`
-          : '<span class="badge" title="Panelden eklediğin skill (data/skills)">yerel</span>')
+        badges: `<span class="badge acc-green" title="Panelle gelen skill (depodaki skills/ klasörü); panelden düzenlenmez. Varsayılan roller: ${esc((s.defaults || []).join(', ') || 'yok')}">panel</span>`
           + (globalSkillNames.has(s.name) ? '<span class="badge warn" title="Global skill ile aynı ad; o rolde global olanı kapatırsan bu da gizlenir">ad çakışıyor</span>' : ''),
-        tools: s.builtin ? '' : ghost('skill-edit', `data-name="${esc(s.name)}"`, 'Düzenle') + ghost('skill-del', `data-name="${esc(s.name)}"`, 'Sil', true),
       })),
       ...inv.filter((x) => x.kind === 'skill').map((x) => ({
         key: x.key, tab: 'skill', name: x.name, isOn: globalOn(x.key), desc: x.description, badges: '<span class="badge">global</span>', tools: accs(x),
@@ -1140,8 +734,8 @@ ${this.roleArchiveSection(r)}`;
 
   capList() {
     const TABS = [
-      ['mcp', 'MCP', 'Panel MCP\'leri ve hesaplarda kurulu MCP sunucuları. Değişiklik yeni açılan ya da yeniden başlatılan oturumda geçerli olur.'],
-      ['skill', 'Skill', 'Panelle gelen, panelden eklenen ve hesaplarda kurulu skill\'ler.'],
+      ['mcp', 'MCP', 'Hesaplarda kurulu MCP sunucuları. Değişiklik yeni açılan ya da yeniden başlatılan oturumda geçerli olur.'],
+      ['skill', 'Skill', 'Panelle gelen (depodaki skills/) ve hesaplarda kurulu skill\'ler.'],
       ['plugin', 'Eklenti', 'Eklenti kapatılınca içindeki MCP\'ler ve skill\'ler birlikte kapanır.'],
       ['synced', 'claude.ai', 'claude.ai hesabından eşitlenen skill\'ler. Açıklamaları her istekte bağlama girer; rolün kullanmayacaklarını kapat.'],
       ['project', 'Proje', 'Proje klasörlerindeki .claude/skills; yalnızca o projede açılan oturumlarda görünür.'],
@@ -1221,14 +815,7 @@ ${this.roleArchiveSection(r)}`;
           </div>
         </section>
         <section class="section">
-          <div class="section-head"><h2>Otomasyon</h2></div>
-          <div class="card set-card">
-            <label class="check" style="align-self: flex-start"><input type="checkbox" data-f="autoRotate" ${m.autoRotate ? 'checked' : ''}>Kota dolunca hesabı otomatik değiştir</label>
-            <p class="note">Açıkken panel 5 dakikada bir kotayı çeker. Bir hesabın kotası dolduğunda o hesaptaki "sıra sende" durumundaki oturumlar, en çok kotası kalan hesaba taşınır ve kaldığı yerden devam eder. Çalışan bir iş yarıda kesilmez. Proje klasörünü onaylamamış hesaba taşınmaz. Bekçisi hamle yapan gruplarda taşımayı bekçi yapar; bu ayar yalnızca bekçisi kapalı ya da yalnızca uyaran gruplar içindir.</p>
-          </div>
-        </section>
-        <section class="section">
-          <div class="section-head"><h2>Bekçi</h2><span class="count">grupların varsayılanı; her grup kendi çalışma ekranındaki Bekçi görünümünden ayrıca açılıp kapatılabilir</span></div>
+          <div class="section-head"><h2>Bekçi</h2><span class="count">bütün gruplar için geçerli; açık / hamle / Haiku düğmeleri grubun Bekçi görünümünde de var</span></div>
           <div class="card set-card" style="display: grid; gap: 12.5px; grid-template-columns: repeat(auto-fit, minmax(162px, 1fr))">
             <label class="check" style="grid-column: 1 / -1; align-self: flex-start"><input type="checkbox" data-f="watch.enabled" ${wv('enabled') ? 'checked' : ''}>Bekçi açık</label>
             <label class="check" style="grid-column: 1 / -1; align-self: flex-start"><input type="checkbox" data-f="watch.act" ${wv('act') ? 'checked' : ''}>Hamleleri kendisi yapsın (compact, hesap taşıma, yenileme); kapalıyken yalnızca öneri bildirimi çıkar</label>
@@ -1248,24 +835,6 @@ ${this.roleArchiveSection(r)}`;
             return `<div class="field"><label for="cw-${k}">${k[0].toUpperCase() + k.slice(1)} (token)</label><input id="cw-${k}" type="number" data-f="cw.${k}" value="${esc(m[`cw.${k}`] ?? ((m.contextWindows || {})[k] || ''))}">${real && real !== cur ? `<span class="note warn-note">Claude Code bildirdiği pencere: ${esc(fmtTok(real))}</span>` : ''}</div>`;
           }).join('')}
             <p class="note" style="grid-column: 1 / -1">Model ailesinin gerçek bağlam sınırı farklıysa buradan düzelt. %80'i geçen oturumlarda ⚠ işareti çıkar. Bekçi küçük pencerede eşikleri pencerenin %50 / %75'iyle sınırlar.</p>
-          </div>
-        </section>`;
-  },
-
-  tabTemplates() {
-    return `
-        <section class="section">
-          <div class="section-head"><h2>Şablonlar</h2><span class="count">${(state.templates || []).length}</span></div>
-          <div class="card settings-list">
-            ${(state.templates || []).length ? state.templates.map((t) => {
-            const p = t.scope === 'global' ? null : project(t.scope);
-            return `
-                <div class="tpl-row" style="padding: 9px 14.5px">
-                  <div class="info"><div style="font-weight: 500">${esc(t.name)}</div>
-                    <div class="note">${t.scope === 'global' ? 'Tüm projeler' : esc(p ? p.name : 'silinmiş proje')} · ${t.rows.length} oturum</div></div>
-                  <button class="btn small ghost" data-act="tpl-del" data-tid="${esc(t.id)}">Sil</button>
-                </div>`;
-          }).join('') : '<div class="note" style="padding: 12.5px 14.5px">Şablon yok. Kurulum ekranında "Mevcut kurulumu kaydet" ile oluşturulur.</div>'}
           </div>
         </section>`;
   },

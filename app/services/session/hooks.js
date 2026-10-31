@@ -36,8 +36,7 @@ function writeSettingsFile(dataDir, port, sessionId, extra = {}) {
 }
 
 // Oturuma özel MCP ayarı: adres oturum kimliğini taşır, böylece panel tool'u hangi üyenin çağırdığını bilir.
-// Rolün panel MCP'leri de aynı dosyaya eklenir.
-function writeMcpConfig(dataDir, port, sessionId, extraServers = {}) {
+function writeMcpConfig(dataDir, port, sessionId) {
   const dir = path.join(dataDir, 'mcp');
   fs.mkdirSync(dir, { recursive: true });
   const file = path.join(dir, `${sessionId}.json`);
@@ -46,7 +45,7 @@ function writeMcpConfig(dataDir, port, sessionId, extraServers = {}) {
     url: `http://127.0.0.1:${port}/api/mcp/${sessionId}`,
     headers: { 'x-panel-hook-token': `\${${TOKEN_ENV}}` },
   };
-  fs.writeFileSync(file, JSON.stringify({ mcpServers: { ...extraServers, [MCP_SERVER]: server } }, null, 2));
+  fs.writeFileSync(file, JSON.stringify({ mcpServers: { [MCP_SERVER]: server } }, null, 2));
   return file;
 }
 

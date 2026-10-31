@@ -241,9 +241,9 @@ function meterTick() {
 }
 
 
-// Grubun bekçi ayarı: genel ayar (Ayarlar → Genel) üstüne grubun kendi açık/kapalı seçimleri (group.watch).
-function groupWatchCfg(g) {
-  return { ...WATCH_DEFAULTS, ...(settings.watch || {}), ...((g && g.watch) || {}) };
+// Geçerli bekçi ayarı: varsayılanlar üstüne Ayarlar → Genel'deki değerler. Bütün gruplar için tektir.
+function watchCfg() {
+  return { ...WATCH_DEFAULTS, ...(settings.watch || {}) };
 }
 
 // Üyenin konuşma dosyasındaki son mesajı (yoksa boş).
@@ -321,5 +321,5 @@ module.exports = {
   hookState, manager, boards, caps, notes, requests, timeline, meter, watch, presence, ledger, launched, pending, ops,
   HttpError, isAllowedDir, sharedConfigDir, hhmm, cleanText, findSession, sessionStatus,
   events, pushEvent, runningLead, pasteTo, cachedQuota, lastQuota, trustsDir, quotaLeft,
-  USER_TL, meterTick, groupWatchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
+  USER_TL, meterTick, watchCfg, lastText, whenStopped, boardGroup, shutdown, warmStats,
 };

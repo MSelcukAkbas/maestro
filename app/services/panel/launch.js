@@ -138,7 +138,7 @@ function launchSession(group, session, { resume }) {
     promptFile: session.promptFile,
     taskFile,
     settingsFile: writeSettingsFile(store.DATA_DIR, PORT, session.id, cap.settings),
-    mcpConfig: writeMcpConfig(store.DATA_DIR, PORT, session.id, cap.mcpServers),
+    mcpConfig: writeMcpConfig(store.DATA_DIR, PORT, session.id),
     addDir: cap.addDir,
   });
   return { taskSent: !!taskFile };
@@ -233,7 +233,7 @@ function buildSession(r, project, usedNames, time) {
 // Kurulum satırındaki yetenek ayarı: rol varsayılanının üstüne açılan / kapatılan anahtarlar.
 function capsOverride(c) {
   if (!c || typeof c !== 'object') return null;
-  const keys = (l) => (Array.isArray(l) ? [...new Set(l.map((k) => cleanText(k, 200)).filter((k) => /^(plugin|skill|mcp|pmcp|pskill):./.test(k)))] : []);
+  const keys = (l) => (Array.isArray(l) ? [...new Set(l.map((k) => cleanText(k, 200)).filter((k) => /^(plugin|skill|mcp|pskill):./.test(k)))] : []);
   const on = keys(c.on);
   const off = keys(c.off).filter((k) => !on.includes(k));
   return on.length || off.length ? { on, off } : null;
@@ -384,6 +384,6 @@ function openInWindowsTerminal(session) {
 }
 
 module.exports = {
-  switchAccount, changeSettings, cancelSettings, launchDrift, launchSession, startSessions, capsOverride,
+  switchAccount, changeSettings, cancelSettings, launchDrift, launchSession, startSessions,
   addSessionToGroup, createGroup, renewSession, openInWindowsTerminal,
 };

@@ -1,16 +1,16 @@
-// Zamanlı işler: bekleyen ayar değişikliklerinin uygulanması, otomatik hesap rotasyonu, zaman çizelgesi örneklemesi
-// ve bekçi. Zamanlayıcılar index.js'te kurulur; bu dosya yalnızca tik fonksiyonlarını verir.
+// Zamanlı işler: bekleyen ayar değişikliklerinin uygulanması, zaman çizelgesi örneklemesi ve bekçi.
+// Zamanlayıcılar index.js'te kurulur; bu dosya yalnızca tik fonksiyonlarını verir.
 const store = require('../core/store');
 const { discovery } = require('../../agent');
-const { WATCH_DEFAULTS, ctxLimits } = require('../watch/watch');
+const { ctxLimits } = require('../watch/watch');
 const { asksUser } = require('../watch/ops');
 const helper = require('../watch/helper');
 const {
   settings, manager, timeline, meter, watch, presence, pending, ops,
-  sharedConfigDir, findSession, sessionStatus, pushEvent, runningLead, pasteTo, cachedQuota, lastQuota, trustsDir, quotaLeft,
-  USER_TL, groupWatchCfg, lastText, whenStopped,
+  sharedConfigDir, findSession, sessionStatus, pushEvent, runningLead, pasteTo, lastQuota, trustsDir,
+  USER_TL, watchCfg, lastText, whenStopped,
 } = require('./context');
-const { switchAccount, launchSession } = require('./launch');
+const { launchSession } = require('./launch');
 const { hasDelivery } = require('./delivery');
 const { memberSnapshot } = require('./members');
 
@@ -38,50 +38,6 @@ function pendingTick() {
     });
   }
 }
-
-const ROTATE_EVERY = Number(process.env.MAESTRO_ROTATE_MS) || 5 * 60 * 1000;
-const noAlternativeWarned = new Set();
-let rotating = false;
-
-// Yalnızca "sıra sende" durumundaki oturumlar taşınır; çalışan bir işi yarıda kesmemek için. Bekçisi hamle yapan
-// gruplar atlanır: taşıma kararını bekçi maliyet ve güven onayıyla birlikte verir, ikisi aynı üyeyi taşımaya çalışmasın.
-async function autoRotateTick() {
-  if (!settings.autoRotate || rotating) return;
-  const running = store.loadGroups()
-    .filter((g) => { const cfg = groupWatchCfg(g); return !(cfg.enabled && cfg.act); })
-    .flatMap((g) => g.sessions.filter((s) => !s.removed && manager.has(s.id)).map((s) => ({ ...s, projectId: g.projectId })));
-  if (!running.length) return;
-  rotating = true;
-  try {
-    const q = await cachedQuota();
-    const left = new Map(q.rows.map((r) => [r.accountId, quotaLeft(r)]));
-    const live = discovery.liveSessions(sharedConfigDir());
-    for (const s of running) {
-      const l = left.get(s.accountId);
-      if (l == null || l > 2) continue;
-      if (sessionStatus(s, live).status !== 'idle' || !ops.free(s.id)) continue;
-      // Proje klasörünü onaylamamış hesaba taşınan oturum açılışta güven sorusunda kalır.
-      const project = store.loadProjects().find((p) => p.id === s.projectId);
-      const best = [...left.entries()]
-        .filter(([id, v]) => id !== s.accountId && v != null && v >= 10 && (!project || trustsDir(id, project.path)))
-        .sort((a, b) => b[1] - a[1])[0];
-      if (!best) {
-        if (!noAlternativeWarned.has(s.id)) pushEvent(`${s.name}: ${s.accountId} kotası doldu ama yeterli kotası olan başka hesap yok.`);
-        noAlternativeWarned.add(s.id);
-        continue;
-      }
-      noAlternativeWarned.delete(s.id);
-      switchAccount(s.id, best[0]);
-      left.set(best[0], best[1] - 5);
-      pushEvent(`${s.name}: ${s.accountId} kotası doldu, ${best[0]} hesabına taşındı (kaldığı yerden devam).`);
-    }
-  } catch (err) {
-    console.error('[panel] otomatik hesap rotasyonu:', err.message);
-  } finally {
-    rotating = false;
-  }
-}
-
 
 // Önceki çalışma düzgün kapanmadıysa açık kalan izler panelin son ayakta olduğu ana "kapalı" olarak kapatılır.
 // Düzgün kapanışta izler zaten "kapalı"dır; record aynı durumu yeniden yazmaz.
@@ -139,7 +95,7 @@ function helperContext(quota, members) {
     })),
     members: Object.fromEntries(members.map((m) => {
       const i = m.info || {};
-      const lim = ctxLimits(m.session, m.info, settings, { ...WATCH_DEFAULTS, ...(settings.watch || {}) });
+      const lim = ctxLimits(m.session, m.info, settings, watchCfg());
       const last = lastText(m.session.id);
       return [m.session.id, {
         rol: m.session.roleLabel, hesap: m.session.accountId, durum: m.status === 'busy' ? 'çalışıyor' : m.status === 'idle' ? 'boşta' : m.status,
@@ -178,7 +134,9 @@ function applyDecisions(results, cfg) {
 }
 
 function watchTick() {
-  const groups = store.loadGroups().filter((g) => g.sessions.some((s) => !s.removed && manager.has(s.id)) && groupWatchCfg(g).enabled);
+  const cfg = watchCfg();
+  if (!cfg.enabled) return;
+  const groups = store.loadGroups().filter((g) => g.sessions.some((s) => !s.removed && manager.has(s.id)));
   if (!groups.length) return;
   const live = discovery.liveSessions(sharedConfigDir());
   const input = {
@@ -188,8 +146,7 @@ function watchTick() {
       members: memberSnapshot(g, live).map((m) => ({ session: m.session, status: m.status, info: m.info })),
     })),
     quota: lastQuota() && Date.now() - lastQuota().fetchedAt < 10 * 60 * 1000 ? lastQuota() : null,
-    // Gruplar yukarıda kendi ayarlarına göre süzüldü; eşikler genel ayardan gelir.
-    meter, accounts: settings.accounts, settings: { ...settings, watch: { ...(settings.watch || {}), enabled: true } },
+    meter, accounts: settings.accounts, settings: { ...settings, watch: cfg },
     leadStatus: (lead) => sessionStatus(lead, live).status,
     canHost: (accountId, group) => {
       const project = store.loadProjects().find((p) => p.id === group.projectId);
@@ -203,7 +160,6 @@ function watchTick() {
     else if (pasteTo(m.lead, m.text) && m.level === 'kritik') pushEvent(`Şefe yazıldı (${m.lead.name}): ${m.text.split('\n')[1] || ''}`.slice(0, 300), 'bekci', m.gid);
   }
   for (const g of groups) {
-    const cfg = groupWatchCfg(g);
     const todo = cands.filter((c) => c.gid === g.id && ops.free(c.sid));
     if (!todo.length) continue;
     if (!cfg.ai) {
@@ -221,15 +177,15 @@ function watchTick() {
     helper.ask(account, todo, helperContext(input.quota, members))
       .then((r) => {
         watch.note({ gid: g.id, key: 'helper', level: 'normal', helper: { account: r.account, tokens: r.tokens, costUSD: r.costUSD }, text: `yardımcı model (${r.account}): ${todo.length} aday, ${r.tokens.in + r.tokens.cw + r.tokens.cr} girdi / ${r.tokens.out} çıktı token, ≈$${r.costUSD.toFixed(4)}` });
-        applyDecisions(helper.validate(todo, r.decisions), groupWatchCfg(g));
+        applyDecisions(helper.validate(todo, r.decisions), watchCfg());
       })
       .catch((err) => {
         console.error('[panel] yardımcı model:', err.message);
         watch.note({ gid: g.id, key: 'helper', level: 'yüksek', text: `yardımcı model yanıt vermedi, kural varsayılanı kullanıldı: ${err.message}` });
-        applyDecisions(helper.validate(todo, []), groupWatchCfg(g));
+        applyDecisions(helper.validate(todo, []), watchCfg());
       })
       .finally(() => { helperBusy.delete(g.id); });
   }
 }
 
-module.exports = { ROTATE_EVERY, pendingTick, autoRotateTick, sampleTimeline, watchTick };
+module.exports = { pendingTick, sampleTimeline, watchTick };

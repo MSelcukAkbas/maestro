@@ -124,14 +124,6 @@ input:focus-visible, select:focus-visible, textarea:focus-visible, .btn:focus-vi
 .setup { display: flex; flex-wrap: wrap; gap: 21.5px; align-items: flex-start; }
 .setup-main { flex: 999 1 558px; min-width: 0; display: flex; flex-direction: column; gap: 14.5px; }
 .setup-side { flex: 1 1 252px; min-width: 0; padding: 16px; display: flex; flex-direction: column; gap: 12.5px; position: sticky; top: 14.5px; }
-.tpl-card { padding: 11px 14.5px; }
-.tpl-card summary { cursor: pointer; min-height: 29px; display: flex; align-items: center; gap: 9px; }
-.tpl-body { display: flex; flex-direction: column; gap: 7px; margin-top: 9px; }
-.tpl-row { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; padding: 7px 0; border-top: 1px solid var(--line-soft); }
-.tpl-row .info { flex: 1 1 234px; min-width: 0; }
-.tpl-save { display: flex; flex-wrap: wrap; gap: 7px; padding-top: 9px; border-top: 1px solid var(--line-soft); }
-.tpl-save input { flex: 1 1 180px; width: auto; }
-.tpl-save select { width: auto; }
 .row-card { padding: 14.5px; display: flex; flex-direction: column; gap: 11px; }
 .row-top { display: flex; gap: 9px; align-items: center; }
 .row-top .num { font-family: var(--mono); color: var(--accent); font-size: 11px; }
@@ -462,8 +454,6 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 .cap-more > summary { padding: 9px 14.5px; cursor: pointer; font-size: 12px; color: var(--text-2); }
 .cap-more > summary:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
 .cap-more[open] > summary { border-bottom: 1px solid var(--line); }
-.mc-stdio, .mc-http, .sk-mode { display: flex; flex-direction: column; gap: 12.5px; }
-.mc-stdio[hidden], .mc-http[hidden], .sk-mode[hidden] { display: none; }
 
 /* ayarlar: yetenekler */
 .cap-list { overflow: hidden; }
@@ -767,12 +757,3 @@ a.notif-item:hover { background: var(--surface-2); }
 .ropt-diff { display: flex; flex-direction: column; gap: 3.5px; font-size: 12px; white-space: pre-wrap; overflow-wrap: anywhere; }
 .ropt-diff del { color: #ffb3b3; background: rgba(255, 90, 90, .08); text-decoration: line-through; padding: 3.5px 7px; border-radius: 5px; }
 .ropt-diff ins { color: var(--accent); background: rgba(52, 209, 160, .08); text-decoration: none; padding: 3.5px 7px; border-radius: 5px; }
-/* Rol arşivi (Geçmiş) */
-.arch-row { padding: 10px 0; border-top: 1px solid var(--line); }
-.arch-row:first-child { border-top: 0; }
-.arch-row .cap-head { flex-wrap: wrap; gap: 7px; }
-.arch-diffs { margin-top: 10px; display: flex; flex-direction: column; gap: 10px; }
-.arch-diff { margin: 5px 0 0; padding: 7px 10px; font-size: 12px; line-height: 1.5; white-space: pre-wrap; overflow-wrap: anywhere; max-height: 420px; overflow: auto; background: rgba(0, 0, 0, .18); border-radius: 7px; }
-.arch-diff .dl { color: #ffb3b3; background: rgba(255, 90, 90, .08); }
-.arch-diff .da { color: var(--accent); background: rgba(52, 209, 160, .08); }
-.arch-diff .dc, .arch-diff .dm { color: var(--muted); }

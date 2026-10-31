@@ -32,22 +32,21 @@ function memberRows(group) {
   return memberSnapshot(group).map((m) => ({ session: m.session, running: m.running, status: m.statusText, stats: m.stats, contextPct: m.contextPct, meter: m.info }));
 }
 
-// Rolün panelden aldığı ek yetenekler ve kapatılan global yetenekler, tek satır.
+// Rolün aldığı depodaki skill'ler ve kapatılan global yetenekler, tek satır.
 function roleCaps(roleId) {
   const c = caps.load();
-  const add = [...c.mcps.filter((m) => m.roles.includes(roleId)).map((m) => `MCP ${m.name}`), ...c.skills.filter((s) => s.roles.includes(roleId)).map((s) => `skill ${s.name}`)];
+  const add = c.skills.filter((s) => s.roles.includes(roleId)).map((s) => `skill ${s.name}`);
   const off = Object.entries(c.globalOff).filter(([, roles]) => roles.includes(roleId)).map(([k]) => k.split(':').slice(1).join(':').split('@')[0]);
   return [add.length ? add.join(', ') : '', off.length ? `kapalı: ${off.join(', ')}` : ''].filter(Boolean).join(' · ');
 }
 
-// Grubun projesinde verilebilecek yetenekler (anahtar + ad): hesaplardaki ve oturumlarda görülenler, panelden eklenenler.
+// Grubun projesinde verilebilecek yetenekler (anahtar + ad): hesaplardaki ve oturumlarda görülenler, depodaki skill'ler.
 function capCatalogFor(group) {
   const project = store.loadProjects().find((p) => p.id === group.projectId);
   const c = caps.load();
   return [
     ...caps.inventory(settings.accounts).filter((x) => x.kind !== 'project' || (project && (x.projects || []).includes(project.path)))
       .map((x) => ({ key: x.key, name: x.name, kind: x.kind })),
-    ...c.mcps.map((m) => ({ key: `pmcp:${m.id}`, name: m.name, kind: 'mcp' })),
     ...c.skills.map((s) => ({ key: `pskill:${s.name}`, name: s.name, kind: 'skill' })),
   ];
 }

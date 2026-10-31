@@ -1,6 +1,4 @@
-// Kurulum: ekip şablonları, grup açılmadan önceki model önerisi (optimize) ve tek rolün iyileştirilmesi (rol danışmanı).
-const crypto = require('crypto');
-
+// Kurulum: grup açılmadan önceki model önerisi (optimize) ve tek rolün iyileştirilmesi (rol danışmanı).
 const store = require('../core/store');
 const { discovery } = require('../../agent');
 const { sessionStats } = require('../core/usage');
@@ -12,17 +10,14 @@ const prompts = require('../core/prompts');
 const {
   settings, boards, caps, notes, events, HttpError, isAllowedDir, sharedConfigDir, cleanText, cachedQuota, lastQuota,
 } = require('../panel/context');
-const { capsOverride } = require('../panel/launch');
 const { route, readBody } = require('../panel/http');
-
-route('GET', '/api/templates', async () => store.loadTemplates());
 
 // Kurulum optimizasyonu: formdaki ekibi grup açılmadan tek model çağrısıyla gözden geçirir; sonuç forma öneri olarak döner.
 const CAP_KIND_TEXT = {
   plugin: 'eklenti', skill: 'skill (hesapta kurulu)', mcp: 'mcp', bundled: 'skill (Claude Code yerleşik)', synced: 'skill (claude.ai)', project: 'skill (proje klasöründe)',
 };
 
-// Modele verilen yetenek kataloğu: hesaplarda kurulu olanlar (inventory) + panelin MCP ve skill'leri.
+// Modele verilen yetenek kataloğu: hesaplarda kurulu olanlar (inventory) + depodaki skill'ler.
 function capCatalog(inventory) {
   const c = caps.load();
   return [
@@ -32,7 +27,6 @@ function capCatalog(inventory) {
       ...(x.skills ? { skilleri: x.skills } : {}),
       ...(x.hooks ? { kancasi_var: true } : {}),
     })),
-    ...c.mcps.map((m) => ({ key: `pmcp:${m.id}`, tur: 'mcp (panel)', ad: m.name, aciklama: m.url || [m.command, ...(m.args || [])].join(' ') })),
     ...c.skills.map((k) => ({ key: `pskill:${k.name}`, tur: 'skill (panel)', ad: k.name, aciklama: String(k.description || '').slice(0, 160) })),
   ];
 }
@@ -184,55 +178,4 @@ route('GET', '/api/roles/([\\w-]+)/cap-usage', async (req, m) => {
   const inventory = caps.inventory(settings.accounts).filter((x) => x.kind !== 'project');
   const stats = (sid) => sessionStats(discovery.transcriptPath(sharedConfigDir(), sid));
   return roleadvisor.capUsage(m[1], store.loadGroups(), stats, capCatalog(inventory));
-});
-
-route('POST', '/api/templates', async (req) => {
-  const body = await readBody(req);
-  const name = cleanText(body.name, 60);
-  if (!name) throw new HttpError(400, 'Şablon adı gerekli.');
-  const rows = Array.isArray(body.rows) ? body.rows.slice(0, 12) : [];
-  if (!rows.length) throw new HttpError(400, 'Şablonda en az bir satır olmalı.');
-  const scope = body.scope === 'global' ? 'global' : String(body.scope || '');
-  if (scope !== 'global' && !store.loadProjects().some((p) => p.id === scope)) throw new HttpError(400, 'Şablon kapsamı geçersiz.');
-  const templates = store.loadTemplates();
-  const tpl = {
-    id: crypto.randomUUID(),
-    name,
-    scope,
-    createdAt: Date.now(),
-    permissionMode: PERMISSION_MODES.includes(body.permissionMode) ? body.permissionMode : 'manual',
-    rows: rows.map((r) => ({
-      key: cleanText(r.key, 20),
-      roleId: cleanText(r.roleId, 24),
-      customLabel: cleanText(r.customLabel, 40),
-      customPrompt: String(r.customPrompt || ''),
-      ...(typeof r.prompt === 'string' && r.prompt.trim() ? { prompt: r.prompt.trim() } : {}),
-      ...(capsOverride(r.caps) ? { caps: capsOverride(r.caps) } : {}),
-      accountId: cleanText(r.accountId, 12),
-      model: MODELS.includes(r.model) ? r.model : '',
-      effort: EFFORTS.includes(r.effort) ? r.effort : '',
-      permissionMode: PERMISSION_MODES.includes(r.permissionMode) ? r.permissionMode : '',
-      talkAll: !!r.talkAll,
-      reportsTo: Array.isArray(r.reportsTo) ? r.reportsTo.map((k) => cleanText(k, 20)) : [],
-    })),
-  };
-  templates.push(tpl);
-  store.saveTemplates(templates);
-  return tpl;
-});
-
-route('PUT', '/api/templates/([\\w-]+)', async (req, m) => {
-  const body = await readBody(req);
-  const templates = store.loadTemplates();
-  const t = templates.find((x) => x.id === m[1]);
-  if (!t) throw new HttpError(404, 'Şablon bulunamadı.');
-  if (body.name != null) t.name = cleanText(body.name, 60) || t.name;
-  if (body.scope != null) t.scope = body.scope === 'global' ? 'global' : String(body.scope);
-  store.saveTemplates(templates);
-  return t;
-});
-
-route('DELETE', '/api/templates/([\\w-]+)', async (req, m) => {
-  store.saveTemplates(store.loadTemplates().filter((t) => t.id !== m[1]));
-  return { ok: true };
 });

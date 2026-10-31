@@ -31,7 +31,6 @@ function buildState() {
     settings,
     projects: store.loadProjects(),
     groups,
-    templates: store.loadTemplates(),
     events,
     autostart: fs.existsSync(STARTUP_LINK),
     presence: presence.view(),

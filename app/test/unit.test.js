@@ -79,7 +79,7 @@ test('caps: skill listesi öğrenilir, türler ayrılır, kapatma skillOverrides
   assert.deepStrictEqual(f.settings.skillOverrides, { 'anthropic-skills:docs': 'off', dataviz: 'off' });
 });
 
-test('caps: depodaki skill\'ler rol klasöründeki rollerle gelir, rol değişikliği oraya yazılır, salt okunurdur', () => {
+test('caps: depodaki skill\'ler rol klasöründeki rollerle gelir, rol değişikliği oraya yazılır', () => {
   const { Caps } = require('../services/setup/caps');
   const repo = tmp('builtin');
   const mk = (name, desc) => {
@@ -97,7 +97,6 @@ test('caps: depodaki skill\'ler rol klasöründeki rollerle gelir, rol değişik
   const c = new Caps(dir, repo, roleSkills);
   const roles = (n) => c.load().skills.find((s) => s.name === n).roles;
   assert.deepStrictEqual(roles('plan-skill'), ['sef']);
-  assert.ok(c.load().skills.every((s) => s.builtin));
   // Rol değişikliği rol klasörlerine yazılır; caps.json'a ve depodaki dosyalara girmez. Yalnızca değişen skill yazılır.
   c.setRole('pskill:plan-skill', 'coder', true);
   c.setRole('pskill:review-skill', 'review', false);
@@ -105,22 +104,13 @@ test('caps: depodaki skill\'ler rol klasöründeki rollerle gelir, rol değişik
   assert.deepStrictEqual(roles('review-skill'), []);
   assert.deepStrictEqual(writes, ['plan-skill', 'review-skill']);
   const saved = JSON.parse(fs.readFileSync(path.join(dir, 'caps.json'), 'utf8'));
-  assert.deepStrictEqual(saved.skills, []);
-  assert.strictEqual(saved.builtinRoles, undefined);
+  assert.deepStrictEqual(Object.keys(saved), ['globalOff', 'seen']);
   c.setRole('pskill:review-skill', 'review', true);
   assert.deepStrictEqual(assigned, { 'plan-skill': ['sef', 'coder'], 'review-skill': ['review'] });
   // Oturuma referans dosyalarıyla birlikte kopyalanır.
   const f = c.forSession('sid', 'sef', null);
   assert.ok(fs.existsSync(path.join(f.addDir, '.claude', 'skills', 'plan-skill', 'references', 'ek.md')));
   assert.ok(!fs.existsSync(path.join(f.addDir, '.claude', 'skills', 'review-skill')));
-  assert.strictEqual(c.readSkill('plan-skill').builtin, true);
-  assert.throws(() => c.removeSkill('plan-skill'), (e) => e.status === 403);
-  assert.throws(() => c.writeRaw('plan-skill', '---\nname: plan-skill\ndescription: x\n---\n'), (e) => e.status === 403);
-  assert.throws(() => c.writeSkill({ name: 'plan-skill', description: 'x', body: '' }), (e) => e.status === 409);
-  assert.ok(fs.existsSync(path.join(repo, 'plan-skill', 'SKILL.md')));
-  // Kullanıcı skill'i yerel katmanda kalır.
-  c.writeSkill({ name: 'yerel-skill', description: 'Yerel', body: 'x' });
-  assert.deepStrictEqual(c.load().skills.map((s) => [s.name, !!s.builtin]), [['plan-skill', true], ['review-skill', true], ['yerel-skill', false]]);
 });
 
 test('prompts/: her rolün ayarı ve talimatı var, depodaki skill\'ler var olan rollere atanmış', () => {
@@ -389,40 +379,6 @@ test('prompts: roller klasörlere yazılır, silinen rol kenara alınır, elle d
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(data, 'settings.json'), 'utf8')).roles, undefined);
 });
 
-test('prompts: rol kaydında değişen dosyaların eski hali arşive girer, en fazla 30 sürüm tutulur', () => {
-  const dir = tmp('prompts-arch');
-  fs.cpSync(path.join(ROOT, 'prompts'), dir, { recursive: true, filter: (src) => path.basename(src) !== 'archive' });
-  const script = `
-    const p = require('./services/core/prompts');
-    const out = {};
-    const list = () => p.roles().map((r) => ({ ...r }));
-    const orig = p.role('review').persona;
-    p.saveRoles(list());
-    out.noop = p.roleArchive('review').length;
-    const l = list(); l.find((r) => r.id === 'review').persona = 'yeni persona';
-    p.saveRoles(l, { review: { kaynak: 'rol danışmanı', ozet: 'kısa', uygulanan: [{ alan: 'persona', ozet: 'x', neden: 'y' }] } });
-    const a = p.roleArchive('review');
-    out.one = a.map((x) => ({ kaynak: x.kaynak, dosyalar: x.dosyalar, ozet: x.ozet }));
-    out.entry = p.roleArchiveEntry('review', a[0].id);
-    out.orig = orig;
-    out.bad = p.roleArchiveEntry('review', '../sef');
-    for (let i = 0; i < 32; i++) { const m = list(); m.find((r) => r.id === 'review').model = i % 2 ? 'opus' : 'sonnet'; p.saveRoles(m); }
-    out.kept = p.roleArchive('review').length;
-    out.sef = p.roleArchive('sef').length;
-    process.stdout.write(JSON.stringify(out));`;
-  const r = spawnSync(process.execPath, ['-e', script], { cwd: ROOT, env: { ...process.env, MAESTRO_PROMPTS: dir, MAESTRO_DATA: tmp('prompts-arch-data') }, encoding: 'utf8' });
-  assert.strictEqual(r.status, 0, r.stderr);
-  const o = JSON.parse(r.stdout);
-  // Değişiklik yoksa arşiv kaydı açılmaz.
-  assert.strictEqual(o.noop, 0);
-  assert.deepStrictEqual(o.one, [{ kaynak: 'rol danışmanı', dosyalar: ['persona.md'], ozet: 'kısa' }]);
-  assert.strictEqual(o.entry.files['persona.md'].replace(/\n+$/, ''), o.orig);
-  assert.strictEqual(o.entry.meta.uygulanan[0].neden, 'y');
-  assert.strictEqual(o.bad, null);
-  assert.strictEqual(o.kept, 30);
-  assert.strictEqual(o.sef, 0);
-});
-
 test('rol danışmanı: skill / MCP çağrıları sayılır, yetenek anahtarına eşlenir, rol başına toplanır', () => {
   const usage = require('../services/core/usage');
   const { capUsage, capKeyOf } = require('../services/setup/roleadvisor');
@@ -439,11 +395,10 @@ test('rol danışmanı: skill / MCP çağrıları sayılır, yetenek anahtarına
   assert.deepStrictEqual(st.mcpCalls, { ljr: 1, plugin_context7_context7: 1, panel: 1 });
   const catalog = [
     { key: 'pskill:tdd', ad: 'tdd' }, { key: 'skill:review', ad: 'review' }, { key: 'plugin:context7@x', ad: 'context7' },
-    { key: 'mcp:ljr', ad: 'ljr' }, { key: 'pmcp:1', ad: 'baska' },
+    { key: 'mcp:ljr', ad: 'ljr' },
   ];
   assert.strictEqual(capKeyOf(catalog, 'skill', 'context7:docs'), 'plugin:context7@x');
   assert.strictEqual(capKeyOf(catalog, 'mcp', 'plugin_context7_context7'), 'plugin:context7@x');
-  assert.strictEqual(capKeyOf(catalog, 'mcp', 'baska'), 'pmcp:1');
   assert.strictEqual(capKeyOf(catalog, 'skill', 'yok'), null);
   const stats = { s1: { lastAt: 1, skillCalls: st.skillCalls, mcpCalls: st.mcpCalls }, s2: { lastAt: 1, skillCalls: { tdd: 3 }, mcpCalls: {} }, s3: null };
   const groups = [{ sessions: [{ id: 's1', roleId: 'coder' }, { id: 's2', roleId: 'coder' }, { id: 's3', roleId: 'coder' }, { id: 's4', roleId: 'review' }] }];

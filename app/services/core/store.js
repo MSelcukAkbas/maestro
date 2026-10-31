@@ -15,8 +15,6 @@ const HOME = os.homedir();
 const DEFAULT_SETTINGS = {
   port: 7788,
   shell: 'pwsh.exe',
-  // Kota dolunca "sıra sende" durumundaki oturumları en çok kotası kalan hesaba taşır.
-  autoRotate: false,
   // Bağlam yüzdesi için model ailesi başına pencere (token). Modelin gerçek sınırı farklıysa Ayarlar'dan düzeltilir.
   contextWindows: { opus: 1000000, sonnet: 1000000, haiku: 200000 },
   allowedDirs: [path.join(HOME, 'Desktop')],
@@ -102,8 +100,6 @@ module.exports = {
   loadGroups: () => readJson('groups.json', []),
   viewGroups,
   saveGroups: (g) => { writeJson('groups.json', g); groupsView = null; },
-  loadTemplates: () => readJson('templates.json', []),
-  saveTemplates: (t) => writeJson('templates.json', t),
   loadToken,
   rotateToken,
 };

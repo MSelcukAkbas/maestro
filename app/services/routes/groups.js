@@ -1,5 +1,5 @@
 // Projeler ve gruplar: durum, proje ekleme / silme, grup kurma, devam ettirme, üye ekleme, mesajlar, durdurma,
-// grubu kapatma (dışa aktarma), arşiv, bekçi ayarı ve üye sırası.
+// grubu kapatma (dışa aktarma), arşiv ve üye sırası.
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
@@ -11,8 +11,7 @@ const exporter = require('../team/exporter');
 const { STATUS_TEXT } = require('../team/board');
 const { actorLabel } = require('../team/notes');
 const {
-  manager, boards, notes, HttpError, isAllowedDir, sharedConfigDir, cleanText, pushEvent,
-  groupWatchCfg, boardGroup,
+  manager, boards, notes, HttpError, isAllowedDir, sharedConfigDir, cleanText, pushEvent, boardGroup,
 } = require('../panel/context');
 const { createGroup, addSessionToGroup, startSessions } = require('../panel/launch');
 const { buildState, groupActivity } = require('../panel/state');
@@ -155,19 +154,6 @@ route('POST', '/api/groups/([\\w-]+)/archive', async (req, m) => {
   g.archived = body.archived !== false;
   store.saveGroups(groups);
   return { ok: true };
-});
-
-// Grubun bekçi ayarı (açık, hamleleri kendisi yapsın, kararı Haiku versin); verilmeyenler genel ayardan gelir.
-route('PUT', '/api/groups/([\\w-]+)/watch', async (req, m) => {
-  const body = await readBody(req);
-  const groups = store.loadGroups();
-  const g = groups.find((x) => x.id === m[1]);
-  if (!g) throw new HttpError(404, 'Grup bulunamadı.');
-  const w = { ...(g.watch || {}) };
-  for (const key of ['enabled', 'act', 'ai']) if (body[key] != null) w[key] = !!body[key];
-  g.watch = w;
-  store.saveGroups(groups);
-  return { ok: true, watch: groupWatchCfg(g) };
 });
 
 // Üye sekmelerinin sürüklenerek sıralanması. body.ids: görünen sıradaki oturum kimlikleri; listede olmayanlar sonda kalır.

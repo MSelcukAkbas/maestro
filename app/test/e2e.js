@@ -73,12 +73,11 @@ const SCENARIOS = {
     }
   },
 
-  // Depodaki skills/: rolün varsayılan skill'i oturuma yüklenir; Ayarlar'da rolden çıkarılan yüklenmez; salt okunur.
+  // Depodaki skills/: rolün varsayılan skill'i oturuma yüklenir; Ayarlar'da rolden çıkarılan yüklenmez.
   async builtinskills({ api, acc, pid }) {
     const caps = await api('GET', '/api/caps');
     const sec = caps.skills.find((s) => s.name === 'security-and-hardening');
-    assert.ok(sec && sec.builtin && sec.roles.includes('guvenlik'), 'depodaki skill varsayılan rolüyle gelmedi');
-    await assert.rejects(api('DELETE', '/api/caps/skill/security-and-hardening'), (e) => e.status === 403);
+    assert.ok(sec && sec.roles.includes('guvenlik'), 'depodaki skill varsayılan rolüyle gelmedi');
     await api('PUT', '/api/caps/role', { key: 'pskill:source-driven-development', roleId: 'arastirma', on: false });
     // İlk görev gruptaki yalnızca ilk üyeye gider; her rol kendi grubunda açılır ki ikisinin de kaydı oluşsun.
     const open = (roleId) => api('POST', '/api/groups', {

@@ -1,17 +1,14 @@
-// Rol yetenekleri: panelden eklenen MCP sunucuları ve skill'ler ile hesaplarda global kurulu olanlar.
-// Panel yetenekleri yalnızca işaretlenen rollerin oturumlarına verilir; global olanlar rol bazında kapatılabilir.
+// Rol yetenekleri: panelle gelen skill'ler (depodaki skills/) ve hesaplarda global kurulu olanlar (eklenti, skill, MCP).
+// Panel skill'leri yalnızca işaretlenen rollerin oturumlarına verilir; global olanlar rol bazında kapatılabilir.
 // Hiçbiri hesapların kendi ayarlarına yazılmaz; her şey oturum açılırken ona özel dosyalarla verilir.
 const fs = require('fs');
 const path = require('path');
-const os = require('os');
-const crypto = require('crypto');
 const { spawn, execFile } = require('child_process');
 const { APP_ROOT } = require('../core/paths');
 const prompts = require('../core/prompts');
 
 const SKILL_NAME = /^[a-z0-9][a-z0-9-]{0,63}$/;
-const MCP_NAME = /^[A-Za-z0-9][A-Za-z0-9_-]{0,47}$/;
-// Panelin görev panosu sunucusu; bu ad panel MCP'lerine verilemez ve hiçbir rolde kapatılmaz.
+// Panelin görev panosu sunucusu; hesaplardaki listede gösterilmez ve hiçbir rolde kapatılmaz.
 const RESERVED_MCP = 'panel';
 // claude.ai hesabından eşitlenen skill'lerin listedeki öneki; skillOverrides tam adla ("anthropic-skills:docs") kapatır.
 const SYNCED_PREFIX = 'anthropic-skills';
@@ -19,7 +16,6 @@ const SYNCED_PREFIX = 'anthropic-skills';
 // rol klasöründe (prompts/roles/<id>/role.json "skills"); panelden yapılan rol değişikliği de oraya yazılır.
 const BUILTIN_DIR = path.join(APP_ROOT, 'skills');
 const ROLE_SKILLS = { map: () => prompts.skillRoles(), set: (name, roles) => prompts.setSkillRoles(name, roles) };
-const READ_ONLY = 'Panelle gelen skill salt okunur; değişiklik depodaki skills/ klasöründe yapılır.';
 
 class CapError extends Error {
   constructor(status, message) {
@@ -71,13 +67,11 @@ class Caps {
   // roleSkills: { map() -> { skillAdı: [rolId] }, set(skillAdı, [rolId]) } — depodaki skill'lerin rolleri (testler verir).
   constructor(dataDir, builtinDir = BUILTIN_DIR, roleSkills = ROLE_SKILLS) {
     this.file = path.join(dataDir, 'caps.json');
-    this.skillDir = path.join(dataDir, 'skills');
     this.builtinDir = builtinDir;
     this.roleSkills = roleSkills;
     this.sessionDir = path.join(dataDir, 'session-skills');
     // () -> proje klasörleri; proje skill'lerini yerleşiklerden ayırmak için (index.js verir).
     this.projectDirs = null;
-    fs.mkdirSync(this.skillDir, { recursive: true });
   }
 
   // Depodaki skill'ler: [{ name, description, defaults }]. defaults: skill'in rol klasörlerinde açık olduğu roller.
@@ -97,21 +91,13 @@ class Caps {
     return out;
   }
 
-  isBuiltin(name) {
-    return this.load().skills.some((s) => s.name === name && s.builtin);
-  }
-
-  // { mcps: [{ id, name, type, command, args, env, url, headers, autoAllow, roles }],
-  //   skills: [{ name, description, roles, builtin?, defaults? }], globalOff: { key: [roleId] },
+  // { skills: [{ name, description, roles, defaults }], globalOff: { key: [roleId] },
   //   seen: { skillAdı: { chars, description, at } } — oturumların skill listesinde görülen her skill (kapatılan da kalır) }
-  // skills önce depodaki (builtin, roller = rol klasörlerindeki atama), sonra kullanıcının eklediği skill'ler.
-  // Aynı adda kullanıcı skill'i daha önceden varsa o kalır, depodaki gizlenir (kullanıcının skill'i kaybolmasın).
+  // skills: depodaki skill'ler; roles = rol klasörlerindeki atama (defaults ile başlar, setRole değiştirir).
   load() {
     const c = readJsonFile(this.file) || {};
-    const user = (c.skills || []).filter((s) => !s.builtin);
-    const builtin = this.builtins().filter((b) => !user.some((u) => u.name === b.name))
-      .map((b) => ({ name: b.name, description: b.description, roles: [...b.defaults], builtin: true, defaults: b.defaults }));
-    return { mcps: c.mcps || [], skills: [...builtin, ...user], globalOff: c.globalOff || {}, seen: c.seen || {} };
+    const skills = this.builtins().map((b) => ({ name: b.name, description: b.description, roles: [...b.defaults], defaults: b.defaults }));
+    return { skills, globalOff: c.globalOff || {}, seen: c.seen || {} };
   }
 
   // Oturum kaydındaki skill_listing eki: { names, content }. content satırları "- ad: açıklama" biçimindedir;
@@ -168,16 +154,14 @@ class Caps {
     }
   }
 
-  // Depodaki skill'ler caps.json'a yazılmaz; rolleri değiştiyse rol klasörlerine yazılır.
+  // Skill'ler caps.json'a yazılmaz; rolleri değiştiyse rol klasörlerine yazılır. caps.json yalnızca globalOff ve seen tutar.
   save(c) {
-    const skills = [];
     for (const s of c.skills || []) {
-      if (!s.builtin) { skills.push(s); continue; }
       const same = s.roles.length === s.defaults.length && s.roles.every((r) => s.defaults.includes(r));
       if (!same) this.roleSkills.set(s.name, s.roles);
     }
     const tmp = `${this.file}.${process.pid}.tmp`;
-    fs.writeFileSync(tmp, JSON.stringify({ ...c, skills }, null, 2), 'utf8');
+    fs.writeFileSync(tmp, JSON.stringify({ globalOff: c.globalOff, seen: c.seen }, null, 2), 'utf8');
     fs.renameSync(tmp, this.file);
   }
 
@@ -258,193 +242,9 @@ class Caps {
     return [...items.values()].sort((x, y) => x.kind.localeCompare(y.kind) || x.name.localeCompare(y.name));
   }
 
-  // ---------- panel MCP'leri ----------
-
-  // globalNames: hesaplardaki MCP adları; aynı ad, rolde global olanı kapatınca panel kopyasını da gizlerdi.
-  cleanMcp(body, existingId, globalNames = []) {
-    const name = String(body.name || '').trim();
-    if (!MCP_NAME.test(name)) throw new CapError(400, 'MCP adı harf ya da rakamla başlamalı; yalnızca harf, rakam, _ ve - içerebilir.');
-    if (name === RESERVED_MCP) throw new CapError(400, '"panel" adı panelin görev panosu sunucusuna ayrılmış.');
-    const c = this.load();
-    if (c.mcps.some((m) => m.name === name && m.id !== existingId)) throw new CapError(409, `"${name}" adında bir MCP zaten var.`);
-    if (globalNames.includes(name)) throw new CapError(409, `"${name}" hesaplarda global olarak kurulu; panel MCP'sine başka bir ad ver.`);
-    const type = body.type === 'http' ? 'http' : 'stdio';
-    const pairs = (o) => Object.fromEntries(Object.entries(o && typeof o === 'object' ? o : {})
-      .map(([k, v]) => [String(k).trim(), String(v)]).filter(([k]) => k));
-    const out = { name, type, autoAllow: !!body.autoAllow };
-    if (type === 'stdio') {
-      out.command = String(body.command || '').trim();
-      if (!out.command) throw new CapError(400, 'Komut gerekli.');
-      out.args = (Array.isArray(body.args) ? body.args : []).map(String).filter((s) => s !== '');
-      out.env = pairs(body.env);
-    } else {
-      out.url = String(body.url || '').trim();
-      if (!/^https?:\/\//i.test(out.url)) throw new CapError(400, 'Adres http:// ya da https:// ile başlamalı.');
-      out.headers = pairs(body.headers);
-    }
-    return out;
-  }
-
-  addMcp(body, globalNames) {
-    const m = { id: crypto.randomUUID(), ...this.cleanMcp(body, null, globalNames), roles: [] };
-    const c = this.load();
-    c.mcps.push(m);
-    this.save(c);
-    return m;
-  }
-
-  updateMcp(id, body, globalNames) {
-    const c = this.load();
-    const i = c.mcps.findIndex((m) => m.id === id);
-    if (i < 0) throw new CapError(404, 'MCP bulunamadı.');
-    c.mcps[i] = { ...c.mcps[i], ...this.cleanMcp(body, id, globalNames) };
-    this.save(c);
-    return c.mcps[i];
-  }
-
-  removeMcp(id) {
-    const c = this.load();
-    c.mcps = c.mcps.filter((m) => m.id !== id);
-    this.save(c);
-    return { ok: true };
-  }
-
-  // ---------- panel skill'leri ----------
-
-  skillPath(name) {
-    if (!SKILL_NAME.test(name)) throw new CapError(400, 'Skill adı küçük harf, rakam ve - içermeli (ör. android-sdk).');
-    return path.join(this.skillDir, name);
-  }
-
-  readSkill(name) {
-    const s = this.load().skills.find((x) => x.name === name);
-    if (!s) throw new CapError(404, 'Skill bulunamadı.');
-    const dir = s.builtin ? path.join(this.builtinDir, name) : this.skillPath(name);
-    let text = '';
-    try { text = fs.readFileSync(path.join(dir, 'SKILL.md'), 'utf8'); } catch {}
-    const files = [];
-    const walk = (d, rel) => {
-      for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-        const r = rel ? `${rel}/${e.name}` : e.name;
-        if (e.isDirectory()) walk(path.join(d, e.name), r);
-        else files.push(r);
-      }
-    };
-    try { walk(dir, ''); } catch {}
-    return { name, text, files, builtin: !!s.builtin };
-  }
-
-  // Kullanıcı skill'i yazılırken / alınırken depodaki bir skill'in adı kullanılamaz.
-  notBuiltin(name) {
-    if (this.isBuiltin(name)) throw new CapError(409, `"${name}" panelle gelen bir skill; başka bir ad ver.`);
-  }
-
-  register(name, description) {
-    const c = this.load();
-    const cur = c.skills.find((s) => s.name === name);
-    if (cur) cur.description = description;
-    else c.skills.push({ name, description, roles: [] });
-    this.save(c);
-    return c.skills.find((s) => s.name === name);
-  }
-
-  // Panelde yazılan skill: tek SKILL.md. Var olan skill'in yalnızca SKILL.md'si değişir, diğer dosyaları kalır.
-  writeSkill({ name, description, body, replace }) {
-    name = String(name || '').trim();
-    description = String(description || '').replace(/\s+/g, ' ').trim();
-    const dir = this.skillPath(name);
-    if (!description) throw new CapError(400, 'Açıklama gerekli; Claude skill\'i ne zaman kullanacağını buradan anlar.');
-    this.notBuiltin(name);
-    const exists = this.load().skills.some((s) => s.name === name);
-    if (exists && !replace) throw new CapError(409, `"${name}" adında bir skill zaten var.`);
-    fs.mkdirSync(dir, { recursive: true });
-    const text = `---\nname: ${name}\ndescription: ${description}\n---\n\n${String(body || '').trim()}\n`;
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), text, 'utf8');
-    return this.register(name, description);
-  }
-
-  // Var olan skill'in SKILL.md'si olduğu gibi (başlık satırlarıyla) değiştirilir; diğer dosyalar kalır.
-  writeRaw(name, text) {
-    const dir = this.skillPath(name);
-    if (this.isBuiltin(name)) throw new CapError(403, READ_ONLY);
-    if (!this.load().skills.some((s) => s.name === name)) throw new CapError(404, 'Skill bulunamadı.');
-    const meta = skillMeta(text);
-    if (meta.name !== name) throw new CapError(400, `SKILL.md başındaki name satırı "${name}" olmalı.`);
-    if (!meta.description) throw new CapError(400, 'SKILL.md başında description satırı olmalı.');
-    fs.writeFileSync(path.join(dir, 'SKILL.md'), String(text), 'utf8');
-    return this.register(name, meta.description);
-  }
-
-  // Klasördeki skill olduğu gibi kopyalanır. SKILL.md klasörün kökünde ya da bir alt klasöründe olabilir.
-  importDir(src, wantedName) {
-    const root = findSkillRoot(src);
-    if (!root) throw new CapError(400, 'Klasörde SKILL.md bulunamadı (kökte ya da bir alt klasörde olmalı).');
-    const meta = skillMeta(fs.readFileSync(path.join(root, 'SKILL.md'), 'utf8'));
-    if (!meta.description) throw new CapError(400, 'SKILL.md\'de description satırı yok.');
-    const name = String(wantedName || meta.name || path.basename(root)).trim().toLowerCase();
-    const dir = this.skillPath(name);
-    this.notBuiltin(name);
-    if (this.load().skills.some((s) => s.name === name)) throw new CapError(409, `"${name}" adında bir skill zaten var.`);
-    fs.rmSync(dir, { recursive: true, force: true });
-    fs.cpSync(root, dir, { recursive: true, dereference: true });
-    // Klasör adı ile SKILL.md'deki ad farklıysa Claude ikisini eşleştiremez; ad satırı düzeltilir.
-    if (meta.name && meta.name !== name) {
-      const f = path.join(dir, 'SKILL.md');
-      fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^(---\r?\n[\s\S]*?)^name:.*$/m, `$1name: ${name}`), 'utf8');
-    }
-    return this.register(name, meta.description);
-  }
-
-  // Zip önce boş bir geçici klasöre açılır; klasör dışına yazan girdi varsa reddedilir.
-  async importZip(buf, wantedName) {
-    const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'panel-skill-'));
-    try {
-      const zip = path.join(tmp, 'skill.zip');
-      const out = path.join(tmp, 'out');
-      fs.writeFileSync(zip, buf);
-      await new Promise((resolve, reject) => {
-        execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command',
-          // Açmadan önce girdi adları denetlenir: kök yolla ya da .. ile klasör dışına çıkan girdi varsa hiç açılmaz.
-          'Add-Type -AssemblyName System.IO.Compression.FileSystem; $z = [IO.Compression.ZipFile]::OpenRead($env:PANEL_ZIP); '
-          + "$bad = $z.Entries | Where-Object { $_.FullName -match '(^|[\\\\/])\\.\\.([\\\\/]|$)' -or $_.FullName -match '^([\\\\/]|[A-Za-z]:)' }; $z.Dispose(); "
-          + 'if ($bad) { exit 3 }; '
-          + 'Expand-Archive -LiteralPath $env:PANEL_ZIP -DestinationPath $env:PANEL_OUT -Force'],
-        { env: { ...process.env, PANEL_ZIP: zip, PANEL_OUT: out }, windowsHide: true, timeout: 60000 },
-        (err, stdout, stderr) => {
-          if (!err) return resolve();
-          if (err.code === 3) return reject(new CapError(400, 'Zip klasör dışına yazan bir girdi içeriyor.'));
-          reject(new CapError(400, `Zip açılamadı: ${String(stderr || err.message).trim().split('\n')[0]}`));
-        });
-      });
-      const realOut = fs.realpathSync(out);
-      const check = (d) => {
-        for (const e of fs.readdirSync(d, { withFileTypes: true })) {
-          const p = path.join(d, e.name);
-          if (e.isSymbolicLink()) throw new CapError(400, 'Zip içinde bağlantı (link) olamaz.');
-          if (!fs.realpathSync(p).startsWith(realOut + path.sep)) throw new CapError(400, 'Zip klasör dışına yazan bir girdi içeriyor.');
-          if (e.isDirectory()) check(p);
-        }
-      };
-      check(realOut);
-      return this.importDir(realOut, wantedName);
-    } finally {
-      fs.rmSync(tmp, { recursive: true, force: true });
-    }
-  }
-
-  removeSkill(name) {
-    const dir = this.skillPath(name);
-    if (this.isBuiltin(name)) throw new CapError(403, READ_ONLY);
-    const c = this.load();
-    c.skills = c.skills.filter((s) => s.name !== name);
-    this.save(c);
-    fs.rmSync(dir, { recursive: true, force: true });
-    return { ok: true };
-  }
-
   // ---------- rol ataması ----------
 
-  // Panel yeteneğinde roles = açık roller; global olanda globalOff[key] = kapalı roller.
+  // Panel skill'inde roles = açık roller; global olanda globalOff[key] = kapalı roller.
   setRole(key, roleId, on) {
     const c = this.load();
     const flip = (list, add) => {
@@ -454,9 +254,8 @@ class Caps {
     };
     const [kind, ...rest] = String(key).split(':');
     const id = rest.join(':');
-    if (kind === 'pmcp' || kind === 'pskill') {
-      const list = kind === 'pmcp' ? c.mcps : c.skills;
-      const item = list.find((x) => (kind === 'pmcp' ? x.id : x.name) === id);
+    if (kind === 'pskill') {
+      const item = c.skills.find((x) => x.name === id);
       if (!item) throw new CapError(404, 'Yetenek bulunamadı.');
       item.roles = flip(item.roles, on);
     } else if (['plugin', 'skill', 'mcp'].includes(kind) && id) {
@@ -471,7 +270,6 @@ class Caps {
   pruneRoles(roleIds) {
     const c = this.load();
     const keep = (list) => (list || []).filter((r) => roleIds.includes(r));
-    for (const m of c.mcps) m.roles = keep(m.roles);
     for (const s of c.skills) s.roles = keep(s.roles);
     for (const k of Object.keys(c.globalOff)) {
       c.globalOff[k] = keep(c.globalOff[k]);
@@ -480,25 +278,23 @@ class Caps {
     this.save(c);
   }
 
-  // Bir rolün varsayılan olarak aldığı yetenek anahtarları (global olanlar: kapatılmadıysa açık; panel olanlar: işaretliyse).
+  // Bir rolün varsayılan olarak aldığı yetenek anahtarları (global olanlar: kapatılmadıysa açık; panel skill'leri: işaretliyse).
   // Anlık rol (custom) yalnızca global yetenekleri alır.
   roleKeys(roleId, inventory) {
     const c = this.load();
     const on = inventory.filter((x) => !(c.globalOff[x.key] || []).includes(roleId)).map((x) => x.key);
-    for (const m of c.mcps) if (m.roles.includes(roleId)) on.push(`pmcp:${m.id}`);
     for (const k of c.skills) if (k.roles.includes(roleId)) on.push(`pskill:${k.name}`);
     return on;
   }
 
-  // Oturum açılırken: ayar dosyasına eklenecekler, MCP dosyasına eklenecek sunucular ve --add-dir klasörü.
-  // Skill'ler oturuma özel bir klasöre kopyalanır; panelde sonradan değişen skill bir sonraki açılışta gelir.
+  // Oturum açılırken: ayar dosyasına eklenecekler ve --add-dir klasörü.
+  // Skill'ler oturuma özel bir klasöre kopyalanır; depoda sonradan değişen skill bir sonraki açılışta gelir.
   // override: kurulumda bu oturum için rol varsayılanının üstüne açılan / kapatılan anahtarlar ({ on: [], off: [] }).
   forSession(sessionId, roleId, override) {
     const c = this.load();
     const on = new Set((override && override.on) || []);
     const off = new Set((override && override.off) || []);
     const settings = { enabledPlugins: {}, skillOverrides: {}, deny: [], allow: [] };
-    const mcpServers = {};
     const globalKeys = new Set([...Object.keys(c.globalOff), ...off].filter((k) => /^(plugin|skill|mcp):/.test(k)));
     for (const key of globalKeys) {
       if (on.has(key) || !(off.has(key) || (c.globalOff[key] || []).includes(roleId))) continue;
@@ -509,34 +305,18 @@ class Caps {
       else if (kind === 'mcp' && id !== RESERVED_MCP) settings.deny.push(mcpPrefix(id));
     }
     const panelOn = (key, roles) => !off.has(key) && (on.has(key) || roles.includes(roleId));
-    for (const m of c.mcps) {
-      if (!panelOn(`pmcp:${m.id}`, m.roles)) continue;
-      mcpServers[m.name] = m.type === 'http'
-        ? { type: 'http', url: m.url, headers: m.headers || {} }
-        : { type: 'stdio', command: m.command, args: m.args || [], env: m.env || {} };
-      if (m.autoAllow) settings.allow.push(mcpPrefix(m.name));
-    }
     const dir = path.join(this.sessionDir, sessionId);
     fs.rmSync(dir, { recursive: true, force: true });
     const skills = c.skills.filter((s) => panelOn(`pskill:${s.name}`, s.roles));
     let addDir = null;
     for (const s of skills) {
-      const src = path.join(s.builtin ? this.builtinDir : this.skillDir, s.name);
+      const src = path.join(this.builtinDir, s.name);
       if (!fs.existsSync(path.join(src, 'SKILL.md'))) continue;
       fs.cpSync(src, path.join(dir, '.claude', 'skills', s.name), { recursive: true });
       addDir = dir;
     }
-    return { settings, mcpServers, addDir };
+    return { settings, addDir };
   }
-}
-
-function findSkillRoot(src) {
-  let st;
-  try { st = fs.statSync(src); } catch { return null; }
-  if (!st.isDirectory()) return null;
-  if (fs.existsSync(path.join(src, 'SKILL.md'))) return src;
-  const subs = fs.readdirSync(src, { withFileTypes: true }).filter((e) => e.isDirectory() && fs.existsSync(path.join(src, e.name, 'SKILL.md')));
-  return subs.length === 1 ? path.join(src, subs[0].name) : null;
 }
 
 // ---------- "Dene": sunucuya bağlanıp tool listesini çekme ----------

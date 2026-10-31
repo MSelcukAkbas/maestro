@@ -71,7 +71,7 @@ function usage(roleId, groups, projects, stats, events, limit) {
 }
 
 // Çağrılan skill / MCP adının yetenek kataloğundaki anahtarı. Skill: panel skill'i, hesaptaki skill ya da "eklenti:ad"
-// biçiminde eklentinin skill'i. MCP sunucusu: panel MCP'si, hesaptaki MCP ya da "plugin_<eklenti>_<sunucu>" (eklentinin).
+// biçiminde eklentinin skill'i. MCP sunucusu: hesaptaki MCP ya da "plugin_<eklenti>_<sunucu>" (eklentinin).
 function capKeyOf(catalog, kind, name) {
   const find = (f) => (catalog.find(f) || {}).key || null;
   const plugin = (f) => find((x) => x.key.startsWith('plugin:') && f(x.ad));
@@ -79,7 +79,7 @@ function capKeyOf(catalog, kind, name) {
     const pfx = name.includes(':') ? name.split(':')[0] : null;
     return find((x) => x.key === `pskill:${name}`) || find((x) => x.key === `skill:${name}`) || (pfx ? plugin((ad) => ad === pfx) : null);
   }
-  return find((x) => x.key.startsWith('pmcp:') && x.ad === name) || find((x) => x.key === `mcp:${name}`) || plugin((ad) => name.startsWith(`plugin_${ad}_`));
+  return find((x) => x.key === `mcp:${name}`) || plugin((ad) => name.startsWith(`plugin_${ad}_`));
 }
 
 // Rolün bütün oturumlarında yetenek başına çağrı: { oturum, keys: { key: { cagri, oturum } } }. stats(sid) -> sessionStats.

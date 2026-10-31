@@ -5,10 +5,9 @@ const fs = require('fs');
 const store = require('../core/store');
 const prompts = require('../core/prompts');
 const { MODELS, EFFORTS, PERMISSION_MODES } = require('../core/options');
-const { WATCH_DEFAULTS } = require('../watch/watch');
 const {
   PORT, settings, replaceSettings, rotateToken, caps, meter, watch, ledger, ops, HttpError, cleanText, cachedQuota,
-  groupWatchCfg, shutdown,
+  watchCfg, shutdown,
 } = require('../panel/context');
 const { STARTUP_LINK, setAutostart } = require('../panel/state');
 const { route, readBody } = require('../panel/http');
@@ -25,7 +24,7 @@ route('POST', '/api/shutdown', async () => {
 });
 
 route('GET', '/api/meter', async () => ({ ...meter.snapshot(settings.accounts), ledger: ledger.view() }));
-// Bekçi grup başına: g verilirse o grubun bulguları, adayları, kayıtları, işlemleri ve geçerli ayarı.
+// Bekçi: g verilirse yalnızca o grubun bulguları, adayları, kayıtları ve işlemleri; ayar bütün gruplar için tektir.
 route('GET', '/api/watch', async (req) => {
   const gid = new URL(req.url, 'http://x').searchParams.get('g');
   const g = gid ? store.loadGroups().find((x) => x.id === gid) : null;
@@ -33,8 +32,7 @@ route('GET', '/api/watch', async (req) => {
   return {
     ...watch.snapshot(gid),
     ops: ops.list().filter((o) => !gid || o.gid === gid),
-    settings: g ? groupWatchCfg(g) : { ...WATCH_DEFAULTS, ...(settings.watch || {}) },
-    groupWatch: g ? g.watch || {} : undefined,
+    settings: watchCfg(),
   };
 });
 
@@ -47,9 +45,8 @@ route('PUT', '/api/settings', async (req) => {
   const body = await readBody(req);
   const next = { ...settings };
   if (Array.isArray(body.allowedDirs)) next.allowedDirs = body.allowedDirs.map((d) => String(d).trim()).filter(Boolean);
-  if (body.autoRotate != null) next.autoRotate = !!body.autoRotate;
   if (body.watch && typeof body.watch === 'object') {
-    const w = { ...WATCH_DEFAULTS, ...(settings.watch || {}) };
+    const w = watchCfg();
     for (const key of ['enabled', 'act', 'ai']) if (body.watch[key] != null) w[key] = !!body.watch[key];
     const num = (key, lo, hi) => {
       const v = Number(body.watch[key]);
@@ -108,36 +105,9 @@ route('PUT', '/api/settings', async (req) => {
   replaceSettings(next);
   store.saveSettings(settings);
   // Roller prompts/roles/<id>/ klasörlerine yazılır (role.json, permissions.json, persona / gorevler / sinirlar md).
-  if (roles) prompts.saveRoles(roles, archiveNotes(body.roleNotes));
+  if (roles) prompts.saveRoles(roles);
   if (Array.isArray(body.roles)) caps.pruneRoles(settings.roles.map((r) => r.id));
   return { settings, restartNeeded: body.port != null && Number(body.port) !== PORT };
-});
-
-// Rol arşivine eklenecek not (rol danışmanının uyguladığı öneriler): { rolId: { kaynak, ozet, cevaplar, uygulanan } }.
-// Model ve kullanıcı metni olduğu için boyutu sınırlanır; kaynak yalnızca bilinen değerlerden.
-function archiveNotes(raw) {
-  const out = {};
-  if (!raw || typeof raw !== 'object') return out;
-  for (const [id, n] of Object.entries(raw).slice(0, 50)) {
-    if (!prompts.ROLE_ID.test(id) || !n || typeof n !== 'object') continue;
-    const list = (v, map) => (Array.isArray(v) ? v.slice(0, 20).map(map) : []);
-    out[id] = {
-      kaynak: n.kaynak === 'rol danışmanı' ? 'rol danışmanı' : n.kaynak === 'geri yükleme' ? 'geri yükleme' : 'elle',
-      ...(n.ozet ? { ozet: String(n.ozet).slice(0, 1000) } : {}),
-      ...(n.geriYuklenen ? { geriYuklenen: cleanText(n.geriYuklenen, 40) } : {}),
-      cevaplar: list(n.cevaplar, (x) => ({ soru: cleanText(x && x.soru, 400), cevap: String((x && x.cevap) || '').slice(0, 1000) })),
-      uygulanan: list(n.uygulanan, (x) => ({ alan: cleanText(x && x.alan, 40), ozet: String((x && x.ozet) || '').slice(0, 2000), neden: cleanText(x && x.neden, 300) })),
-    };
-  }
-  return out;
-}
-
-// Rolün panelden yapılan kayıtlarının arşivi (en yeni önce) ve tek sürümün dosyaları.
-route('GET', '/api/roles/([\\w-]+)/archive', async (req, m) => prompts.roleArchive(m[1]));
-route('GET', '/api/roles/([\\w-]+)/archive/([\\w-]+)', async (req, m) => {
-  const e = prompts.roleArchiveEntry(m[1], m[2]);
-  if (!e) throw new HttpError(404, 'Arşiv kaydı bulunamadı.');
-  return e;
 });
 
 route('POST', '/api/token/rotate', async () => {
