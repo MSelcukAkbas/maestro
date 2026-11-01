@@ -1,4 +1,4 @@
-// Maestro arayüzü · Çalışma ekranı: terminaller, harita, zaman çizelgesi, mesajlar, pano, notlar.
+// Maestro arayüzü · Çalışma ekranı: terminaller, ekip görünümü (harita + zaman çizelgesi), mesajlar, pano, notlar.
 // web/js/ altındaki dosyalar index.html'deki sırayla yüklenen klasik script'lerdir; üst düzey bildirimler ortak
 // global kapsamdadır. Yüklenirken çalışan kod yalnızca kendinden önceki dosyaları kullanabilir.
 'use strict';
@@ -136,7 +136,8 @@ function createTerm(sessionId, body) {
   return obj;
 }
 
-// Harita yardımcıları.
+// Ekip görünümü (harita + zaman şeritleri + mesajlar) yardımcıları. Eski kayıtlı "map" / "time" / "msgs" görünümü "team" olur.
+const teamView = (v) => (['map', 'time', 'msgs'].includes(v) ? 'team' : v);
 const MAP_WINDOWS = [['15m', '15 dk', 15 * 60000], ['1h', '1 saat', 3600000], ['all', 'Tümü', 0]];
 const ROLE_COLORS = {
   sef: '#f0b45a', coder: '#6aa8ff', review: '#b690ff', debug: '#ef6b6b', kalite: '#34d1a0',
@@ -179,6 +180,15 @@ function initials(label) {
   return (words.length > 1 ? words[0][0] + words[1][0] : words[0].slice(0, 2)).toLocaleUpperCase('tr');
 }
 // p noktasından q'ya doğru d kadar ilerlemiş nokta (okları düğüm kenarında başlatıp bitirmek için).
+// Harita çizim alanı (viewBox) ve en fazla yakınlaştırma.
+const MAP_W = 1000, MAP_H = 660, MAP_ZOOM_MAX = 4;
+// Ekrandaki noktanın harita (SVG) koordinatı.
+function svgPoint(svg, x, y) {
+  const p = svg.createSVGPoint();
+  p.x = x;
+  p.y = y;
+  return p.matrixTransform(svg.getScreenCTM().inverse());
+}
 function towards(p, q, d) {
   const dx = q.x - p.x, dy = q.y - p.y, len = Math.hypot(dx, dy) || 1;
   return { x: p.x + (dx / len) * d, y: p.y + (dy / len) * d };
@@ -191,7 +201,7 @@ const WorkView = {
     this.gid = id;
     this.selected = sid || null;
     this.layout = ['grid', 'split'].includes(store(LAYOUT_KEY)) ? store(LAYOUT_KEY) : 'tek';
-    this.view = ['map', 'time', 'msgs', 'board', 'notes', 'bekci'].includes(store(VIEW_KEY)) ? store(VIEW_KEY) : 'terms';
+    this.view = ['team', 'board', 'notes', 'bekci'].includes(teamView(store(VIEW_KEY))) ? teamView(store(VIEW_KEY)) : 'terms';
     this.noteSel = null;
     this.noteReading = false;
     this.noteQuery = '';
@@ -210,13 +220,19 @@ const WorkView = {
     this.notesKey = null;
     this.boardKey = null;
     this.dragCard = null;
-    this.msgFilter = 'all';
     this.openMsgs = new Set();
     this.msgBodies = new Map();
     this.allBodies = false;
     this.mapWindow = ['15m', '1h', 'all'].includes(store(MAPWIN_KEY)) ? store(MAPWIN_KEY) : 'all';
+    // Ekip görünümünde seçili üye / ok ([gönderen, alan]) / mesaj ve bağlam panelindeki arama.
     this.mapSel = null;
+    this.edgeSel = null;
+    this.msgSel = null;
+    this.teamQuery = '';
     this.mapKey = null;
+    this.statsOpen = false;
+    this.mapView = null;
+    this.mapDrag = null;
     this.panes = new Map();
     document.body.classList.add('work');
     app.innerHTML = `
@@ -229,9 +245,7 @@ const WorkView = {
           <button class="btn small add-member" id="add-member" aria-label="Üye ekle" title="Üye ekle">${ICON_PLUS}</button>
           <div class="seg view-seg" role="group" aria-label="Görünüm" id="view-seg">
             <button data-view="terms" aria-pressed="${this.view === 'terms'}" aria-label="Terminaller" title="Terminaller">${ICON_TERM}</button>
-            <button data-view="map" aria-pressed="${this.view === 'map'}" aria-label="Harita" title="Harita">${ICON_MAP}</button>
-            <button data-view="time" aria-pressed="${this.view === 'time'}" aria-label="Zaman" title="Zaman">${ICON_TIME}</button>
-            <button data-view="msgs" aria-pressed="${this.view === 'msgs'}" aria-label="Mesajlar" title="Mesajlar">${ICON_MSGS}</button>
+            <button data-view="team" aria-pressed="${this.view === 'team'}" aria-label="Ekip" title="Ekip: iletişim haritası, zaman çizelgesi ve mesajlar">${ICON_MAP}</button>
             <button data-view="board" aria-pressed="${this.view === 'board'}" aria-label="Pano" title="Pano">${ICON_BOARD}</button>
             <button data-view="notes" aria-pressed="${this.view === 'notes'}" aria-label="Notlar" title="Notlar">${ICON_NOTES}</button>
           </div>
@@ -261,12 +275,65 @@ const WorkView = {
     };
     $('#bekci-btn').addEventListener('click', this.onBekciBtn);
     const act$ = $('#activity');
-    // Harita: zaman aralığı, düğüm seçimi, üzerine gelince ilgili okları vurgulama.
+    // Ekip görünümü: ortak zaman aralığı, üye seçimi (harita düğümü ya da şerit adı), üzerine gelince ilgili okları
+    // vurgulama, istatistik tablosunun açık / kapalı durumu.
     const redrawMap = () => {
       this.mapKey = null;
       const g = this.group();
-      if (g && this.lastActivity) this.renderMap(g, this.lastActivity);
+      if (g && this.lastActivity) this.renderTeam(g, this.lastActivity);
     };
+    // Harita yakınlaştırma: tekerlek imlecin altındaki noktaya yakınlaştırır (tamamı görünürken uzaklaştırma sayfayı
+    // kaydırır), yakınken sağ tuşla sürükleme kaydırır; sol tık yalnızca seçim yapar. Haritada sağ tık menüsü açılmaz.
+    act$.addEventListener('wheel', (e) => {
+      const svg = e.target.closest && e.target.closest('#map-svg');
+      if (!svg || (e.deltaY > 0 && !this.mapView)) return;
+      e.preventDefault();
+      const p = svgPoint(svg, e.clientX, e.clientY);
+      this.zoomMap(e.deltaY < 0 ? 1.2 : 1 / 1.2, p.x, p.y);
+    }, { passive: false });
+    act$.addEventListener('contextmenu', (e) => {
+      if (e.target.closest && e.target.closest('#map-svg')) e.preventDefault();
+    });
+    act$.addEventListener('pointerdown', (e) => {
+      const svg = e.target.closest && e.target.closest('#map-svg');
+      if (!svg || !this.mapView || e.button !== 2) return;
+      e.preventDefault();
+      this.mapDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, view: { ...this.mapView }, k: 1 / svg.getScreenCTM().a, svg, moved: false };
+    });
+    act$.addEventListener('pointermove', (e) => {
+      const d = this.mapDrag;
+      if (!d || e.pointerId !== d.id) return;
+      const dx = e.clientX - d.x, dy = e.clientY - d.y;
+      if (!d.moved) {
+        if (Math.hypot(dx, dy) < 4) return;
+        d.moved = true;
+        d.svg.setPointerCapture(d.id);
+        d.svg.classList.add('panning');
+      }
+      this.setMapView({ w: d.view.w, x: d.view.x - dx * d.k, y: d.view.y - dy * d.k });
+    });
+    const endDrag = (e) => {
+      const d = this.mapDrag;
+      if (!d || e.pointerId !== d.id) return;
+      this.mapDrag = null;
+      d.svg.classList.remove('panning');
+    };
+    act$.addEventListener('pointerup', endDrag);
+    act$.addEventListener('pointercancel', endDrag);
+    act$.addEventListener('click', (e) => {
+      const z = e.target.closest('[data-mz]');
+      if (!z) return;
+      if (z.dataset.mz === 'fit') this.setMapView(null);
+      else this.zoomMap(z.dataset.mz === 'in' ? 1.4 : 1 / 1.4);
+    });
+    act$.addEventListener('toggle', (e) => {
+      const d = e.target;
+      if (!d.matches) return;
+      if (d.matches('details.tl-more')) this.statsOpen = d.open;
+      if (d.matches('details[data-mid]')) {
+        if (d.open) { this.openMsgs.add(d.dataset.mid); this.loadBody(d); } else this.openMsgs.delete(d.dataset.mid);
+      }
+    }, true);
     act$.addEventListener('click', (e) => {
       const w = e.target.closest('[data-mw]');
       if (w) {
@@ -275,17 +342,23 @@ const WorkView = {
         return redrawMap();
       }
       const sn = e.target.closest('[data-sel]');
-      if (sn) {
-        this.mapSel = sn.dataset.sel && sn.dataset.sel !== this.mapSel ? sn.dataset.sel : null;
-        return redrawMap();
+      if (sn) return this.selectTeam({ member: sn.dataset.sel !== this.mapSel ? sn.dataset.sel : null });
+      // Ok: iki üyenin konuşması (iki yön birlikte); aynı oka yeniden tıklamak seçimi kaldırır.
+      const ed = e.target.closest('.edge[data-from]');
+      if (ed) {
+        const pair = [ed.dataset.from, ed.dataset.to];
+        const same = this.edgeSel && pair.every((x) => this.edgeSel.includes(x));
+        return this.selectTeam({ edge: same ? null : pair });
       }
+      const mk = e.target.closest('[data-msg]');
+      if (mk) return this.selectTeam({ msg: mk.dataset.msg !== this.msgSel ? mk.dataset.msg : null });
+      if (e.target.closest('[data-ctx-clear]')) return this.selectTeam();
     });
     act$.addEventListener('keydown', (e) => {
-      const sn = e.target.closest('.node[data-sel]');
+      const sn = e.target.closest('.node[data-sel], .edge[data-from]');
       if (sn && (e.key === 'Enter' || e.key === ' ')) {
         e.preventDefault();
-        this.mapSel = sn.dataset.sel;
-        redrawMap();
+        sn.dispatchEvent(new MouseEvent('click', { bubbles: true }));
       }
     });
     act$.addEventListener('mouseover', (e) => {
@@ -851,9 +924,7 @@ const WorkView = {
     try {
       const a = await api('GET', `/api/groups/${g.id}/activity`);
       this.lastActivity = a;
-      if (this.view === 'map') this.renderMap(g, a);
-      else if (this.view === 'time') this.renderTimeline(g, a);
-      else if (this.view === 'msgs') this.renderMsgs(g, a);
+      if (this.view === 'team') this.renderTeam(g, a);
     } catch (err) {
       $('#activity').innerHTML = `<div class="empty">Etkinlik alınamadı: ${esc(err.message)}</div>`;
     } finally {
@@ -861,22 +932,87 @@ const WorkView = {
     }
   },
 
+  // Ekip görünümü: solda iletişim haritası, altta aynı zaman aralığındaki durum şeritleri, sağda bağlam paneli.
+  // Mesajlar toplu dökülmez; panel yalnızca seçilenin mesajlarını gösterir (üye, ok = iki üyenin konuşması, şeritteki
+  // mesaj çizgisi) ya da aramayı. Özet kutuları ve tablo grubun tamamı içindir; aralık haritayı, şeritleri ve paneli süzer.
+  renderTeam(g, a) {
+    if (!$('#team-map')) {
+      this.mapKey = null;
+      this.ctxHtml = null;
+      $('#activity').innerHTML = `
+          <div class="team">
+            <div class="team-top">
+              <div id="team-map"></div>
+              <aside class="team-side card" aria-label="Seçilenin ayrıntısı ve mesajları">
+                <div class="ctx-search"><input id="team-q" type="search" placeholder="Mesajlarda ara" aria-label="Mesajlarda ara" value="${esc(this.teamQuery)}"></div>
+                <div id="team-ctx"></div>
+              </aside>
+            </div>
+            <div id="team-time"></div>
+          </div>`;
+      $('#team-q').addEventListener('input', (e) => {
+        this.teamQuery = e.target.value;
+        const gg = this.group();
+        if (gg && this.lastActivity) this.renderTeam(gg, this.lastActivity);
+      });
+    }
+    const members = g.sessions.filter((s) => !s.removed);
+    // Grubun başlangıcı: açılış ya da (daha eskiyse) ilk kayıtlı durum.
+    let start = g.createdAt;
+    for (const s of members) {
+      const list = (a.timeline || {})[s.id];
+      if (list && list.length && list[0].t < start) start = list[0].t;
+    }
+    // Süreler çizimden ayrı, ortak hesaptan (core.js timeStats); proje sayfasındaki grup özeti de aynısını kullanır.
+    const tot = { members, start, ts: timeStats(members, a, start, false), away: awayIntervals(a.user || [], a.now) };
+    const win = MAP_WINDOWS.find((w) => w[0] === this.mapWindow) || MAP_WINDOWS[0];
+    tot.since = win[2] ? Math.max(start, a.now - win[2]) : start;
+    this.renderMap(g, a, tot);
+    this.renderCtx(g, a, tot);
+    this.renderTimeline(g, a, tot);
+  },
+
+  // Seçimler birbirini dışlar: üye, ok (iki üye) ya da tek mesaj. Boş çağrı hepsini temizler.
+  selectTeam(sel = {}) {
+    this.mapSel = sel.member || null;
+    this.edgeSel = sel.edge || null;
+    this.msgSel = sel.msg || null;
+    this.mapKey = null;
+    const g = this.group();
+    if (g && this.lastActivity) this.renderTeam(g, this.lastActivity);
+  },
+
+  // Grubun tamamı için özet kutuları: grup süresi, ekip aktif / boşta, çalışma toplamı, onay bekleme, uzaklık, mesaj.
+  teamTiles(a, tot) {
+    const { ts } = tot;
+    const tiles = [
+      ['Grup süresi', fmtDur(ts.span), 'Grubun açılışından bu yana geçen süre (duvar saati)'],
+      ['Ekip aktif', fmtDur(ts.active), 'En az bir üyenin çalıştığı ya da onay beklediği süre; aynı anda çalışan üyeler bir kez sayılır'],
+      ['Ekip boşta', fmtDur(ts.idle), 'Üyeler açıkken hiçbirinin çalışmadığı süre'],
+      ['Üyelerin çalışma toplamı', fmtDur(ts.agentBusy), 'Her üyenin çalışma süresi toplanır; iki üye aynı saatte çalışınca iki saat sayılır'],
+      ['Onay bekleme', fmtDur(ts.waiting), 'Sen başındayken üyelerin onay beklediği sürelerin toplamı'],
+      ['Sen uzaktaydın', fmtDur(ts.userAway), 'Grubun süresi içinde panelden uzakta geçen süre'],
+      ['Mesaj', String(a.messages.length), ''],
+    ];
+    return `<div class="tl-tiles">${tiles.map(([l, v, tip]) => `<div class="tl-tile"${tip ? ` title="${esc(tip)}"` : ''}><span>${l}</span><strong>${v}</strong></div>`).join('')}</div>`;
+  },
+
   // İletişim haritası. Şef ortada, diğer üyeler çevresinde; oklar mesaj yönünü, kalınlık mesaj sayısını,
   // akan noktalar son bir dakikadaki mesajları gösterir. Düğümün dış halkası bağlamın doluluğudur.
   // Veri değişmedikçe yeniden çizilmez (animasyon ve üzerine gelme durumu bozulmasın diye).
-  renderMap(g, a) {
-    const members = g.sessions.filter((s) => !s.removed);
-    const win = MAP_WINDOWS.find((w) => w[0] === this.mapWindow) || MAP_WINDOWS[0];
-    const since = win[2] ? a.now - win[2] : 0;
+  renderMap(g, a, tot) {
+    const { members, since } = tot;
     const msgs = a.messages.filter((m) => m.ts >= since);
     const key = JSON.stringify([
       members.map((s) => [s.id, statusKey(s), s.accountId, s.stats && s.stats.context, s.stats && Math.round(s.stats.costUSD * 100)]),
-      msgs.length, msgs.length ? msgs[msgs.length - 1].ts : 0, this.mapWindow, this.mapSel, Math.floor(a.now / 15000),
+      msgs.length, msgs.length ? msgs[msgs.length - 1].ts : 0, this.mapWindow, this.mapSel, this.edgeSel, Math.floor(a.now / 15000),
     ]);
-    if (key === this.mapKey && $('#map-svg')) return;
+    // Sürükleme sırasında yeniden çizilmez (tutulan SVG değişmesin); bırakınca sonraki yenilemede çizilir.
+    if ((key === this.mapKey && $('#map-svg')) || (this.mapDrag && this.mapDrag.moved)) return;
+    const box = $('#team-map');
     this.mapKey = key;
 
-    const W = 1000, H = 660, cx = W / 2, cy = H / 2 - 34, NR = 44;
+    const W = MAP_W, H = MAP_H, cx = W / 2, cy = H / 2 - 34, NR = 44;
     const lead = members.length > 2 ? members.find((s) => s.roleId === 'sef') : null;
     const ring = members.filter((s) => s !== lead);
     const R = ring.length > 1 ? Math.min(330, 230 + ring.length * 14) : 0;
@@ -889,11 +1025,8 @@ const WorkView = {
 
     const HOT_MS = 60000;
     const edges = new Map();
-    const sent = new Map(), recv = new Map();
     let outside = 0;
     for (const m of msgs) {
-      sent.set(m.from, (sent.get(m.from) || 0) + 1);
-      if (m.to) recv.set(m.to, (recv.get(m.to) || 0) + 1);
       if (!m.to || !pos.has(m.from) || !pos.has(m.to)) { outside++; continue; }
       const k = `${m.from}>${m.to}`;
       const e = edges.get(k) || { from: m.from, to: m.to, n: 0, last: 0, text: '', hot: 0 };
@@ -903,6 +1036,7 @@ const WorkView = {
       edges.set(k, e);
     }
     const maxN = Math.max(1, ...[...edges.values()].map((e) => e.n));
+    const pairSel = (e) => !!this.edgeSel && this.edgeSel.includes(e.from) && this.edgeSel.includes(e.to);
 
     const edgeSvg = [...edges.values()].map((e) => {
       const p = pos.get(e.from), q = pos.get(e.to);
@@ -920,7 +1054,7 @@ const WorkView = {
       const dots = e.hot ? Array.from({ length: Math.min(3, e.hot) }, (_, i) => `
           <circle r="4.5" class="particle" fill="${color}"><animateMotion dur="1.8s" begin="${(i * 0.6).toFixed(1)}s" repeatCount="indefinite" path="${d}"></animateMotion></circle>`).join('') : '';
       return `
-          <g class="edge ${e.hot ? 'hot' : ''}" data-from="${esc(e.from)}" data-to="${esc(e.to)}">
+          <g class="edge ${e.hot ? 'hot' : ''} ${pairSel(e) ? 'sel' : ''}" data-from="${esc(e.from)}" data-to="${esc(e.to)}" role="button" tabindex="0" aria-label="${esc(from.roleLabel)} ile ${esc(to.roleLabel)} konuşması">
             <title>${esc(from.roleLabel)} → ${esc(to.roleLabel)}: ${e.n} mesaj. Son: ${esc(e.text)}</title>
             <path d="${d}" stroke="${color}" stroke-width="${w.toFixed(1)}" marker-end="url(#mk-${esc(e.from)})"></path>
             ${dots}
@@ -960,37 +1094,22 @@ const WorkView = {
           </g>`;
     }).join('');
 
-    const sel = members.find((s) => s.id === this.mapSel);
-    const roleOf = (id) => (members.find((s) => s.id === id) || {}).roleLabel;
-    const detail = sel ? (() => {
-      const lastMsg = [...msgs].reverse().find((m) => m.from === sel.id || m.to === sel.id);
-      return `
-          <div class="node-card">
-            <div class="nc-head"><span class="nc-dot" style="background: ${roleColor(sel)}"></span><strong>${esc(sel.roleLabel)}</strong>${statusBadge(sel)}</div>
-            <div class="mono note" style="word-break: break-all">${esc(sel.name)}</div>
-            <div class="nc-grid">
-              <span>Hesap</span><b>${esc(sel.accountId)}</b>
-              <span>Model</span><b>${esc((sel.stats && familyOf(sel.stats.model)) || sel.model || 'varsayılan')}</b>
-              <span>Gönderdi / aldı</span><b>${sent.get(sel.id) || 0} / ${recv.get(sel.id) || 0}</b>
-              <span>Harcama</span><b>${esc(sel.stats ? fmtUsd(sel.stats.costUSD) : '-')}</b>
-              <span>Bağlam</span><b>${esc(sel.stats ? `${fmtTok(sel.stats.context)}${ctxPct(sel.stats) != null ? ` (%${ctxPct(sel.stats)})` : ''}` : '-')}</b>
-            </div>
-            ${lastMsg ? `<div class="note">Son mesaj · ${esc(roleOf(lastMsg.from) || '?')} → ${esc(roleOf(lastMsg.to) || lastMsg.toName || '?')}</div><div class="nc-msg">${esc(lastMsg.text)}</div>` : ''}
-            <div class="actions"><button class="btn small primary" data-goto="${esc(sel.id)}">Terminale git</button><button class="btn small ghost" data-sel="">Kapat</button></div>
-          </div>` ;
-    })() : '';
-
-    const recent = msgs.slice(-14).reverse();
-    $('#activity').innerHTML = `
-        <div class="map-wrap">
+    box.innerHTML = `
           <div class="map-box card">
             <div class="map-top">
               <div class="seg" role="group" aria-label="Zaman aralığı">
                 ${MAP_WINDOWS.map(([v, l]) => `<button data-mw="${v}" aria-pressed="${this.mapWindow === v}">${l}</button>`).join('')}
               </div>
               <span class="note">${msgs.length} mesaj${outside ? ` · ${outside} grup dışına` : ''}</span>
+              <span class="grow"></span>
+              <div class="seg map-zoom" role="group" aria-label="Yakınlaştırma" title="Tekerlekle yakınlaştır, yakındayken sağ tuşla sürükleyerek kaydır">
+                <button data-mz="out" aria-label="Uzaklaştır">−</button>
+                <span class="note" id="map-zoom-level">${this.mapZoomText()}</span>
+                <button data-mz="in" aria-label="Yakınlaştır">+</button>
+                <button data-mz="fit" aria-label="Tamamını göster">Sığdır</button>
+              </div>
             </div>
-            <svg id="map-svg" viewBox="0 0 ${W} ${H}" role="img" aria-label="Ekip iletişim haritası">
+            <svg id="map-svg" class="${this.mapView ? 'zoomed' : ''}" viewBox="${this.mapViewBox()}" role="img" aria-label="Ekip iletişim haritası">
               <defs>
                 ${markers}
                 <radialGradient id="map-bg" cx="50%" cy="48%" r="60%"><stop offset="0%" stop-color="#1a2030"></stop><stop offset="100%" stop-color="#11141a" stop-opacity="0"></stop></radialGradient>
@@ -1006,83 +1125,113 @@ const WorkView = {
               const s = members.find((x) => x.roleId === rid);
               return `<span><i style="background: ${roleColor(s)}"></i>${esc(s.roleLabel)}</span>`;
             }).join('')}
-              <span class="note">Dış halka: bağlam doluluğu · akan nokta: son 1 dk · düğüme tıkla: ayrıntı</span>
+              <span class="note">Dış halka: bağlam doluluğu · akan nokta: son 1 dk · üye, ok ya da şeritteki mesaj çizgisi: sağda ayrıntısı</span>
             </div>
-          </div>
-          <div class="msg-list card">
-            ${detail}
-            <div class="msg-head"><strong>Son mesajlar</strong><span class="note">${msgs.length}</span></div>
-            ${recent.length ? recent.map((m) => `
-              <div class="msg ${a.now - m.ts < HOT_MS ? 'hot' : ''}" data-mfrom="${esc(m.from)}">
-                <div class="note"><span class="nc-dot" style="background: ${roleColor(members.find((s) => s.id === m.from))}"></span>${esc(new Date(m.ts).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' }))} · <b>${esc(roleOf(m.from) || '?')}</b> → <b>${esc(roleOf(m.to) || m.toName || '?')}</b></div>
-                <div>${esc(m.text)}</div>
-              </div>`).join('') : '<div class="note" style="padding: 11px 12.5px">Bu aralıkta ekip içi mesaj yok.</div>'}
-          </div>
-        </div>`;
+          </div>`;
   },
 
-  // Ajan mesajları: filtre ve arama alanı bir kez kurulur, liste her yenilemede güncellenir (yazı kaybolmasın diye).
-  renderMsgs(g, a) {
-    if (!a) return;
-    const box = $('#activity');
-    if (!$('#msg-tools')) {
-      this.msgKey = null;
-      box.innerHTML = `
-          <div class="card msgs">
-            <div class="msg-tools" id="msg-tools">
-              <div class="seg" id="msg-filter" role="group" aria-label="Üyeye göre filtre"></div>
-              <input id="msg-search" placeholder="Mesajlarda ara" aria-label="Mesajlarda ara">
-              <span class="note" id="msg-count"></span>
-            </div>
-            <div id="msg-items"></div>
-          </div>`;
-      $('#msg-filter').addEventListener('click', (e) => {
-        const b = e.target.closest('[data-mf]');
-        if (!b) return;
-        this.msgFilter = b.dataset.mf;
-        this.renderMsgs(this.group(), this.lastActivity);
-      });
-      $('#msg-search').addEventListener('input', () => this.renderMsgs(this.group(), this.lastActivity));
-      $('#msg-items').addEventListener('toggle', (e) => {
-        const d = e.target;
-        if (!d.matches || !d.matches('details[data-mid]')) return;
-        if (d.open) this.openMsgs.add(d.dataset.mid); else this.openMsgs.delete(d.dataset.mid);
-        if (d.open) this.loadBody(d);
-      }, true);
+  // ----- harita yakınlaştırma -----
+  // Görünür alan { x, y, w } (yükseklik en-boy oranından); null = haritanın tamamı. Yeniden çizimlerde korunur.
+  setMapView(v) {
+    if (v) {
+      const w = Math.min(MAP_W, Math.max(MAP_W / MAP_ZOOM_MAX, v.w));
+      const h = (w * MAP_H) / MAP_W;
+      v = w >= MAP_W - 0.5 ? null : { w, x: Math.min(MAP_W - w, Math.max(0, v.x)), y: Math.min(MAP_H - h, Math.max(0, v.y)) };
     }
-    const members = g.sessions;
-    const q = $('#msg-search').value.trim().toLocaleLowerCase('tr');
-    if (q) this.loadAllBodies();
-    // Mesaj listesi, filtre ve arama değişmediyse yeniden çizilmez (açık ayrıntılar ve kaydırma korunur).
-    // "Yeni" işareti için süre dilimi de anahtarda: 45 sn'lik pencere kapanınca liste bir kez yenilenir.
-    const key = JSON.stringify([g.id, members.map((s) => [s.id, s.roleLabel]), this.msgFilter, q, a.messages.length,
-      a.messages.length ? a.messages[a.messages.length - 1].ts : 0, Math.floor(a.now / 15000), this.msgBodies.size]);
-    if (key === this.msgKey) return;
-    this.msgKey = key;
-    const label = (id, fallback) => {
-      const s = members.find((x) => x.id === id);
+    this.mapView = v;
+    const svg = $('#map-svg');
+    if (svg) {
+      svg.setAttribute('viewBox', this.mapViewBox());
+      svg.classList.toggle('zoomed', !!v);
+    }
+    const lvl = $('#map-zoom-level');
+    if (lvl) lvl.textContent = this.mapZoomText();
+  },
+
+  mapViewBox() {
+    const v = this.mapView;
+    return v ? `${v.x.toFixed(1)} ${v.y.toFixed(1)} ${v.w.toFixed(1)} ${((v.w * MAP_H) / MAP_W).toFixed(1)}` : `0 0 ${MAP_W} ${MAP_H}`;
+  },
+
+  mapZoomText() {
+    return `%${Math.round((MAP_W / (this.mapView ? this.mapView.w : MAP_W)) * 100)}`;
+  },
+
+  // factor > 1 yakınlaştırır. (cx, cy): sabit kalacak harita noktası; yoksa görünür alanın ortası.
+  zoomMap(factor, cx, cy) {
+    const cur = this.mapView || { x: 0, y: 0, w: MAP_W };
+    const h = (cur.w * MAP_H) / MAP_W;
+    if (cx == null) { cx = cur.x + cur.w / 2; cy = cur.y + h / 2; }
+    this.setMapView({ w: cur.w / factor, x: cx - (cx - cur.x) / factor, y: cy - (cy - cur.y) / factor });
+  },
+
+  // Bağlam paneli: seçime göre az ve ilgili bilgi. Seçim yok → ekip özeti + son 5 mesaj; üye → kartı + son 5 mesajı;
+  // ok → iki üyenin konuşması (son 10, eskiden yeniye); mesaj çizgisi → o mesaj açık; arama → eşleşenler (son 30).
+  // Hepsi seçili zaman aralığında. Çıktı değişmedikçe DOM'a yazılmaz (açık mesajlar ve kaydırma korunur).
+  renderCtx(g, a, tot) {
+    const { members, since } = tot;
+    const inWin = a.messages.filter((m) => m.ts >= since);
+    const mid = (m) => `${m.ts}-${m.from}`;
+    const roleOf = (id, fallback) => {
+      const s = g.sessions.find((x) => x.id === id);
       return s ? s.roleLabel : fallback || '?';
     };
-    $('#msg-filter').innerHTML = [['all', 'Tümü'], ...members.map((s) => [s.id, s.roleLabel])]
-      .map(([v, l]) => `<button data-mf="${esc(v)}" aria-pressed="${this.msgFilter === v}">${esc(l)}</button>`).join('');
-    const list = a.messages
-      .filter((m) => this.msgFilter === 'all' || m.from === this.msgFilter || m.to === this.msgFilter)
-      .filter((m) => !q || `${m.text}\n${this.msgBodies.get(`${m.ts}-${m.from}`) || ''}`.toLocaleLowerCase('tr').includes(q))
-      .slice(-300)
-      .reverse();
-    $('#msg-count').textContent = `${list.length} / ${a.messages.length} mesaj`;
-    $('#msg-items').innerHTML = list.length ? list.map((m) => {
-      const mid = `${m.ts}-${m.from}`;
+    const item = (m, open) => {
+      const id = mid(m);
       const time = new Date(m.ts).toLocaleString('tr-TR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
       return `
-          <details class="msg-item ${a.now - m.ts < 45000 ? 'hot' : ''}" data-mid="${esc(mid)}" ${this.openMsgs.has(mid) ? 'open' : ''}>
-            <summary><span class="note">${esc(time)}</span> <b>${esc(label(m.from))}</b> → <b>${esc(label(m.to, m.toName))}</b> · ${esc(m.text)}</summary>
-            <div class="last">${esc(this.msgBodies.get(mid) || m.text)}</div>
+          <details class="msg-item ${a.now - m.ts < 45000 ? 'hot' : ''}" data-mid="${esc(id)}" ${open || this.openMsgs.has(id) ? 'open' : ''}>
+            <summary><span class="note">${esc(time)}</span> <b>${esc(roleOf(m.from))}</b> → <b>${esc(roleOf(m.to, m.toName))}</b> · ${esc(m.text)}</summary>
+            <div class="last">${esc(this.msgBodies.get(id) || m.text)}</div>
           </details>`;
-    }).join('') : '<div class="note" style="padding: 12.5px">Eşleşen mesaj yok.</div>';
+    };
+    const winNote = this.mapWindow === 'all' ? '' : ' Daha eskiler için aralığı "Tümü" yap.';
+    const list = (arr, empty, open) => (arr.length ? arr.map((m) => item(m, open)).join('') : `<div class="note ctx-empty">${empty}${winNote}</div>`);
+    const head = (title, sub, close) => `<div class="msg-head"><strong>${title}</strong><span class="note">${sub || ''}</span>${close ? '<button class="btn small ghost" data-ctx-clear>Kapat</button>' : ''}</div>`;
+    const q = this.teamQuery.trim().toLocaleLowerCase('tr');
+    let html;
+    if (q) {
+      this.loadAllBodies();
+      const hits = inWin.filter((m) => `${m.text}\n${this.msgBodies.get(mid(m)) || ''}`.toLocaleLowerCase('tr').includes(q));
+      html = head('Arama', `${hits.length} sonuç${hits.length > 30 ? ' · son 30' : ''}`) + list(hits.slice(-30).reverse(), 'Eşleşen mesaj yok.');
+    } else if (this.msgSel) {
+      const m = a.messages.find((x) => mid(x) === this.msgSel);
+      html = head('Mesaj', '', true) + (m ? item(m, true) : '<div class="note ctx-empty">Mesaj bulunamadı.</div>');
+    } else if (this.edgeSel) {
+      const [x, y] = this.edgeSel;
+      const talk = inWin.filter((m) => (m.from === x && m.to === y) || (m.from === y && m.to === x));
+      html = head(`${esc(roleOf(x))} ↔ ${esc(roleOf(y))}`, `${talk.length} mesaj${talk.length > 10 ? ' · son 10' : ''}`, true)
+        + list(talk.slice(-10), 'Bu aralıkta konuşma yok.');
+    } else if (members.some((s) => s.id === this.mapSel)) {
+      const sel = members.find((s) => s.id === this.mapSel);
+      const mine = inWin.filter((m) => m.from === sel.id || m.to === sel.id);
+      const sent = mine.filter((m) => m.from === sel.id).length;
+      html = `
+          <div class="node-card">
+            <div class="nc-head"><span class="nc-dot" style="background: ${roleColor(sel)}"></span><strong>${esc(sel.roleLabel)}</strong>${statusBadge(sel)}</div>
+            <div class="mono note" style="word-break: break-all">${esc(sel.name)}</div>
+            <div class="nc-grid">
+              <span>Hesap</span><b>${esc(sel.accountId)}</b>
+              <span>Model</span><b>${esc((sel.stats && familyOf(sel.stats.model)) || sel.model || 'varsayılan')}</b>
+              <span>Gönderdi / aldı</span><b>${sent} / ${mine.length - sent}</b>
+              <span>Harcama</span><b>${esc(sel.stats ? fmtUsd(sel.stats.costUSD) : '-')}</b>
+              <span>Bağlam</span><b>${esc(sel.stats ? `${fmtTok(sel.stats.context)}${ctxPct(sel.stats) != null ? ` (%${ctxPct(sel.stats)})` : ''}` : '-')}</b>
+            </div>
+            <div class="actions"><button class="btn small primary" data-goto="${esc(sel.id)}">Terminale git</button><button class="btn small ghost" data-ctx-clear>Kapat</button></div>
+          </div>`
+        + head('Son mesajları', mine.length > 5 ? `${mine.length} mesajın son 5'i` : '') + list(mine.slice(-5).reverse(), 'Bu aralıkta mesajı yok.');
+    } else {
+      html = head('Ekip özeti', 'grubun tamamı') + this.teamTiles(a, tot)
+        + head('Son mesajlar', 'bir oka tıkla: o konuşma') + list(inWin.slice(-5).reverse(), 'Bu aralıkta mesaj yok.');
+    }
+    if (html === this.ctxHtml) return;
+    this.ctxHtml = html;
+    const box = $('#team-ctx');
+    box.innerHTML = html;
+    // Açık gelen mesajların tam metni getirilir (önbellekteyse istek atılmaz).
+    for (const d of box.querySelectorAll('details[data-mid][open]')) this.loadBody(d);
   },
 
-  // Mesaj gövdesi listeyle gelmez; ayrıntı açılınca tek mesaj olarak alınır.
   async loadBody(d) {
     const mid = d.dataset.mid;
     if (this.msgBodies.has(mid)) return;
@@ -1102,40 +1251,39 @@ const WorkView = {
     try {
       const r = await api('GET', `/api/groups/${this.gid}/activity?bodies=1`);
       for (const m of r.messages) this.msgBodies.set(`${m.ts}-${m.from}`, m.body);
-      this.msgKey = null;
-      if (this.lastActivity && this.view === 'msgs') this.renderMsgs(this.group(), this.lastActivity);
+      this.ctxHtml = null;
+      if (this.lastActivity && this.view === 'team') this.renderTeam(this.group(), this.lastActivity);
     } catch { this.allBodies = false; }
   },
 
-  renderTimeline(g, a) {
-    const members = g.sessions.filter((s) => !s.removed);
+  // Durum şeritleri: seçili zaman aralığına (tot.since → şimdi) yakınlaşır. Satır sonundaki süreler ve alttaki tablo
+  // grubun tamamı içindir (tot.ts). Şerit adına tıklamak üyeyi haritada da seçer.
+  renderTimeline(g, a, tot) {
+    const { members, since: start, ts, away } = tot;
     const tl = a.timeline || {};
-    let start = g.createdAt;
-    for (const s of members) {
-      const list = tl[s.id];
-      if (list && list.length && list[0].t < start) start = list[0].t;
-    }
     const end = a.now;
     const span = Math.max(60000, end - start);
     const pct = (t) => Math.max(0, Math.min(100, ((t - start) / span) * 100));
+    const hhmmOf = (t) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
     const COLORS = { busy: 'busy', starting: 'starting', waiting: 'waiting', idle: 'idle', off: 'off', away: 'away' };
     const LABEL = { ...STATUS, off: 'kapalı', away: 'sıra sende · sen yoktun' };
 
     // Kullanıcının uzakta olduğu aralıklar; "sıra sende" ve "onay bekliyor" bu aralıklarda ayrı gösterilir.
     const user = a.user || [];
-    const away = awayIntervals(user, end);
     const split = (t0, t1) => splitAway(away, t0, t1);
-    const bar = (cls, label, t0, t1) => `<span class="seg-bar ${cls}" style="left: ${pct(t0)}%; width: ${Math.max(0.3, pct(t1) - pct(t0))}%" title="${esc(label)} · ${hhmmOf(t0)}–${hhmmOf(t1)} (${fmtDur(t1 - t0)})"></span>`;
+    // Aralığın başından önce biten parça çizilmez, taşan parça aralık başından kesilir (ipucu gerçek süreyi gösterir).
+    const bar = (cls, label, t0, t1) => {
+      if (t1 <= start) return '';
+      const from = Math.max(t0, start);
+      return `<span class="seg-bar ${cls}" style="left: ${pct(from)}%; width: ${Math.max(0.3, pct(t1) - pct(from))}%" title="${esc(label)} · ${hhmmOf(t0)}–${hhmmOf(t1)} (${fmtDur(t1 - t0)})"></span>`;
+    };
 
     // Eksen: 6–10 çizgi olacak şekilde aralık seçilir.
     const steps = [1, 2, 5, 10, 15, 30, 60, 120, 240, 480].map((m) => m * 60000);
     const step = steps.find((s) => span / s <= 10) || steps[steps.length - 1];
     const ticks = [];
     for (let t = Math.ceil(start / step) * step; t <= end; t += step) ticks.push(t);
-    const hhmmOf = (t) => new Date(t).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-    // Süreler çizimden ayrı, ortak hesaptan (core.js timeStats); kapanış özeti de aynısını kullanır.
-    const ts = timeStats(members, a, start, false);
     const rows = members.map((s) => {
       const list = tl[s.id] || [];
       const totals = ts.per[s.id];
@@ -1146,21 +1294,22 @@ const WorkView = {
         // Sen yokken geçen bekleme ayrı gösterilir: oturum sana değil, senin dönmene bekliyordu.
         return split(e.t, to).map(([t0, t1, out]) => (out ? bar('away', e.s === 'waiting' ? 'onay bekliyor · sen yoktun' : LABEL.away, t0, t1) : bar(COLORS[e.s], LABEL[e.s], t0, t1))).join('');
       }).join('');
-      const marks = a.messages.filter((m) => m.from === s.id).map((m) => {
+      const marks = a.messages.filter((m) => m.from === s.id && m.ts >= start).map((m) => {
         const to = members.find((x) => x.id === m.to);
-        return `<span class="msg-mark" style="left: ${pct(m.ts)}%" title="${hhmmOf(m.ts)} → ${esc(to ? to.roleLabel : m.toName)}: ${esc(m.text)}"></span>`;
+        const id = `${m.ts}-${m.from}`;
+        return `<span class="msg-mark ${this.msgSel === id ? 'sel' : ''}" data-msg="${esc(id)}" style="left: ${pct(m.ts)}%" title="${hhmmOf(m.ts)} → ${esc(to ? to.roleLabel : m.toName)}: ${esc(m.text)}"></span>`;
       }).join('');
       return `
-          <div class="tl-row">
-            <button class="tl-name" data-goto="${esc(s.id)}" title="${esc(s.name)}"><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)} <span class="note">${esc(s.accountId)}</span></button>
+          <div class="tl-row ${this.mapSel === s.id ? 'sel' : ''}">
+            <button class="tl-name" data-sel="${esc(s.id)}" aria-pressed="${this.mapSel === s.id}" title="${esc(s.name)}"><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)} <span class="note">${esc(s.accountId)}</span></button>
             <div class="tl-track">${segs}${marks}</div>
             <div class="tl-sum note">çalıştı ${fmtDur(totals.busy)} · <span style="color: var(--warn-text)">onay ${fmtDur(totals.waiting)}</span> · sıra sende ${fmtDur(totals.idle)}${totals.away ? ` · sen yoktun ${fmtDur(totals.away)}` : ''}</div>
           </div>`;
     }).join('');
     const userSegs = user.map((e, i) => {
       const to = i + 1 < user.length ? user[i + 1].t : end;
-      if (e.s === 'off' || to <= start) return '';
-      return bar(e.s === 'away' ? 'away' : 'here', e.s === 'away' ? 'uzaktaydın' : 'paneldeydin', Math.max(start, e.t), to);
+      if (e.s === 'off') return '';
+      return bar(e.s === 'away' ? 'away' : 'here', e.s === 'away' ? 'uzaktaydın' : 'paneldeydin', e.t, to);
     }).join('');
     const userRow = user.length ? `
           <div class="tl-row">
@@ -1169,34 +1318,23 @@ const WorkView = {
             <div class="tl-sum note">${Math.round((a.awayMs || 600000) / 60000)} dk temas olmazsa uzakta sayılırsın</div>
           </div>` : '';
 
-    // İstatistik: grup süresi (duvar saati), ekibin aktif olduğu süre (üst üste binenler bir kez) ve
-    // üyelerin çalışma toplamı ayrı ayrı; satırlardaki sayılarla aynı kaynaktan.
+    // Üye tablosu: satırlardaki sayılarla aynı kaynaktan (grubun tamamı).
     const sentBy = (id) => a.messages.filter((m) => m.from === id).length;
-    const awayTotal = away.reduce((t, [a0, a1]) => t + (a1 - a0), 0);
-    const tiles = [
-      ['Grup süresi', fmtDur(ts.span), 'Grubun açılışından bu yana geçen süre (duvar saati)'],
-      ['Ekip aktif', fmtDur(ts.active), 'En az bir üyenin çalıştığı ya da onay beklediği süre; aynı anda çalışan üyeler bir kez sayılır'],
-      ['Ekip boşta', fmtDur(ts.idle), 'Üyeler açıkken hiçbirinin çalışmadığı süre'],
-      ['Üyelerin çalışma toplamı', fmtDur(ts.agentBusy), 'Her üyenin çalışma süresi toplanır; iki üye aynı saatte çalışınca iki saat sayılır'],
-      ['Onay bekleme', fmtDur(ts.waiting), 'Sen başındayken üyelerin onay beklediği sürelerin toplamı'],
-      ['Sen uzaktaydın', fmtDur(awayTotal), ''],
-      ['Mesaj', String(a.messages.length), ''],
-    ];
-    const statsHtml = `
-        <div class="card tl-stats">
-          <div class="tl-tiles">${tiles.map(([l, v, tip]) => `<div class="tl-tile"${tip ? ` title="${esc(tip)}"` : ''}><span>${l}</span><strong>${v}</strong></div>`).join('')}</div>
-          <div class="tl-tbl-wrap">
-            <table class="tl-stats-tbl">
-              <thead><tr><th>Üye</th><th>Çalıştı</th><th title="Çalıştığı süre ÷ açık kaldığı süre">Çalışma oranı</th><th>Onay</th><th>Sıra sende</th><th>Gönderdiği mesaj</th></tr></thead>
-              <tbody>${members.map((s) => {
-              const t = ts.per[s.id];
-              return `<tr><td><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)}</td><td>${fmtDur(t.busy)}</td><td>${t.open ? Math.round((t.busy / t.open) * 100) : 0}%</td><td>${fmtDur(t.waiting)}</td><td>${fmtDur(t.idle)}</td><td>${sentBy(s.id)}</td></tr>`;
-            }).join('')}</tbody>
-            </table>
-          </div>
-        </div>`;
+    const table = `
+          <details class="tl-more" ${this.statsOpen ? 'open' : ''}>
+            <summary>Ayrıntılı istatistik (üye başına, grubun tamamı)</summary>
+            <div class="tl-tbl-wrap">
+              <table class="tl-stats-tbl">
+                <thead><tr><th>Üye</th><th>Çalıştı</th><th title="Çalıştığı süre ÷ açık kaldığı süre">Çalışma oranı</th><th>Onay</th><th>Sıra sende</th><th>Gönderdiği mesaj</th></tr></thead>
+                <tbody>${members.map((s) => {
+                const t = ts.per[s.id];
+                return `<tr><td><span class="dot ${statusKey(s)}"></span>${esc(s.roleLabel)}</td><td>${fmtDur(t.busy)}</td><td>${t.open ? Math.round((t.busy / t.open) * 100) : 0}%</td><td>${fmtDur(t.waiting)}</td><td>${fmtDur(t.idle)}</td><td>${sentBy(s.id)}</td></tr>`;
+              }).join('')}</tbody>
+              </table>
+            </div>
+          </details>`;
 
-    $('#activity').innerHTML = `
+    $('#team-time').innerHTML = `
         <div class="card tl">
           <div class="tl-row tl-axis">
             <span></span>
@@ -1211,10 +1349,10 @@ const WorkView = {
             <span><i class="seg-bar idle"></i>sıra sende</span>
             <span><i class="seg-bar away"></i>sen yoktun</span>
             <span><i class="msg-mark"></i>gönderilen mesaj</span>
-            <span>Kayıt yalnızca panel açıkken tutulur; boşluklar kapalı ya da kaydedilmemiş süredir.</span>
+            <span>Şerit seçili aralığı, satır sonundaki süreler grubun tamamını gösterir. Kayıt yalnızca panel açıkken tutulur; boşluklar kapalı ya da kaydedilmemiş süredir.</span>
           </div>
-        </div>
-        ${statsHtml}`;
+          ${table}
+        </div>`;
   },
 
   // ----- çalışırken üye ekleme -----

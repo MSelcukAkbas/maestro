@@ -200,6 +200,8 @@ function unionMs(list) {
 // active: en az bir üyenin çalıştığı ya da onay beklediği süre, aynı anda çalışan üyeler bir kez sayılır;
 // agentBusy: üyelerin çalışma sürelerinin toplamı, iki üye aynı saatte çalışınca iki saat olur.
 // Üye başına: busy, waiting / idle (sen yokken geçeni away'e ayrılır), open (açık kaldığı süre).
+// userAway: kullanıcının bu grubun süresi içinde uzakta geçirdiği süre ("Sen" izi bütün gruplar için ortak ve
+// günlerce geriye gider; grubun başı ile sonu arasına kırpılır).
 function timeStats(members, a, start, closed) {
   const tl = a.timeline || {};
   let end = a.now;
@@ -226,7 +228,8 @@ function timeStats(members, a, start, closed) {
   }
   const sum = (k) => members.reduce((n, s) => n + per[s.id][k], 0);
   const active = unionMs(act);
-  return { start, end, span: Math.max(0, end - start), active, idle: Math.max(0, unionMs(open) - active), agentBusy: sum('busy'), waiting: sum('waiting'), per, recorded: open.length > 0 };
+  const userAway = away.reduce((n, [a0, a1]) => n + Math.max(0, Math.min(a1, end) - Math.max(a0, start)), 0);
+  return { start, end, span: Math.max(0, end - start), active, userAway, idle: Math.max(0, unionMs(open) - active), agentBusy: sum('busy'), waiting: sum('waiting'), per, recorded: open.length > 0 };
 }
 
 function fmtDate(iso) {
@@ -456,10 +459,8 @@ function crumbs(items) {
 
 const ICON_PLUS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>';
 const ICON_CROWN = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M3 8l4.5 4L12 5l4.5 7L21 8l-2 11H5z"/></svg>';
-const ICON_MSGS = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a8 8 0 0 1-11.6 7.1L4 20l1-4.6A8 8 0 1 1 21 12z"/></svg>';
 const ICON_TERM ='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 9l3 3-3 3M13 15h4"/></svg>';
 const ICON_MAP = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>';
-const ICON_TIME = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>';
 const ICON_BOARD = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="5" height="16" rx="1"/><rect x="10" y="4" width="5" height="10" rx="1"/><rect x="17" y="4" width="4" height="13" rx="1"/></svg>';
 const ICON_NOTES = '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 3H6a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z"/><path d="M14 3v6h6M8 13h8M8 17h5"/></svg>';
 const ICON_CHEV ='<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 6l6 6-6 6"/></svg>';

@@ -264,9 +264,6 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 .pane-off { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 11px; color: var(--muted); }
 
 /* ajan mesajları */
-.msgs { overflow: hidden; }
-.msg-tools { display: flex; flex-wrap: wrap; gap: 7px 11px; align-items: center; padding: 9px 12.5px; border-bottom: 1px solid var(--line); }
-.msg-tools input { width: 216px; max-width: 100%; min-height: 30.5px; }
 .msg-item { border-bottom: 1px solid var(--line-soft); padding: 7px 12.5px; font-size: 11.5px; }
 .msg-item.hot { background: var(--accent-soft); }
 .msg-item summary { cursor: pointer; line-height: 1.5; }
@@ -280,12 +277,19 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 
 /* harita ve zaman çizelgesi */
 .activity { flex: 1; min-height: 0; overflow: auto; padding: 11px 18px 14.5px; }
-.map-wrap { display: flex; flex-wrap: wrap; gap: 11px; height: 100%; }
-.map-box { flex: 999 1 504px; min-width: 0; padding: 7px; display: flex; flex-direction: column; }
-.map-box svg { width: 100%; flex: 1; min-height: 324px; }
+/* Ekip görünümü: üstte harita + yan kart, altta zaman şeritleri. */
+.team { display: flex; flex-direction: column; gap: 11px; }
+.team-top { display: flex; flex-wrap: wrap; gap: 11px; align-items: flex-start; }
+#team-map { flex: 999 1 504px; min-width: 0; }
+.map-box { padding: 7px; display: flex; flex-direction: column; }
+/* Yükseklik sabit, çizim (viewBox) bu kutuya sığacak kadar küçülür; aşağıdaki şeritler ekrana sığsın. */
+.map-box svg { width: 100%; height: clamp(320px, 50vh, 540px); }
 .map-legend { padding: 3.5px 7px; }
 .map-top { display: flex; flex-wrap: wrap; align-items: center; gap: 7px 12.5px; padding: 3.5px 5.5px 0; }
-.map-box svg { min-height: 378px; }
+.map-zoom { align-items: center; }
+.map-zoom .note { min-width: 40px; text-align: center; }
+#map-svg.zoomed { touch-action: none; }
+#map-svg.panning { cursor: grabbing; }
 .orbit { fill: none; stroke: #232836; stroke-width: 1.5; stroke-dasharray: 3 7; }
 .edge path { fill: none; stroke-linecap: round; opacity: .55; transition: opacity .15s; }
 .edge.hot path { opacity: .95; stroke-dasharray: 9 7; animation: flow 1s linear infinite; }
@@ -294,6 +298,9 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 .edge .pill rect { fill: #151820; stroke: #34414f; }
 .edge .pill text { fill: var(--text-2); font-size: 11px; font-weight: 600; text-anchor: middle; dominant-baseline: central; }
 .edge.hot .pill rect { stroke: var(--accent); }
+.edge { cursor: pointer; outline: none; }
+.edge.sel path { opacity: 1; }
+.edge.sel .pill rect, .edge:focus-visible .pill rect { stroke: var(--accent); stroke-width: 2.5; }
 #map-svg.focus .edge, #map-svg.focus .node { opacity: .25; transition: opacity .15s; }
 #map-svg.focus .edge.lit, #map-svg.focus .node.lit { opacity: 1; }
 #map-svg.focus .edge.lit path { opacity: 1; }
@@ -329,11 +336,17 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 @media (prefers-reduced-motion: reduce) {
   .edge.hot path, .node .halo, .node .status-dot.waiting { animation: none; }
 }
-.msg-list { flex: 1 1 252px; min-width: 0; overflow: auto; max-height: 100%; }
+/* Bağlam paneli haritanın yüksekliğini aşmaz; uzun içerik kendi içinde kayar. */
+.team-side { flex: 1 1 288px; min-width: 0; max-height: calc(clamp(320px, 50vh, 540px) + 90px); overflow: auto; }
+.ctx-search { padding: 9px 12.5px; border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 1; background: var(--surface); }
+.ctx-search input { width: 100%; min-height: 30.5px; }
+#team-ctx .tl-tiles { padding: 9px 12.5px; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+#team-ctx .tl-tile { padding: 6px 9px; }
+#team-ctx .tl-tile strong { font-size: 14px; }
+#team-ctx .msg-head { position: static; justify-content: flex-start; align-items: center; gap: 9px; }
+#team-ctx .msg-head .note { flex: 1; text-align: right; }
+.ctx-empty { padding: 11px 12.5px; }
 .msg-head { display: flex; justify-content: space-between; padding: 9px 12.5px; border-bottom: 1px solid var(--line); position: sticky; top: 0; background: var(--surface); }
-.msg { padding: 7px 12.5px; border-bottom: 1px solid var(--line-soft); font-size: 11.5px; line-height: 1.45; }
-.msg.hot { background: var(--accent-soft); }
-.msg b { color: var(--text-2); font-weight: 600; }
 .tl { padding: 11px 14.5px; display: flex; flex-direction: column; gap: 7px; min-width: 684px; }
 .tl-row { display: grid; grid-template-columns: 153px 1fr 270px; gap: 11px; align-items: center; }
 .tl-name { display: flex; align-items: center; gap: 7px; background: transparent; border: 0; padding: 0; cursor: pointer; text-align: left; min-height: 29px; }
@@ -348,12 +361,18 @@ body.work main { flex: 1; min-height: 0; display: flex; flex-direction: column; 
 .seg-bar.idle { background: #2f4a78; }
 .seg-bar.away { background: repeating-linear-gradient(135deg, #2a2f3a 0 4px, #353b48 4px 8px); }
 .seg-bar.here { background: #3a4f6e; }
-.msg-mark { position: absolute; top: -2.5px; width: 2px; height: 29px; background: var(--text); opacity: .7; transform: translateX(-1px); display: inline-block; }
+.msg-mark { position: absolute; top: -2.5px; width: 2px; height: 29px; background: var(--text); opacity: .7; transform: translateX(-1px); display: inline-block; cursor: pointer; }
+/* 2 px'lik çizginin tıklama alanı genişletilir. */
+.msg-mark::after { content: ''; position: absolute; inset: 0 -4px; }
+.msg-mark:hover, .msg-mark.sel { opacity: 1; background: var(--accent); }
 .tl-sum { font-size: 11px; }
 .tl-legend { display: flex; flex-wrap: wrap; gap: 5.5px 14.5px; align-items: center; padding-top: 5.5px; border-top: 1px solid var(--line-soft); }
 .tl-legend i { position: static; display: inline-block; width: 12.5px; height: 9px; margin-right: 5.5px; vertical-align: middle; }
 .tl-legend i.msg-mark { width: 2px; height: 11px; }
-.tl-stats { display: flex; flex-direction: column; gap: 11px; margin-top: 11px; }
+.tl-row.sel .tl-name { color: var(--text); font-weight: 600; }
+.tl-row.sel .tl-track { box-shadow: 0 0 0 1.5px var(--accent); }
+.tl-more summary { cursor: pointer; padding-top: 5.5px; font-size: 11.5px; color: var(--text-2); }
+.tl-more .tl-tbl-wrap { margin-top: 7px; }
 .tl-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(128px, 1fr)); gap: 9px; }
 .tl-tile { display: flex; flex-direction: column; gap: 3px; padding: 9px 11px; border-radius: 8px; background: var(--sunken); }
 .tl-tile span { font-size: 11px; color: var(--muted); }

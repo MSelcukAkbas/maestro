@@ -9,9 +9,9 @@ let current = null;
 function parseRoute() {
   const [pathPart, query] = location.hash.replace(/^#\/?/, '').split('?');
   const parts = pathPart.split('/').filter(Boolean);
-  // Çalışma ekranı görünümü adresle de seçilebilir: #/g/<grup>?view=map
-  const view = new URLSearchParams(query || '').get('view');
-  if (view && ['terms', 'map', 'time', 'msgs', 'board', 'notes', 'bekci'].includes(view)) store(VIEW_KEY, view);
+  // Çalışma ekranı görünümü adresle de seçilebilir: #/g/<grup>?view=team (eski map / time / msgs adresleri de team açar).
+  const view = teamView(new URLSearchParams(query || '').get('view'));
+  if (view && ['terms', 'team', 'board', 'notes', 'bekci'].includes(view)) store(VIEW_KEY, view);
   if (parts[0] === 'p' && parts[1] && parts[2] === 'kurulum') return [SetupView, { id: parts[1] }];
   if (parts[0] === 'p' && parts[1]) return [ProjectView, { id: parts[1] }];
   if (parts[0] === 'g' && parts[1]) return [WorkView, { id: parts[1], sid: parts[2] }];

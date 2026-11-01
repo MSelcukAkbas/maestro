@@ -542,3 +542,17 @@ test('web/serve: arayüz dosyaları sunulur, web/ dışına ve serve.js\'e çık
   }
   for (const p of ['/serve.js', '/../package.json', '/..%2Fpackage.json', '/js/../../package.json', '/js', '/nope.exe']) assert.equal(resolve(p), null, p);
 });
+
+test('web/core timeStats: "Sen uzaktaydın" grubun süresine kırpılır (ortak "Sen" izi günlerce geriye gider)', () => {
+  const vm = require('vm');
+  const src = fs.readFileSync(path.join(__dirname, '..', 'web', 'js', 'core.js'), 'utf8');
+  const code = src.slice(src.indexOf('function awayIntervals'), src.indexOf('function fmtDate'));
+  const ctx = {};
+  vm.runInNewContext(`${code}; this.timeStats = timeStats;`, ctx);
+  const H = 3600000, start = 10 * 24 * H, now = start + 5 * H;
+  // Kullanıcı grup açılmadan 4 gün önce uzaklaşmış, grup başladıktan 2 saat sonra dönmüş.
+  const a = { now, timeline: {}, user: [{ t: start - 4 * 24 * H, s: 'away' }, { t: start + 2 * H, s: 'here' }] };
+  const ts = ctx.timeStats([], a, start, false);
+  assert.strictEqual(ts.span, 5 * H);
+  assert.strictEqual(ts.userAway, 2 * H);
+});
